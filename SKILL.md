@@ -261,6 +261,28 @@ target.Save()
 
 When using MCP tools (which target ActivePresentation), close all other PowerPoint windows first, or activate the right window with `target.Windows(1).Activate()` before the call. Verify with `slide_snapshot` after activation.
 
+**Multiple matching presentations open.** `next((p for p in app.Presentations if "MyDeck" in p.Name), None)` returns the *first* match. If both `MyDeck.pptx` and `MyDeck-conflict-...pptx` (or `MyDeck2.pptx`) are open and either could match the substring, prefer **exact name first, then fall back to substring**:
+
+```python
+target = next((p for p in app.Presentations if p.Name == "MyDeck.pptx"), None)
+if target is None:
+    target = next((p for p in app.Presentations if "MyDeck" in p.Name), None)
+```
+
+A `for ... if ...: target = p` loop **without `break`** is worse than `next(...)` — it walks the entire list and ends up on the *last* match, which is whichever order PowerPoint enumerates the open windows (effectively random).
+
+### Force UTF-8 stdout in any script that prints Unicode
+
+**Rule:** On Windows, Python's stdout defaults to the legacy cp1252 codec. Any `print()` containing `→`, `↓`, `≈`, non-ASCII diacritics, etc. crashes with `UnicodeEncodeError` — *after* the COM work has already succeeded and (often) saved the deck. The result is a confusing "the script printed something but also raised, did it actually run?" state, and a partial second run if you retry.
+
+```python
+# Put at the top of every COM script that has print() with non-ASCII content:
+import sys, io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+```
+
+**Why this matters:** the COM call to `target.Save()` happens before the crashing `print()`, so the deck state is correct, but the operator can't tell from the stack trace. They'll re-run, and an append-style script (e.g. `notes_*.py`) may double-apply. Cheaper to add three lines upfront than to debug duplicated state.
+
 ### Idempotent build scripts
 
 **Pattern:** For every non-trivial slide, write a `build_slide_NN.py` script that clears all shapes and rebuilds from scratch. Save these scripts alongside the deck. They make iteration cheap.
@@ -279,6 +301,25 @@ def clear_and_bg(slide, img):
 Each run produces the same result. To tweak typography or layout, edit the script and re-run — no manual element-by-element fixing in PowerPoint.
 
 **Strongly prefer rebuild over patch.** Once a slide has 5+ shapes and you need a layout change touching more than two elements, rebuild from scratch is almost always cheaper and safer than a patch script. Patches drift — backing rectangles get left in old positions while text moves, shape Z-order silently shifts, conditional filters miss shapes. A rebuild is a single source of truth.
+
+**Sentinel for "already built?" must only exist *after* the build.** A common bug in idempotent expansion/build scripts: the "skip duplication" check searches for a phrase that *also exists in the pre-build content*. The script thinks the work is done, skips the structural step (e.g. `Duplicate()`), then proceeds to rewrite text into the wrong slides — usually destroying adjacent unrelated slides.
+
+```python
+# BAD — "We have the solutions" appears on the original opener slide already.
+# First run does Duplicate() + rebuild. Second run sees the phrase on the
+# pre-build slide, skips Duplicate(), but still rewrites — overwriting the
+# NEXT slide with content meant for the duplicate.
+if slide_has(target.Slides(start_n), "We have the solutions"):
+    skip_duplication = True
+
+# GOOD — sentinel is something the build itself adds and the pre-build slide
+# cannot contain. The motto is set by this script; nothing else writes
+# "We are lying." into a slide of this section.
+if slide_motto(target.Slides(start_n + 1)) == "We are lying.":
+    skip_duplication = True
+```
+
+**Rule:** the sentinel should be a *post-condition of the build*, not a phrase from the source content. If the same string could plausibly exist before the script runs, it's not a sentinel — it's a coincidence waiting to happen.
 
 ### Filtering shapes — `HasTextFrame` is NOT "is this a text shape"
 
@@ -749,6 +790,52 @@ pic = slide.Shapes.AddPicture(
 
 > **Gotcha:** See the "Images get swallowed by content placeholders" section above if the image disappears into a placeholder.
 
+### Swapping a picture that lives inside a Group
+
+**Rule:** When the picture you want to replace is a child of a Group (e.g. a chart wrapped with a rounded-rectangle backdrop), you can't just `AddPicture` over it — and Group children don't have a clean "replace source" API. The pattern is **delete the group, rebuild both shapes from scratch, then regroup by name**.
+
+```python
+# 1. Capture the bounds before deleting
+for sh in slide.Shapes:
+    if sh.Name == "Group 1":
+        gx, gy, gw, gh = sh.Left, sh.Top, sh.Width, sh.Height
+        for i in range(1, sh.GroupItems.Count + 1):
+            child = sh.GroupItems(i)
+            if child.Name == "ChartOverlay":
+                px, py, pw, ph = child.Left, child.Top, child.Width, child.Height
+        sh.Delete()
+        break
+
+# 2. Rebuild backdrop + picture at the captured coords
+backdrop = slide.Shapes.AddShape(msoShapeRoundedRectangle, gx, gy, gw, gh)
+backdrop.Name = "Rounded Rectangle 31"
+# ...style backdrop...
+pic = slide.Shapes.AddPicture(new_png_path, 0, -1, px, py, pw, ph)
+pic.Name = "ChartOverlay"
+
+# 3. Regroup so the slide structure matches the original
+slide.Shapes.Range([backdrop.Name, pic.Name]).Group().Name = "Group 1"
+```
+
+A regenerated PNG with the same filename won't update an *embedded* picture — `AddPicture(SaveWithDocument=True)` copies bytes into the deck at insertion time. To pick up the new chart you must replace the shape.
+
+### Portable OUT paths in chart scripts
+
+**Rule:** Chart scripts that emit PNGs alongside themselves should derive the output directory from `__file__`, not hardcode `C:\Users\<somebody>\...`. Hardcoded paths break the moment the project moves between machines, between users, or between drives (cloud-synced repos are common offenders).
+
+```python
+# BAD — fails on every other machine, often silently if the dir exists
+OUT = r"C:\Users\alice\Dropbox\my-project\images"
+
+# GOOD — chart drops next to the script, wherever the repo lives
+import os
+OUT = os.path.dirname(os.path.abspath(__file__))
+# ...later...
+plt.savefig(os.path.join(OUT, "amoc-chart.png"), ...)
+```
+
+Same principle applies to `DECK_PATH` resolution in build scripts — use `os.path.join(os.path.dirname(__file__), "..", "Deck.pptx")` over absolute paths.
+
 ---
 
 ## Remotion Integration (Animated Video)
@@ -1159,5 +1246,10 @@ A consolidated catalog of the silent failures that have actually shipped broken 
 | Re-prompting Veo for a physics chain reaction | Diffusion video reliably fails dominoes / cradle / pool break | [Known limits — when not to use Veo](#known-limits--when-not-to-use-veo) |
 | Inline reimplementation of helper logic | Drifts from canonical version, no `--quiet` flag, no error stream propagation | [Wrapping Python helpers via subprocess + uvx](#wrapping-python-helpers-via-subprocess--uvx) |
 | Author-name marker for notes-append idempotency | Marker mismatches actual citation format ("X & Y" vs "X T., Y Q."), block gets appended every re-run | [Idempotent notes appending](#idempotent-notes-appending--use-the-doi-not-author-names) |
+| Missing UTF-8 stdout in scripts that `print()` Unicode | Script crashes *after* `target.Save()` succeeds; operator re-runs and double-applies append-style work | [Force UTF-8 stdout](#force-utf-8-stdout-in-any-script-that-prints-unicode) |
+| Sentinel-text check uses a phrase from the pre-build slide | Idempotency check skips structural step (Duplicate / Insert), then rewrites text — destroys adjacent unrelated slides | [Idempotent build scripts](#idempotent-build-scripts) (Sentinel rule) |
+| `AddPicture` to replace a picture inside a Group | New picture lands as a sibling outside the group; old picture remains; layout breaks | [Swapping a picture inside a Group](#swapping-a-picture-that-lives-inside-a-group) |
+| Hardcoded `OUT = r"C:\Users\<somebody>\..."` in chart scripts | Script does nothing useful on any other machine; PNG fails to update; embedded chart looks stale forever | [Portable OUT paths](#portable-out-paths-in-chart-scripts) |
+| `for p in app.Presentations: if ...: target = p` without `break` | Picks the *last* matching presentation in enumeration order (effectively random when multiple match the substring) | [Multi-presentation safety](#multi-presentation-safety--never-trust-activepresentation) |
 
 When one of these bites, fix it and **add a row here** if it's a new variant. The signal is: "I lost an hour to a silent failure" → it belongs in this table.

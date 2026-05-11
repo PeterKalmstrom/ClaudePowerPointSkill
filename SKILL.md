@@ -1,6 +1,6 @@
 ---
 name: configuring-powerpoint-mcp
-description: Configure PowerPoint MCP and the rich-media presentation workflow — uv/uvx prerequisite, claude mcp add, troubleshooting, plus Remotion (animated video), Nanobanana (AI image generation), and Veo 3.1 (AI video generation) integration for professional slides. Load when configuring PowerPoint MCP, creating presentations, embedding video/images/AI-generated video, or diagnosing why PowerPoint tools are missing.
+description: Build production-quality PowerPoint decks on Windows via the powerpoint-mcp server — COM safety patterns, idempotent build scripts, anchor-type word budgets, plus Remotion / Nanobanana / Veo media integration. Load when creating or editing a .pptx, embedding video / AI-generated images or video, or troubleshooting missing PowerPoint tools.
 ---
 
 # PowerPoint MCP — Setup & Rich Media Workflow
@@ -324,7 +324,7 @@ if sh.Name == "HeroBacking":
 ```python
 # Shift text right; backing stays put → text floats outside its card
 for sh in slide.Shapes:
-    if sh.HasTextFrame and "vetat" in sh.TextFrame.TextRange.Text:
+    if sh.HasTextFrame and "intro" in sh.TextFrame.TextRange.Text:
         sh.Left = 400  # text moves
         sh.Width = 500
 # (forgot to move the backing rectangle behind it)
@@ -628,7 +628,7 @@ Right card: warm/cool border (e.g., cyan) — represents the answer
 Card height: 280–340px depending on row count
 Card structure:
   - Title row: 22pt bold, accent color
-  - Subtitle row: 14pt italic muted ("— styrs av:" or "— bryr sig om:")
+  - Subtitle row: 14pt italic muted ("— driven by:" or "— values:")
   - 4–6 bullet rows: 18pt body, white
 Bottom strip below both cards: single bold 20–24pt line with the synthesis
 ```
@@ -721,7 +721,7 @@ bg.ZOrder(3)  # send backward (behind text)
 
 # Text on top
 txt = slide.Shapes.AddTextbox(1, x, y, w, h)
-txt.TextFrame.TextRange.Text = "Swädish text"
+txt.TextFrame.TextRange.Text = "Caption text"
 txt.TextFrame.TextRange.Font.Size = 16
 txt.TextFrame.TextRange.Font.Bold = True
 txt.TextFrame.TextRange.Font.Color.RGB = 0xFFFFFF  # white in BGR
@@ -1148,16 +1148,16 @@ Consider scripting these checks as a one-pass audit that walks every slide and p
 
 A consolidated catalog of the silent failures that have actually shipped broken slides. Skim this list whenever you're about to write a non-trivial COM patch — most of these fail without raising an error, so they don't show up in stack traces.
 
-| Anti-pattern | What goes wrong | Where to find the rule |
+| Anti-pattern | What goes wrong | See |
 |---|---|---|
-| Trusting `app.ActivePresentation` | Targets the wrong deck if another window has focus | "COM patterns & safety → Multi-presentation safety" |
-| `if not sh.HasTextFrame:` filter | Silently skips AutoShapes (they have empty text frames) | "COM patterns & safety → Filtering shapes" |
-| Moving text without moving its backing | Text floats outside its card or off-slide | "COM patterns & safety → Move text and its backing" |
-| Patching a 5+ shape slide instead of rebuilding | Z-order drifts, conditional filters miss shapes, layout never quite matches | "COM patterns & safety → Idempotent build scripts" |
-| Skipping the LOOK step (step 3 of the loop) | Code "succeeds" but the rendered slide is wrong | "Workflow → Iteration loop" |
-| Re-prompting an AI image after 2 text-baked attempts | Wastes budget; the model is locked into baking text | "Nanobanana → no-text rule" |
-| Re-prompting Veo for a physics chain reaction | Diffusion video reliably fails dominoes / cradle / pool break | "Veo → Known limits" |
-| Inline reimplementation of helper logic | Drifts from canonical version, no `--quiet` flag, no error stream propagation | "Wrapping Python helpers via subprocess + uvx" |
-| Author-name marker for notes-append idempotency | Marker mismatches actual citation format ("X & Y" vs "X T., Y Q."), block gets appended every re-run | "Speaker notes → Idempotent notes appending" |
+| Trusting `app.ActivePresentation` | Targets the wrong deck if another window has focus | [Multi-presentation safety](#multi-presentation-safety--never-trust-activepresentation) |
+| `if not sh.HasTextFrame:` filter | Silently skips AutoShapes (they have empty text frames) | [Filtering shapes](#filtering-shapes--hastextframe-is-not-is-this-a-text-shape) |
+| Moving text without moving its backing | Text floats outside its card or off-slide | [Move text and its backing together](#move-text-and-its-backing-together) |
+| Patching a 5+ shape slide instead of rebuilding | Z-order drifts, conditional filters miss shapes, layout never quite matches | [Idempotent build scripts](#idempotent-build-scripts) |
+| Skipping the LOOK step (step 3 of the loop) | Code "succeeds" but the rendered slide is wrong | [Iteration loop](#iteration-loop--build-render-look-critique-fix) |
+| Re-prompting an AI image after 2 text-baked attempts | Wastes budget; the model is locked into baking text | [Generate images WITHOUT text](#generate-images-without-text--overlay-text-in-powerpoint) |
+| Re-prompting Veo for a physics chain reaction | Diffusion video reliably fails dominoes / cradle / pool break | [Known limits — when not to use Veo](#known-limits--when-not-to-use-veo) |
+| Inline reimplementation of helper logic | Drifts from canonical version, no `--quiet` flag, no error stream propagation | [Wrapping Python helpers via subprocess + uvx](#wrapping-python-helpers-via-subprocess--uvx) |
+| Author-name marker for notes-append idempotency | Marker mismatches actual citation format ("X & Y" vs "X T., Y Q."), block gets appended every re-run | [Idempotent notes appending](#idempotent-notes-appending--use-the-doi-not-author-names) |
 
 When one of these bites, fix it and **add a row here** if it's a new variant. The signal is: "I lost an hour to a silent failure" → it belongs in this table.

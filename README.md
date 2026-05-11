@@ -4,6 +4,46 @@ A Claude Code [skill](https://docs.claude.com/en/docs/claude-code/skills) that t
 
 This is **not** an MCP server. It's a body of operational knowledge — patterns, anti-patterns, and a tested workflow — packaged as a single `SKILL.md` that Claude loads when you ask it to work on a deck.
 
+> **Screenshot wanted.** A before/after PNG of a slide built with the skill would help readers decide whether to install. Open an issue if you build something worth showing off.
+
+---
+
+## Why this exists
+
+Vanilla Claude Code can already drive PowerPoint via the `powerpoint-mcp` server — open a deck, snapshot a slide, populate a placeholder, save. That part is one MCP install away.
+
+What it *can't* do out of the box is avoid the silent failures that turn an afternoon of slide work into a debugging session. The recurring pain points:
+
+- **PowerPoint COM lies about success.** A shape edit returns `{"success": true}` while the rendered slide is wrong. Text fits on paper but wraps in the export. The image cache holds the old version after replacement. `app.ActivePresentation` targets the wrong deck because another window grabbed focus.
+- **AutoShape rectangles report `HasTextFrame == True`.** Filter logic that means "skip rectangles" silently skips half the slide.
+- **Patches drift after the third one.** Backing rectangles get left behind while text moves; z-order shifts; the build script becomes shape soup.
+- **AI image generators bake unwanted text into images** — often in the wrong language, often misspelled, always locked into the raster. Two reprompts cost more than starting over with a different background.
+- **Diffusion video models reliably fail at rigid-body physics** — dominoes, Newton's cradle, pool break. Veo will produce a beautiful, physically wrong cascade and waste your generation budget if you let it.
+- **Optimistic font sizing.** "36pt should fit" is a guess until the PNG confirms it. The COM property values don't tell you what the audience will see.
+
+This skill encodes those lessons. Every rule has a "why" and a "how to apply" line so Claude can judge edge cases rather than pattern-matching blindly, and a consolidated *Anti-patterns* table at the bottom of `SKILL.md` for fast lookup when something feels off.
+
+---
+
+## Example: what working with the skill looks like
+
+A representative session:
+
+> **You:** Add a hero-stat slide showing "3.2°C — projected warming by 2100" to the deck I have open.
+>
+> **Claude:** *(loads `configuring-powerpoint-mcp` skill)*
+> Before I touch the file, I'm going to make a timestamped backup copy — irreversible bulk edits live outside PowerPoint's undo stack.
+> *(creates `deck.20260511-1430.pre-hero-stat.pptx`)*
+>
+> Now matching to "hero stat" anchor type — single big number, ~5-word visible budget excluding title. Typography hierarchy: number at 120pt bold, unit at 28pt bold, caption at 18pt italic. I'll use the "Title Only" layout so the number doesn't get absorbed into a content placeholder.
+> *(runs `evaluate` against the open presentation, finds it by name match rather than ActivePresentation, builds the slide, names every shape, exports a PNG)*
+>
+> Here's the rendered slide — looking at the export, the unit at 28pt reads cleanly against the 120pt number, no text wrap, vertical balance is roughly equal top/bottom. Speaker notes have the IPCC source citation with the DOI. Ready to save?
+>
+> **You:** ship it.
+
+The skill's contribution is everything Claude did *that you didn't ask for*: the backup, the layout choice, naming the shapes, exporting and inspecting the PNG, putting the citation in notes rather than on the slide. Each one is a rule from `SKILL.md` that prevented a specific past failure.
+
 ---
 
 ## What this skill gives Claude
@@ -94,7 +134,7 @@ The skill's frontmatter tells Claude when to load it:
 ```yaml
 ---
 name: configuring-powerpoint-mcp
-description: Configure PowerPoint MCP and the rich-media presentation workflow ...
+description: Build production-quality PowerPoint decks on Windows via the powerpoint-mcp server ...
 ---
 ```
 
@@ -143,26 +183,23 @@ Other day-to-day expectations the skill encodes:
 
 ```
 ClaudePowerPointSkill/
-├── README.md       # This file
-└── SKILL.md        # The skill itself — loaded by Claude Code
+├── README.md          # This file
+├── SKILL.md           # The skill itself — loaded by Claude Code
+├── CONTRIBUTING.md    # How to add new rules / anti-patterns
+├── LICENSE            # MIT
+└── .gitignore
 ```
 
-That's it. No build step, no dependencies in this repo. The skill is pure markdown.
+No build step, no dependencies in this repo. The skill is pure markdown.
 
 ---
 
 ## License
 
-No license yet — treat the contents as "all rights reserved" until one is added. If you want to use the patterns in your own work, open an issue and we'll sort it out.
+[MIT](LICENSE). Use, fork, adapt, and integrate the patterns freely; attribution appreciated but not required.
 
 ---
 
 ## Contributing
 
-The skill grows by accretion: every silent failure that costs an hour of debugging belongs in the *Anti-patterns* table at the bottom of `SKILL.md`. If you hit one, fix it in your local copy first, confirm the fix works, then open a PR with:
-
-- A new row in the anti-patterns table
-- A linked rule in the relevant section explaining the fix
-- (Optional) A minimal repro in a comment
-
-Keep rule additions opinionated. The skill is most useful when it tells Claude what to *do* rather than enumerating every possible option.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide. Short version: the skill grows by accretion — every silent failure that costs an hour of debugging belongs in the *Anti-patterns* table at the bottom of `SKILL.md`, with a linked rule in the relevant section explaining the fix.

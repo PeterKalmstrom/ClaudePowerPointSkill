@@ -24,3 +24,6 @@ desktop.ini
 # Local
 *.local
 .env
+
+# Claude Code project context (private, not for distribution)
+CLAUDE.md

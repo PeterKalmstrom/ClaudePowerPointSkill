@@ -11,7 +11,7 @@ and makes it **render each slide, look at it, and fix it** before calling it don
 - **Claim titles, not topic labels** — "East leads Q1, up 8 %" instead of "Q1 revenue"
 - **Word budgets and an 18 pt floor** — no 60-word bullet walls; the depth goes in the speaker notes
 - **Render → look → fix** — the tool saying `success: true` is not evidence; the rendered slide is
-- **A ~40-code defect catalogue** — overflow, stretched pictures, default chart colours, contrast, monotone layouts
+- **A deck linter that runs anywhere** — overlaps, stretched pictures, small text, missing alt text, default chart colours
 - **Works on any OS** with python-pptx; on Windows it also drives live PowerPoint for pixel-exact renders
 
 ```bash
@@ -61,8 +61,8 @@ the shapes, rendering and looking, putting the citation in the notes.
 
 | Mode | Needs | You get |
 |---|---|---|
-| **Any OS** (Linux, macOS, Windows, CI) | Python + [`python-pptx`](https://python-pptx.readthedocs.io/) (via `uvx`); LibreOffice optional for rough renders | Building and editing .pptx files, all the content and layout rules, the defect catalogue, slide-size and image-crop checks |
-| **Windows power mode** | Desktop PowerPoint + the [`powerpoint-mcp`](https://pypi.org/project/powerpoint-mcp/) server | Live editing of the open deck, pixel-exact renders (including embedded fonts), word-break checks, the automated audit, contact sheets, notes/handout PDFs |
+| **Any OS** (Linux, macOS, Windows, CI) | Python + [`python-pptx`](https://python-pptx.readthedocs.io/) (via `uvx`); LibreOffice optional for rough renders | Building and editing .pptx files, all the content and layout rules, **`lint_deck.py`** (overlaps, stretched pictures, small text, missing alt text, contrast, empty placeholders…), theme and template extraction, approximate LibreOffice renders, before/after render diffs |
+| **Windows power mode** | Desktop PowerPoint + the [`powerpoint-mcp`](https://pypi.org/project/powerpoint-mcp/) server | Live editing of the open deck, pixel-exact renders (including embedded fonts), word-break checks, contact sheets, notes/handout PDFs |
 
 Optional media: [Remotion](https://www.remotion.dev/) for animated video, Google
 [Veo](https://ai.google.dev/gemini-api/docs/video-generation) and Gemini image models for AI video and images

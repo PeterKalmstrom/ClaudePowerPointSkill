@@ -20,6 +20,8 @@ Once a deck is content-complete **and audits clean**, and there is a real talk c
    Writing your own export? Don't call `ExportAsFixedFormat` positionally from pywin32: it fails with
    *"The Python instance can not be converted to a COM object"* because of the optional `PrintRange` argument.
    Pass a real range (`pres.PrintOptions.Ranges.Add(1, n)`) and name every argument, as `scripts/export_pdf.py` does.
+   **Big room?** Raise the font floor for the room: `scripts/lint_deck.py deck.pptx --room-depth 45` (up to 20 ft →
+   14 pt, 30 ft → 18 pt, 50 ft → 24 pt, further → 28 pt).
 4. **Dress-rehearsal contact sheet** — `scripts/contact_sheet.py`, printed on A3; mark the section breaks.
 5. **Rehearsal checklist** — run the deck in slideshow mode, out loud, with a stopwatch; cold-read the panic sheet
    (each answer ≤ 30 s); check projector, mic and clicker in the real room.

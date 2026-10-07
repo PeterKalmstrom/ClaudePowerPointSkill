@@ -91,8 +91,14 @@ def before(png):
 def after():
     prs = Presentation()
     prs.slide_width, prs.slide_height = Pt(1440), Pt(810)
-    s = prs.slides.add_slide(prs.slide_layouts[6])  # Blank
-    text(s, "East leads Q1, up 8 %", 80, 60, 1280, 110, 54, bold=True, name="Title")
+    s = prs.slides.add_slide(prs.slide_layouts[5])  # Title Only: a real title placeholder for outline and screen readers
+    title = s.shapes.title
+    title.left, title.top, title.width, title.height = Pt(80), Pt(60), Pt(1280), Pt(110)
+    title.text = "East leads Q1, up 8 %"
+    tf = title.text_frame
+    tf.paragraphs[0].alignment = 1  # left
+    for r in tf.paragraphs[0].runs:
+        r.font.size, r.font.bold, r.font.color.rgb = Pt(54), True, INK
     text(s, "+8 %", 80, 250, 560, 260, 160, color=ACCENT, bold=True, name="HeroStat")
     text(s, "East revenue vs Q4. Every other region within ±3 %.", 80, 540, 560, 120, 24,
          color=MUTED, name="Caption")
@@ -102,6 +108,8 @@ def after():
     data.add_series("Growth vs Q4 (%)", GROWTH)
     gf = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Pt(720), Pt(220), Pt(640), Pt(480), data)
     gf.name = "GrowthChart"
+    gf._element.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}cNvPr").set(
+        "descr", "Column chart of Q1 revenue growth vs Q4: East +8.0 %, South +3.0 %, West +0.2 %, North -1.5 %.")
     ch = gf.chart
     ch.has_legend = False
     ch.has_title = False

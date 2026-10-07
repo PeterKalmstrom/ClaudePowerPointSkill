@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install python-pptx pillow
+        run: pip install python-pptx pillow numpy
       - name: Compile scripts
         run: python -m py_compile scripts/*.py tools/*.py
       - name: Docs links, anchors and SKILL.md budget

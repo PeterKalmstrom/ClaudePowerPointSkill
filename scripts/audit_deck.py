@@ -10,19 +10,9 @@ An ** AUDIT row is either a defect to fix or an accepted anchor-type exception (
 knowledge graph, quote, chart, reference) - see "Auditing a deck" in SKILL.md.
 """
 import argparse
-import re
 
 from _ppt import is_title, open_deck, shape_texts, utf8_stdout
-
-VERBS = set("""is are was were be been has have had do does did can will must should may
-need needs wins leads beats grows drops rises fails ships pays
-comes goes stays decides""".split())
-
-
-def looks_like_label(title):
-    words = [w for w in re.findall(r"[^\W\d_]{2,}", title.lower())]
-    return bool(words) and len(words) <= 2 and "?" not in title and not VERBS & set(words)
-
+from _rules import looks_like_label
 
 utf8_stdout()
 ap = argparse.ArgumentParser()

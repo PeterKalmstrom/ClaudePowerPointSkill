@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `scripts/lint_deck.py`: lints a deck from the file alone, on any OS — titles, body floor (with
+  `--room-depth`), bullets, off-slide shapes, overlaps, empty placeholders (`--fix`), colour count, contrast,
+  alt text, stretched pictures, chart palette/title/labels, notes, duplicate titles, font drift. JSON output.
+- `scripts/extract_theme.py`: theme colours, fonts, layouts and placeholders from a .pptx or .potx; `--markdown`
+  writes a brand-spec skeleton. New *Building from a template* section in LAYOUT.md.
+- `scripts/render_lo.py` (LibreOffice renders) and `scripts/diff_renders.py` (before/after diffs with heat maps).
+- Self-test grows to 22 checks without PowerPoint (36 with `--com`). Rule thresholds partly follow PointClaw.
+- Before/after example now uses a real title placeholder and chart alt text (lint-clean).
+
 ## v1.0.0 — 2026-10-07
 
 - Renamed `configuring-powerpoint-mcp` → `building-powerpoint-decks`; repo renamed to `claude-powerpoint-skill`.

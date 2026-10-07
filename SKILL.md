@@ -1,9 +1,11 @@
 ---
 name: configuring-powerpoint-mcp
-description: Build production-quality PowerPoint decks on Windows via the powerpoint-mcp server — COM safety patterns, idempotent build scripts, anchor-type word budgets, plus Remotion / Nanobanana / Veo media integration. Load when creating or editing a .pptx, embedding video / AI-generated images or video, or troubleshooting missing PowerPoint tools.
+description: Build production-quality PowerPoint decks on Windows via the powerpoint-mcp server — COM safety patterns, idempotent build scripts, anchor-type word budgets, deck audits and presenter prep, plus Remotion / Nanobanana / Veo media integration. Load when creating or editing a .pptx, embedding video / AI-generated images or video, or troubleshooting missing PowerPoint tools.
 ---
 
 # PowerPoint MCP — Setup & Rich Media Workflow
+
+Helper scripts referenced below live in [`scripts/`](scripts/README.md).
 
 Installs `powerpoint-mcp` so Claude Code can open, read, edit, and create PowerPoint presentations via COM automation on Windows. Also covers integrating **Remotion** (programmatic animated video), **Nanobanana** (AI image generation), and **Veo 3.1** (AI video generation from text prompts) for professional-quality slide media.
 
@@ -13,6 +15,7 @@ Installs `powerpoint-mcp` so Claude Code can open, read, edit, and create PowerP
 - Installation
 - Troubleshooting
 - COM patterns & safety
+- Slide size and pictures
 - Workflow
 - Available Tools
 - Quick Verification
@@ -24,6 +27,10 @@ Installs `powerpoint-mcp` so Claude Code can open, read, edit, and create PowerP
 - Speaker notes — load them up
 - Showcase-first for multi-slide sections
 - Common defects to self-check
+- Auditing a deck (full procedure)
+- Presenter prep
+- Headless PowerPoint for checks
+- Building .pptx without PowerPoint (no COM)
 - Anti-patterns (recurring COM / build traps)
 
 ---
@@ -59,7 +66,7 @@ C:\Users\<USER>\.local\bin\uvx.exe --version
 ### Step 1 — Add the MCP server at user scope with the full path to uvx
 
 ```bash
-claude mcp add --scope user powerpoint -- "C:\Users\<USER>\.local\bin\uvx.exe" powerpoint-mcp
+claude mcp add --scope user powerpoint -- "C:\Users\<USER>\.local\bin\uvx.exe" --with "mcp<2" powerpoint-mcp
 ```
 
 **Critical details:**
@@ -75,7 +82,7 @@ The command writes to the top-level `mcpServers` block in `C:\Users\<USER>\.clau
     "powerpoint": {
       "type": "stdio",
       "command": "C:\\Users\\<USER>\\.local\\bin\\uvx.exe",
-      "args": ["powerpoint-mcp"],
+      "args": ["--with", "mcp<2", "powerpoint-mcp"],
       "env": {}
     }
   }
@@ -100,7 +107,7 @@ If the `claude` CLI is not available (e.g., running inside the VS Code extension
     "powerpoint": {
       "type": "stdio",
       "command": "C:\\Users\\<USER>\\.local\\bin\\uvx.exe",
-      "args": ["powerpoint-mcp"],
+      "args": ["--with", "mcp<2", "powerpoint-mcp"],
       "env": {}
     }
   }
@@ -144,6 +151,36 @@ If you see `✓ Connected`, the PowerPoint tools are available in the session.
    - **Right:** `mcpServers` at the top level of the JSON file
    
    Fix: remove the project-scoped entry and re-add with `--scope user`.
+
+### `CONNECTION_CLOSED` at startup: `No module named 'mcp.server.fastmcp'`
+
+**Symptom:** Claude Code reports `powerpoint (CONNECTION_CLOSED): "Connection closed"` and no PowerPoint tools
+appear. Run by hand, the server crashes on import with
+`ModuleNotFoundError: No module named 'mcp.server.fastmcp'. This is mcp 2.x, where FastMCP was renamed to MCPServer`.
+
+**Root cause:** `powerpoint-mcp` (1.30.0) does not pin its `mcp` dependency. `uvx` resolves the newest `mcp`, and
+`mcp` 2.x renamed `FastMCP` → `MCPServer`, so the server dies before it answers `initialize`. Nothing in your config
+changed; a new upstream release broke a setup that used to work.
+
+**Fix:** pin `mcp<2` in the server args:
+
+```json
+"powerpoint": {
+  "type": "stdio",
+  "command": "C:\\Users\\<USER>\\.local\\bin\\uvx.exe",
+  "args": ["--with", "mcp<2", "powerpoint-mcp"],
+  "env": {}
+}
+```
+
+or with the CLI: `claude mcp add --scope user powerpoint -- "C:\Users\<USER>\.local\bin\uvx.exe" --with "mcp<2" powerpoint-mcp`.
+
+To confirm before restarting, send `initialize` then `tools/list` over stdin to
+`uvx.exe --with "mcp<2" powerpoint-mcp`: a working server returns `serverInfo` "PowerPoint MCP Server" and 11 tools.
+Remove the pin once `powerpoint-mcp` itself declares `mcp<2` or supports 2.x.
+
+**Common mistake:** reading `CONNECTION_CLOSED` as a config or PATH problem. Run the exact configured command by
+hand first — the traceback names the real cause in one line.
 
 ### `uvx` not found
 
@@ -219,17 +256,16 @@ Foundational rules for any COM script targeting PowerPoint. These are not "thing
 
 **Rule:** Before running any script that touches more than a handful of shapes — bulk font bumps, layout reflows, multi-slide rebuilds — copy the deck to a timestamped backup. COM operations succeed without raising errors when they corrupt the wrong shapes; the backup is your only undo.
 
-The cheapest pattern is a file-copy (no COM), so the user's open PowerPoint session is undisturbed:
+The cheapest pattern is a file-copy (no COM), so the user's open PowerPoint session is undisturbed. Use
+[`scripts/backup_snapshot.py`](scripts/backup_snapshot.py):
 
-```python
-import shutil, datetime, pathlib
-src = pathlib.Path(r"C:/path/to/deck.pptx")
-ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-dst = src.with_name(f"{src.stem}.{ts}.pre-bulk-fontbump{src.suffix}")
-shutil.copy2(src, dst)
+```bash
+python scripts/backup_snapshot.py --file "C:/path/to/deck.pptx" --label pre-bulk-fontbump
 ```
 
-Save in PowerPoint first if there are unwritten changes — the file-copy reads disk, not in-memory state.
+Output lands beside the source as `<deck>.YYYYMMDD-HHMMSS.<label>.pptx`. It refuses to overwrite an existing backup,
+so re-running it never destroys an earlier snapshot. Save in PowerPoint first if there are unwritten changes — the
+file-copy reads disk, not in-memory state.
 
 When to snapshot:
 - Before any bulk script that walks all slides
@@ -321,6 +357,40 @@ if slide_motto(target.Slides(start_n + 1)) == "We are lying.":
 
 **Rule:** the sentinel should be a *post-condition of the build*, not a phrase from the source content. If the same string could plausibly exist before the script runs, it's not a sentinel — it's a coincidence waiting to happen.
 
+### A generated deck that people also edit in PowerPoint: harvest before you overwrite
+
+**Symptom:** a rebuild from source silently erased a day of a client's PowerPoint edits (87 slides). The agent then
+made it worse by treating the edits as defects against the slide rules and reverting some of them. **A person's edit
+is content: keep it exactly, and report anything that looks accidental.**
+
+**Working pattern:**
+1. Before saving a rebuild, fingerprint the deck on disk against the last build's manifest, and copy every changed,
+   added, deleted or moved slide into a frozen store.
+2. Key each generated slide by `<p:cSld name="…">` (the slide's `Name` in COM) — set it to a permanent id in the build.
+3. After generating, copy the stored slides back in, XML-exactly.
+4. Fingerprint the saved file into the manifest for next time.
+
+**Measured facts it depends on:**
+- **PowerPoint keeps `<p:cSld name>`** through a text edit, delete, move and save. A **duplicated** slide copies it
+  too, so treat the second occurrence as new.
+- **What PowerPoint changes on save with no edits:** the `top`/`height` of "resize shape to fit text" boxes
+  (`a:spAutoFit`), and **empty `a:r` runs are dropped**. Leave both out of any "was this slide edited?" fingerprint —
+  with them excluded, a re-save with no edits changed 0 fingerprints and a real edit changed only its own.
+- **Copying a slide into another python-pptx presentation** (python-pptx 1.0.2):
+  - Rebuild the rels with the **same rIds** (`part.rels._rels[rId] = _Relationship(...)`).
+  - Images go through `package.get_or_add_image_part`; any other part (SmartArt `diagram*`, media) is copied
+    recursively with `package.next_partname`.
+  - **Clear the cached `shapes` proxy** (`slide.__dict__.pop("shapes")`) after replacing the XML, or reads see the
+    old, detached tree.
+  - Call **`prs.part.rename_slide_parts(...)` after deleting slides**, or `add_slide` reuses `slide<count+1>.xml`
+    and the zip gets duplicate entries.
+- A PowerPoint save keeps an **embedded font** even when it is not installed on the machine.
+
+### Normalise paths before `SaveCopyAs` / `SaveAs`
+
+`Presentation.SaveCopyAs(path, …)` fails on a path that mixes `/` and `\` ("PowerPoint can't save ^0 to ^1").
+Pass `os.path.normpath(os.path.abspath(path))`.
+
 ### Filtering shapes — `HasTextFrame` is NOT "is this a text shape"
 
 **Rule:** Don't use `if not sh.HasTextFrame` to mean "this is a rectangle / image / decorative shape". AutoShape rectangles return `HasTextFrame == True` even when they hold no text — they have a text frame, it's just empty. A filter like:
@@ -389,6 +459,58 @@ text.Left    = 400; text.Width    = 500   # 20px text margin inside the card
 
 ---
 
+## Slide size and pictures
+
+### Slide size — set it before inserting anything
+
+PowerPoint measures slides in **points, not pixels** (96 DPI): **Full HD 1920 × 1080 px = 1440 × 810 pt.**
+
+Two ways to get it wrong, both common:
+
+1. **Setting 1920 × 1080 *points*.** That is 2560 × 1440 px — a third bigger than intended.
+2. **Letting PowerPoint pick.** `Presentations.Add()` defaults to **960 × 540 pt (720p)**, and
+   `Slides.InsertFromFile` then **silently scales every inserted slide down** to fit. Nothing errors; the deck ships
+   at 720p with every font a third smaller.
+
+```python
+pres = app.Presentations.Add()
+pres.PageSetup.SlideWidth, pres.PageSetup.SlideHeight = 1440, 810   # BEFORE the first InsertFromFile
+assert (pres.PageSetup.SlideWidth, pres.PageSetup.SlideHeight) == (1440, 810)
+```
+
+Keep the size in one shared constant — never hardcode it per build script. Check any deck (no PowerPoint needed;
+exits non-zero, so it works as a build gate):
+
+```bash
+uvx --with python-pptx python scripts/check_slide_size.py deck.pptx [--expect 1440x810]
+```
+
+**Pixel maths for renders:** on a 1920-px-wide render of a 1440-pt slide, 1 pt = 1.333 px; on a 1920-px render of a
+960-pt slide, **1 pt = 2 px**. Get this wrong in a comparison script and every text size looks off by a third.
+
+### Pictures stretch — crop to fill, never pass both sizes blindly
+
+`Shapes.AddPicture(..., w, h)` and python-pptx `add_picture(width=, height=)` **stretch** the image to the box. They
+do not crop or keep the aspect ratio. A 3:2 photo in a 1440 × 610 pt box comes out **~57 % too wide**, and it reads
+as "a wide crop", not as a defect — nobody notices. People and animals in a stretched frame look fatter than they
+are, which also misrepresents the photographer's work.
+
+```bash
+uvx --with pillow python scripts/cover_crop.py photo.jpg --box 1440x610 --out photo.crop.jpg
+# prints: stretch if inserted as-is: +57% horizontal
+```
+
+Then insert the cropped file at the box size. **A centred crop is a default, not a guarantee** — heads and subjects
+get cut. Use `--focus-y` / `--focus-x` and look at the render.
+
+### Third-party photos — credit in the speaker notes
+
+For any photo you did not make, put the credit (photographer, source, licence, link) in the slide's speaker notes.
+Under a CC-BY / CC-BY-NC licence, **cropping is an adaptation and must be indicated** ("cropped from original").
+Keep the licence terms with the image file so the next build can rewrite the credit.
+
+---
+
 ## Workflow
 
 The five-step iteration loop that catches the silent rendering failures the troubleshooting rules above describe. Read this section before starting any slide work, not after something goes wrong.
@@ -399,8 +521,9 @@ The five-step iteration loop that catches the silent rendering failures the trou
 
 ```
 1. Build / edit (idempotent script)
-2. Render to PNG via slide.Export(out, "PNG", 1280, 720)
-3. LOOK at the actual rendered PNG  ←  DO NOT SKIP
+2. Render via presentation.SaveCopyAs(folder, 17)  (Save As JPEG — scripts/render_slides.py)
+   slide.Export is fine ONLY when every font in the deck is installed; never for embedded fonts
+3. LOOK at the actual rendered image  ←  DO NOT SKIP
 4. Self-critique against rules (see "Common defects to self-check" section)
 5. Fix → loop back to step 2,  OR  save → done
 ```
@@ -460,8 +583,39 @@ text.TextFrame.WordWrap = 0  # msoFalse
 text.TextFrame.MarginLeft = 4
 text.TextFrame.MarginRight = 4
 
-# 3. Always export and look at the actual rendering before declaring done
-slide.Export(out_path, "PNG", 1280, 720)
+# 3. Always render and look before declaring done — Save As JPEG, which uses
+#    embedded fonts (slide.Export does not; see the next section)
+presentation.SaveCopyAs(out_folder, 17)
+```
+
+**4. Size display fonts so the widest *word* fits.** PowerPoint breaks *inside* a word that is wider than its line
+("constrai / n"). For a display font in a narrow box, measure the widest word with the font's real metrics (e.g.
+Pillow `ImageFont.getlength`) and pick the size from that, not from the character count.
+
+### Embedded fonts: `Slide.Export` renders a FALLBACK — use Save As JPEG
+
+**Symptom:** a deck whose display font is embedded but not installed renders fine in PowerPoint, but PNGs from
+`slide.Export(...)` show the display type in an Arial-like fallback. The fallback is narrower, so a real mid-word
+break that the audience will see renders clean in the PNG and passes review. `prs.Fonts(name).Embedded == -1` only
+proves the font is in the file, not that the renderer used it. The MCP's `slide_snapshot` uses `Slide.Export` too, so
+**don't trust its screenshots for embedded fonts.**
+
+**Fix:** render through PowerPoint's own File → Save As → JPEG, which does use the embedded font:
+
+```python
+prs.SaveCopyAs(r"C:\temp\out\_saveas", 17)   # ppSaveAsJPG -> Slide1.JPG .. SlideN.JPG in that folder
+# rename SlideN.JPG -> sNNN.jpg so they sort; assert count == prs.Slides.Count
+```
+
+[`scripts/render_slides.py`](scripts/render_slides.py) does exactly this. Use `SaveCopyAs`, not `SaveAs`: same render,
+and it never rebinds the open presentation. Speed: ~15 s for 148 slides at 1280×720. **Not** a substitute:
+`SaveAs(pdf, 32)` — its PDF used Calibri, not the embedded face.
+
+**Line-fit gate without a picture:** PowerPoint's layout engine *does* use the embedded font, so
+`TextRange.Lines(i, 1)` reports the real breaks. Flag any line boundary with a letter on both sides:
+
+```bash
+uvx --with pywin32 python scripts/check_word_breaks.py --file deck.pptx   # exit 1 if any word is broken
 ```
 
 **Pattern:** for any headline ≥30pt, export and visually verify that no text wrapped. Don't trust the COM property values — only the rendered PNG tells you what the audience sees.
@@ -497,19 +651,27 @@ Once connected, these tools become available:
 
 ### Bulk reading the deck
 
-For analyzing a deck as a whole (critiquing content, building a relationship map, counting words, finding contradictions), `slide_snapshot` is too slow — one round trip per slide. Instead, write a small Python script that opens the presentation once via `win32com.client`, walks every slide, and dumps all text + speaker notes to JSON in a single COM session (~6s for 70 slides vs. minutes one slide at a time).
+For analyzing a deck as a whole (critiquing content, building a relationship map, counting words, finding contradictions), `slide_snapshot` is too slow — one round trip per slide. Use [`scripts/bulk_read.py`](scripts/bulk_read.py): it opens the presentation once and dumps all text + speaker notes to JSON in a single COM session (~6s for 70 slides vs. minutes one slide at a time).
+
+```bash
+uvx --with pywin32 python scripts/bulk_read.py --file "C:/path/to/deck.pptx" [--slides 5-20] --out dump.json --pretty
+```
 
 **When to use bulk read vs slide_snapshot:**
-- **Bulk read script**: analyzing ≥5 slides, reviewing whole sections, building any cross-slide reasoning
+- **bulk_read.py**: analyzing ≥5 slides, reviewing whole sections, building any cross-slide reasoning
 - **slide_snapshot**: editing or inspecting a single slide with visual reference
 
 ### Auditing a deck
 
-For a one-shot quality check across an entire deck (word counts per slide, minimum body font size, taste defects), write a script that walks every slide and emits a flat report flagging slides that violate the per-anchor word budget or the 18pt body floor.
+For a one-shot check across an entire deck, run [`scripts/audit_deck.py`](scripts/audit_deck.py). It walks every slide and prints a flat report flagging slides over the word budget or under the 18pt body floor:
 
-Useful columns: slide #, word count, min body font size, title, status. Statuses like `OK`, `ok-tight` (within budget but close), `** AUDIT` (needs review), `[skip]` (template / cover / vote slides) make it easy to scan.
+```bash
+uvx --with pywin32 python scripts/audit_deck.py --file "C:/path/to/deck.pptx"
+```
 
-Run this before declaring any deck done. Treat each `** AUDIT` flag as a defect to either fix or document as an accepted anchor-type exception.
+Columns: slide #, word count, min body font size, status, title. Statuses: `OK`, `ok-tight` (within budget but close), `** AUDIT` (needs review), `[skip]` (hidden slide).
+
+Run this before declaring any deck done. The full procedure — taste pass, anchor exceptions, batching fixes, reporting — is in **Auditing a deck (full procedure)** below.
 
 ---
 
@@ -532,7 +694,7 @@ Nanobanana is an MCP server for AI image generation powered by Gemini models. It
 
 ### Wrapping Python helpers via subprocess + uvx
 
-When a project script needs to generate images or videos (e.g., a slide builder that needs a backdrop first), **call a Python helper as a subprocess via `uvx`** rather than importing it. The helpers depend on `google-genai` / `pywin32`, which most projects do not want to add as a hard dependency. `uvx` provisions the dependency per call and tears it down — no virtualenv setup, no project-wide pollution.
+When a project script needs to generate images or videos (e.g., a slide builder that needs a backdrop first), **call a Python helper as a subprocess via `uvx`** rather than importing it (see [`scripts/`](scripts/README.md) for the deck helpers). The helpers depend on `google-genai` / `pywin32`, which most projects do not want to add as a hard dependency. `uvx` provisions the dependency per call and tears it down — no virtualenv setup, no project-wide pollution.
 
 **Single-shot pattern** (one image, one video):
 
@@ -1006,10 +1168,10 @@ The API key is in `~/.claude.json` under the Nanobanana MCP config's `env.GEMINI
 
 ### Key details
 
-- **Model**: `veo-3.1-generate-preview` (best quality), also `veo-3.1-fast` and `veo-3.1-lite` (cheaper)
-- **Output**: 8-second 720p MP4 with native audio, typically 5–10 MB
+- **Model**: `veo-3.1-generate-preview` (best quality) and `veo-3.1-fast-generate-preview` (cheaper) are confirmed model ids; a `lite` id is **unverified** — list models before relying on it
+- **Output**: 8-second MP4, 720p by default or 1080p on request; audio is always added (strip it, e.g. `ffmpeg -an`, if the slide should be silent), typically 5–15 MB
 - **Generation time**: ~60 seconds including polling
-- **Cost**: Pay-per-second via Gemini API billing. Veo 3.1 Lite is the cheapest option for drafts.
+- **Cost**: Pay-per-second via Gemini API billing. Use the fast model for drafts.
 
 ### Prompt tips
 
@@ -1227,7 +1389,120 @@ Before declaring a slide done, scan against these common defects:
 | `attribution_truncated` | Author/source visibly cut off? Widen container or shorten attribution. |
 | `chart_contrast_fail` | Chart bar labels below WCAG 3:1 contrast? Use chart-aware palette. |
 
-Consider scripting these checks as a one-pass audit that walks every slide and prints a flat report — much faster than spot-checking by eye.
+`scripts/audit_deck.py` catches `body_below_floor` and word-budget problems automatically; `scripts/check_word_breaks.py` catches broken words. The rest need eyes — see the procedure below.
+
+---
+
+## Auditing a deck (full procedure)
+
+Use for any deck of 5+ slides, after any bulk edit, and when reviewing a deck someone else (or an earlier session) built.
+
+**Step 1 — Structural audit.** Run `scripts/audit_deck.py` and `scripts/check_word_breaks.py`.
+
+**Step 2 — Taste pass on the flagged slides.** Render each `** AUDIT` slide and check it against the codes in
+*Common defects to self-check*.
+
+**Step 3 — Separate defects from anchor exceptions.** The audit flags anything over 12 words, but several anchor
+types legitimately exceed that:
+
+| Anchor type | Word budget | Excess OK? |
+|---|---|---|
+| Hero stat (one big number) | 5 | No |
+| Hero + sub | 10 | No |
+| Comparison pair | 12 | No |
+| 3–5 card gallery | 25 | Yes — read in sequence |
+| Matrix | unlimited | Yes — labels, not body |
+| Knowledge graph / cascade | 40+ | Yes — relationships, not text |
+| Animated list (sequential reveal) | unlimited | Yes — one item at a time |
+| Quote | length of quote | Yes — read as one phrase |
+| Chart | 8 + chart labels | Yes — the chart speaks |
+| Reference / agenda / rules | 30+ | Yes — the audience studies it |
+
+If the anchor type allows the excess, record it as accepted and move on; otherwise fix it.
+
+**Step 4 — Fix in batches by type:** font bumps (one script raising anything below 18pt), trim cuts (taglines,
+sub-attributions, decorative dashes), layout reflows (edit and re-run `build_slide_NN.py`). Snapshot first, and re-run
+the audit after each batch. **An `OK` status only proves word count and font size** — render every fixed slide
+before calling it done; the audit cannot see text floating outside its backing or a mis-grouped picture.
+
+**Step 5 — Final visual pass.** Spot-check the cover, the busiest slide, the sparsest slide and two random ones.
+For 15+ slides, also look at a contact sheet — it shows colour drift between sections, density imbalance, 5+
+similar layouts in a row and forgotten template slides:
+
+```bash
+uvx --with pywin32 --with pillow python scripts/contact_sheet.py --file deck.pptx [--cols 6] [--slide-width 240]
+```
+
+**Reporting back:** lead with the numbers (N slides, M flagged, K accepted as anchor exceptions), then a table of
+slide # → fix, then the accepted exceptions with their anchor type, then any slides with thin speaker notes.
+
+---
+
+## Presenter prep
+
+Once a deck is content-complete **and audits clean**, and there is a real talk coming up:
+
+1. **Timing markers** — one line at the top of each slide's notes, e.g. `[15 sec]`. Baseline = talk length ÷
+   content slides; give openers and summaries 20–25 s, detail slides 10–15 s, votes ~30 s, the close 30 s+.
+   Make the script idempotent (skip slides whose notes already start with `[`).
+2. **Q&A panic sheet** — a markdown file next to the deck with the 15–25 hardest questions, each with a 2–4
+   sentence sourced answer. Build it from the speaker notes: every challengeable claim becomes a question. End with
+   a "last-resort exit" line for questions you can't answer.
+3. **Printed presenter handout** — slide + notes per page:
+   ```bash
+   uvx --with pywin32 python scripts/export_pdf.py --file deck.pptx --mode notes
+   uvx --with pywin32 python scripts/export_pdf.py --file deck.pptx --mode handout --slides-per-page 6   # audience
+   ```
+4. **Dress-rehearsal contact sheet** — `scripts/contact_sheet.py`, printed on A3; mark the section breaks.
+5. **Rehearsal checklist** — run the deck in slideshow mode, out loud, with a stopwatch; cold-read the panic sheet
+   (each answer ≤ 30 s); check projector, mic and clicker in the real room.
+
+---
+
+## Headless PowerPoint for checks
+
+Scripts that open decks for checking or rendering (audits, renders, comparisons in CI) should not disturb the
+user's PowerPoint or leave debris behind:
+
+- **Work on a copy.** Open it with `Presentations.Open(path, ReadOnly=-1, Untitled=-1, WithWindow=0)`; this creates
+  no recovery record, and PowerPoint exits by itself 1–3 s after `Quit()`.
+- **Don't run alongside the user's PowerPoint** for unattended jobs: refuse if a `POWERPNT.EXE` process exists,
+  rather than attaching to it. (The scripts in `scripts/` are for interactive use: they reuse the open deck and
+  quit PowerPoint only if they started it.) **Never kill PowerPoint** — wait for it to exit and report it if it
+  doesn't.
+- **Turn `DisplayAlerts` on when validating a generated file.** With alerts off, PowerPoint **repairs broken files
+  silently** (e.g. a non-numeric `<a:off x="abc">`) and the check passes. With alerts on, a damaged file shows the
+  "PowerPoint found a problem with content… repair" dialog, which blocks `Presentations.Open` — so a validator needs a
+  timeout and treats the prompt as a failure.
+- **Rendering is deterministic.** Two exports of the same file are pixel-identical, so in a before/after comparison
+  any difference is a real change — there's no noise band to hide in. Mean pixel difference is weak for small text
+  moves; a per-region heat map or perceptual hash catches them.
+- **Give slides stable ids.** Set each generated slide's `Name` (`<p:cSld name>`) to a permanent id so reports and
+  baselines say *which* slide changed, not just its position.
+- **Sections** (`p14:sectionLst`) are worth checking too: one section list, every slide in exactly one section,
+  unique names, at most 512 sections.
+
+---
+
+## Building .pptx without PowerPoint (no COM)
+
+On Linux, macOS or CI there is no COM. Write the OOXML directly with **python-pptx** (Python) or a library such as
+PptxGenJS (Node). Everything about content — anchor types, word budgets, the 18pt floor, notes, no text in images —
+still applies. What changes:
+
+- **No renderer.** You can't LOOK without PowerPoint (or LibreOffice, whose layout differs — fine for catching gross
+  errors, not for line breaks). Plan a Windows render pass before shipping, or keep text conservative.
+- **Set the slide size explicitly:** python-pptx's default template is **720 × 540 pt (4:3)**.
+  `prs.slide_width, prs.slide_height = Pt(1440), Pt(810)`.
+- **`add_picture` stretches** when given both width and height — crop first (`scripts/cover_crop.py`).
+- **Name every shape and slide** (`shape.name`, `<p:cSld name>`), exactly as in COM builds.
+- **Validate the package** before handing it over: re-open it with python-pptx, and if possible with the Open XML
+  SDK validator. A file that python-pptx reads can still trigger PowerPoint's repair prompt — duplicate zip entries,
+  dangling rels and content-type mismatches are the usual causes. Read every zip entry before rewriting any (writing
+  then re-reading entries raises "Overlapped entries").
+- **Embedding fonts** is possible (`.fntdata` parts) but check the font's licence and `fsType` first — many
+  commercial display fonts forbid embedding.
+- Copying slides between presentations: see the python-pptx notes under *A generated deck that people also edit*.
 
 ---
 
@@ -1250,6 +1525,12 @@ A consolidated catalog of the silent failures that have actually shipped broken 
 | Sentinel-text check uses a phrase from the pre-build slide | Idempotency check skips structural step (Duplicate / Insert), then rewrites text — destroys adjacent unrelated slides | [Idempotent build scripts](#idempotent-build-scripts) (Sentinel rule) |
 | `AddPicture` to replace a picture inside a Group | New picture lands as a sibling outside the group; old picture remains; layout breaks | [Swapping a picture inside a Group](#swapping-a-picture-that-lives-inside-a-group) |
 | Hardcoded `OUT = r"C:\Users\<somebody>\..."` in chart scripts | Script does nothing useful on any other machine; PNG fails to update; embedded chart looks stale forever | [Portable OUT paths](#portable-out-paths-in-chart-scripts) |
+| Trusting `Slide.Export` / `slide_snapshot` for decks with embedded fonts | Renders a fallback font; real mid-word breaks look clean and pass review | [Embedded fonts](#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg) |
+| Pinning nothing in the uvx args | A new `mcp` 2.x release kills the server at startup (`CONNECTION_CLOSED`) | [`CONNECTION_CLOSED` at startup](#connection_closed-at-startup-no-module-named-mcpserverfastmcp) |
+| Rebuilding a generated deck over a hand-edited one | A day of human edits silently erased | [Harvest before you overwrite](#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite) |
+| `Presentations.Add()` then `InsertFromFile` without setting the size | Whole deck silently scaled to 720p, all fonts a third smaller | [Slide size](#slide-size--set-it-before-inserting-anything) |
+| `AddPicture` / `add_picture` with both width and height | Photos stretched by up to ~60 %, unnoticed | [Pictures stretch](#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly) |
+| Validating a generated .pptx with `DisplayAlerts` off | PowerPoint silently repairs the broken file and the check passes | [Headless PowerPoint](#headless-powerpoint-for-checks) |
 | `for p in app.Presentations: if ...: target = p` without `break` | Picks the *last* matching presentation in enumeration order (effectively random when multiple match the substring) | [Multi-presentation safety](#multi-presentation-safety--never-trust-activepresentation) |
 
 When one of these bites, fix it and **add a row here** if it's a new variant. The signal is: "I lost an hour to a silent failure" → it belongs in this table.

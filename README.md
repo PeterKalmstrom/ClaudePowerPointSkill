@@ -94,7 +94,7 @@ The core dependency. Provides the tools Claude uses to manipulate `.pptx` files:
 - **Package**: [powerpoint-mcp on PyPI](https://pypi.org/project/powerpoint-mcp/)
 - **Install** (registers with Claude Code at user scope):
   ```bash
-  claude mcp add --scope user powerpoint -- "C:\Users\<USER>\.local\bin\uvx.exe" powerpoint-mcp
+  claude mcp add --scope user powerpoint -- "C:\Users\<USER>\.local\bin\uvx.exe" --with "mcp<2" powerpoint-mcp
   ```
 - **Verify**: restart Claude Code, then `claude mcp list` should show `powerpoint: ... - ✓ Connected`.
 - **Troubleshooting**: see `SKILL.md` → *Troubleshooting* for the full diagnostic tree (project-scope traps, missing PATH, COM modal-dialog hangs, etc.).
@@ -121,9 +121,10 @@ If you don't want an MCP for it, the same Gemini image API can be called directl
 Claude Code skills live in a `skills/` directory under your Claude config. To install this one:
 
 1. Clone or download this repo.
-2. Copy `SKILL.md` into your skills folder. The standard location is:
+2. Copy `SKILL.md` and the `scripts/` folder into your skills folder. The standard location is:
    ```
    <your-skills-path>/configuring-powerpoint-mcp/SKILL.md
+   <your-skills-path>/configuring-powerpoint-mcp/scripts/
    ```
    where `<your-skills-path>` is wherever you keep your Claude skills (e.g., `~/.claude/skills/`, a shared admin folder, or a per-project `.claude/skills/`).
 3. Make sure the `powerpoint-mcp` server is registered (see above).
@@ -144,7 +145,7 @@ You don't invoke it explicitly — Claude reads the description and loads the sk
 
 ## What's in `SKILL.md`
 
-Top-level sections (each is substantial — the file is ~1100 lines):
+Top-level sections (each is substantial — the file is ~1500 lines):
 
 | Section | What it covers |
 |---|---|
@@ -152,7 +153,8 @@ Top-level sections (each is substantial — the file is ~1100 lines):
 | **Installation** | Three ways to register the MCP (CLI, direct JSON edit, pre-download), plus restart and `claude mcp list` verification. |
 | **Troubleshooting** | Tools-not-appearing diagnostic tree, COM error recovery, image-placeholder swallow fix, snapshot-before-destructive-ops rule. |
 | **COM patterns & safety** | Snapshot-before-bulk-edit, multi-presentation safety (never trust `ActivePresentation`), idempotent build scripts, the `HasTextFrame` trap, moving text and its backing together. |
-| **Workflow** | The five-step iteration loop (build → render → **LOOK** → critique → fix), text-wrap defenses, font-size ceilings per container width. |
+| **Slide size and pictures** | Full HD = 1440 × 810 pt (not 1920 × 1080 pt), the 720p `Presentations.Add()` trap, stretched pictures and cover-cropping, photo credits in notes. |
+| **Workflow** | The five-step iteration loop (build → render → **LOOK** → critique → fix), text-wrap defenses, font-size ceilings per container width, why `Slide.Export` lies about embedded fonts (render with Save As JPEG instead), a no-picture check for words broken across lines. |
 | **Available Tools** | Reference table of every MCP tool the PowerPoint server exposes, plus bulk-read and audit-deck strategies. |
 | **Nanobanana Integration** | When to use AI-generated images vs. native shapes, the on-slide word budget (~10 words), anchor types with their word budgets (hero stat, comparison pair, gallery, knowledge graph, etc.), label vs. body floor, hero-stat pattern, two-column comparison pattern, balanced-layout sizing math, the "no text in images" rule with overlay pattern. |
 | **Remotion Integration** | Project setup, required files, key APIs, render command with `--browser-executable`, animation design patterns (hub-and-spoke, progressive reveal), iteration workflow. |
@@ -162,6 +164,10 @@ Top-level sections (each is substantial — the file is ~1100 lines):
 | **Speaker notes** | What goes in notes (citations, anticipated Q&A, methodology caveats, pacing notes), the slide-vs-notes contract, idempotent notes-append using DOIs as markers. |
 | **Showcase-first for multi-slide sections** | The rule that saves the most time: build slide 1 and one detail slide, get sign-off, *then* batch the rest. |
 | **Common defects to self-check** | Nine taste-defect codes Claude scans against before declaring a slide done. |
+| **Auditing a deck** | Five-step procedure: structural audit, taste pass, anchor-type exceptions table, fixing in batches, contact-sheet review, how to report. |
+| **Presenter prep** | Timing markers in notes, Q&A panic sheet, notes-page / handout PDF, rehearsal checklist. |
+| **Headless PowerPoint for checks** | Opening copies windowless, `DisplayAlerts` and silent repairs, deterministic rendering, stable slide ids, sections. |
+| **Building .pptx without PowerPoint** | The python-pptx / no-COM route for Linux, macOS and CI, and what changes without a renderer. |
 | **Anti-patterns** | Consolidated catalog of recurring COM and build traps that fail silently. Each anti-pattern points back to the rule that prevents it. |
 
 ---
@@ -185,12 +191,13 @@ Other day-to-day expectations the skill encodes:
 ClaudePowerPointSkill/
 ├── README.md          # This file
 ├── SKILL.md           # The skill itself — loaded by Claude Code
+├── scripts/           # Helper scripts SKILL.md calls (audit, bulk read, render, contact sheet, PDF, checks)
 ├── CONTRIBUTING.md    # How to add new rules / anti-patterns
 ├── LICENSE            # MIT
 └── .gitignore
 ```
 
-No build step, no dependencies in this repo. The skill is pure markdown.
+No build step. The skill is markdown plus small Python helpers in `scripts/`, run with `uvx` so their dependencies (`pywin32`, `pillow`, `python-pptx`) never touch your project. See [`scripts/README.md`](scripts/README.md).
 
 ---
 

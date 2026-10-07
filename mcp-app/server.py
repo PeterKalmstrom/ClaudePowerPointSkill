@@ -43,7 +43,8 @@ if SCRIPTS not in sys.path:
 
 from kShared import ToolInputException, ToolReportableException, kErrorReport, kS, kToolException  # noqa: E402
 
-kErrorReport.HoldForView = True  # a server never exits: each error report waits for the person's Yes/No in the view
+kErrorReport.HoldForView = True  # a server never exits: each error report waits for the person's Yes/No
+kS.InstallUnhandledExceptionCapture()  # errors that escape every guarded method are reported too
 
 URI = "ui://powerpoint-live/slide-view"
 MIME = "text/html;profile=mcp-app"
@@ -872,10 +873,15 @@ class kPowerPointLive:
     # DOCUMENTED EXCEPTION: builds the halt message; it must work exactly when kS.ErrorMode is set
     def HaltedError(self):
         First = kS.FirstError() or {}
+        Ask = ""
+        if kErrorReport.Pending and kErrorReport.EffectiveUrl():
+            Ask = (f" ERROR-REPORT-PENDING: ask the user \"{kErrorReport.Question}\" (yes/no) - they can also answer"
+                   " in the view. Only if they say yes, call powerpoint_send_error_report with send=true; if they say"
+                   " no, call it with send=false.")
         return ToolReportableException(
             f"PowerPoint Live halted after an error in {First.get('location', '?')}: "
             f"{First.get('type', 'Error')}: {First.get('message', '')}. "
-            "Press Resume in the view or call powerpoint_resume.")
+            "Press Resume in the view or call powerpoint_resume." + Ask)
 
     # DOCUMENTED EXCEPTION: the one re-arm (a person's Resume); it must work exactly when kS.ErrorMode is set
     def Resume(self):
@@ -889,7 +895,10 @@ class kPowerPointLive:
         if kS.ErrorMode:
             raise self.HaltedError()
         try:
-            Result = await asyncio.get_running_loop().run_in_executor(self.Pool, Method, *Args)
+            Loop = asyncio.get_running_loop()
+            if Loop.get_exception_handler() is None:
+                Loop.set_exception_handler(kS.OnAsyncioError)  # tasks nobody awaited report too
+            Result = await Loop.run_in_executor(self.Pool, Method, *Args)
             if kS.ErrorMode:
                 raise self.HaltedError()
             return Result
@@ -1392,6 +1401,20 @@ async def PowerpointResume() -> dict:
         return Live.Resume()
     except Exception as e:
         kS.GlobalErrorHandler(e, "server.PowerpointResume")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="powerpoint_send_error_report", meta=UI)
+async def PowerpointSendErrorReport(send: bool) -> dict:
+    """Answer a waiting error report. ONLY after asking the user "Do you want to send this error message?" and
+    getting their explicit answer: send=true if they said yes (it goes to the support flow), send=false if they
+    said no (it is discarded). Never call this with send=true on your own."""
+    if kS.ErrorMode:
+        return kErrorReport.Decide(send)
+    try:
+        return kErrorReport.Decide(send)
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.PowerpointSendErrorReport")
         raise Live.HaltedError() from e
 
 

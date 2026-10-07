@@ -28,7 +28,10 @@ The rules, the same as the C#, TypeScript and PowerShell code this skill's autho
   public repository); without one nothing is sent. NOTHING is ever sent without a person's yes: the report is
   shown and the person is asked "Do you want to send this error message? (yes/no)"; no means nothing is sent.
   Without a terminal (Claude ran the script) the report is saved and Claude must ask the user the same question;
-  only on yes is it sent with scripts/send_error_report.py --yes. PowerPoint Live asks in its view.
+  only on yes is it sent with scripts/send_error_report.py --yes. The script then exits 4 and prints
+  "ERROR-REPORT-PENDING: <file>", so Claude knows. PowerPoint Live asks in its view and tells Claude in its
+  error message. Errors that escape every guarded method (uncaught, other threads, asyncio) are captured too:
+  kS.InstallUnhandledExceptionCapture().
   KPS_ERROR_REPORT=0 switches reporting off.
 
 tools/check_kpattern.py audits every method for the four parts; the self-test and CI run it.
@@ -39,6 +42,7 @@ import os
 import platform
 import sys
 import tempfile
+import threading
 import traceback
 import urllib.error
 import urllib.request
@@ -118,7 +122,8 @@ class kErrorReport:
     ProductVersion = ""
     Component = os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else "python"
     TimeoutSeconds = 20
-    HoldForView = False         # PowerPoint Live: reports wait for the person's Yes/No in the view
+    HoldForView = False         # PowerPoint Live: reports wait for the person's Yes/No (view, or Claude asks)
+    SavedPath = ""              # set when a report was saved for Claude to ask about (exit code 4)
     Question = "Do you want to send this error message?"
     Pending = []
     Offered = False
@@ -229,8 +234,10 @@ class kErrorReport:
                 sys.stderr.write("".join(f"    {Line}\n" for Line in Detail.Summary()) + "\n")
             if not kErrorReport.CanAsk():
                 Saved = kErrorReport.SaveForLater()
+                kErrorReport.SavedPath = Saved
                 Here = os.path.dirname(os.path.abspath(__file__))
                 sys.stderr.write(
+                    f"ERROR-REPORT-PENDING: {Saved}\n"
                     "Not sent: there is no one at a terminal to ask.\n"
                     f"CLAUDE: ask the user \"{kErrorReport.Question}\" (yes/no). Only if they answer yes, run:\n"
                     f"    python \"{os.path.join(Here, 'send_error_report.py')}\" \"{Saved}\" --yes\n"
@@ -269,6 +276,7 @@ class kErrorReport:
     def Reset():
         kErrorReport.Pending = []
         kErrorReport.Offered = False
+        kErrorReport.SavedPath = ""
 
 
 class kS:
@@ -311,6 +319,44 @@ class kS:
             kErrorReport.Reset()
 
     @staticmethod
+    def InstallUnhandledExceptionCapture():
+        """Route errors that escape every guarded method - uncaught, in other threads, in asyncio - to the handler,
+        so no error that can occur goes unreported. Idempotent."""
+        try:
+            if getattr(kS, "_captureInstalled", False):
+                return
+            kS._captureInstalled = True
+            sys.excepthook = kS.OnUnhandled
+            threading.excepthook = kS.OnUnhandledThread
+            sys.unraisablehook = kS.OnUnraisable
+        except Exception as Inner:  # ERROR-SUPPRESSED-JUSTIFIED: capture setup failing must not stop the program
+            sys.stderr.write(f"could not install unhandled-error capture: {Inner!r}\n")
+
+    @staticmethod
+    def OnUnhandled(ExcType, Error, Tb):
+        if issubclass(ExcType, (KeyboardInterrupt, SystemExit)):
+            sys.__excepthook__(ExcType, Error, Tb)
+            return
+        kS.GlobalErrorHandler(Error, "[unhandled] main thread")
+        kRun.Finish(1)
+
+    @staticmethod
+    def OnUnhandledThread(Args):
+        if Args.exc_type is SystemExit:
+            return
+        kS.GlobalErrorHandler(Args.exc_value, f"[unhandled] thread {getattr(Args.thread, 'name', '?')}")
+
+    @staticmethod
+    def OnUnraisable(Unraisable):
+        kS.GlobalErrorHandler(Unraisable.exc_value, f"[unhandled] {Unraisable.err_msg or 'unraisable'}")
+
+    @staticmethod
+    def OnAsyncioError(Loop, Context):
+        """For loop.set_exception_handler: an exception in a task nobody awaited."""
+        Error = Context.get("exception") or RuntimeError(Context.get("message", "asyncio error"))
+        kS.GlobalErrorHandler(Error, "[unhandled] asyncio")
+
+    @staticmethod
     def FirstError():
         """The report that halted the run, or None."""
         return kS.Errors[0] if kS.Errors else None
@@ -320,13 +366,21 @@ kErrorReport.ProductVersion = kErrorReport.Version()
 
 
 class kRun:
-    """The one way a script starts and exits. Infrastructure: exempt from the guard."""
+    """The one way a script starts and exits. Infrastructure: exempt from the guard.
+
+    Exit codes: 0 ok; 1 an unexpected error (reported; halted); 2 bad input (ToolInputException); 3 text that does
+    not fit (build_deck); 4 an unexpected error whose report is waiting for the user's yes - stderr has a line
+    "ERROR-REPORT-PENDING: <file>" and Claude must ask "Do you want to send this error message?"."""
+
+    EXIT_REPORT_PENDING = 4
 
     @staticmethod
     def Main(AppClass):
         """Run AppClass().Run() (which returns an exit code) and exit: the code, 1 if the handler fired,
         or the code of an expected-state exception after printing its message."""
         kS.Reset()
+        kErrorReport.Reset()
+        kS.InstallUnhandledExceptionCapture()
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8")
         Code = 0
@@ -341,7 +395,11 @@ class kRun:
 
     @staticmethod
     def Finish(Code):
-        """Offer any reported error to the support flow, then exit with 1 when the handler fired, otherwise Code."""
+        """Offer any reported error to the support flow, then exit: EXIT_REPORT_PENDING (4) when an error report
+        was saved for Claude to ask the user about, 1 when the handler fired, otherwise Code."""
         sys.stdout.flush()
         kErrorReport.OfferOnce()
+        sys.stderr.flush()
+        if kErrorReport.SavedPath:
+            sys.exit(kRun.EXIT_REPORT_PENDING)
         sys.exit(1 if kS.ErrorMode else Code)

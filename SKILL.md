@@ -109,9 +109,11 @@ Never run more than 4 iterations on the same defect without escalating.
 
 ## Error reports - always ask first
 
-When a script prints `CLAUDE: ask the user "Do you want to send this error message?"`, ask the user exactly that
-(AskUserQuestion, Yes / No) and show what would be sent. Only on **Yes** run the `send_error_report.py ... --yes`
-command it printed; on **No** run it with `--no`. Never send an error report without the user's yes.
+A script that exits with code **4** (stderr: `ERROR-REPORT-PENDING: <file>`) hit an unexpected error whose report
+is waiting. Ask the user exactly "Do you want to send this error message?" (AskUserQuestion, Yes / No) and show
+what would be sent. Only on **Yes** run the `send_error_report.py <file> --yes` command it printed; on **No** run
+it with `--no`. PowerPoint Live says `ERROR-REPORT-PENDING` in its error message: ask the same question, then call
+`powerpoint_send_error_report` with `send=true` only on Yes (`false` on No). Never send without the user's yes.
 
 ## Version-specific facts (as of 2026-10)
 

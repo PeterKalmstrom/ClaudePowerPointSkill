@@ -845,6 +845,22 @@ class kSelfTest:
             self.Check("error handler: expected state exits with its code, no report",
                        Code == 2 and "this input is wrong on purpose" in Err and "ERROR in" not in Err,
                        f"exit {Code}: {Err[-400:]}")
+
+            # no terminal + an address: the report is saved, nothing is sent, exit 4 tells Claude to ask the user
+            Env = dict(os.environ, KPS_ERROR_REPORT="1", KPS_ERROR_WEBHOOK="http://127.0.0.1:9/never-called")
+            Run = subprocess.run([sys.executable, HaltScript, Marker], capture_output=True, text=True,
+                                 stdin=subprocess.DEVNULL, env=Env)
+            Pending = [Line.split(":", 1)[1].strip() for Line in Run.stderr.splitlines()
+                       if Line.startswith("ERROR-REPORT-PENDING:")]
+            Saved = bool(Pending) and os.path.isfile(Pending[0])
+            self.Check("error report: no terminal -> exit 4, report saved, Claude told to ask, nothing sent",
+                       Run.returncode == 4 and Saved and "Do you want to send this error message?" in Run.stderr
+                       and "Error report sent" not in Run.stderr, f"exit {Run.returncode}: {Run.stderr[-400:]}")
+            if Saved:
+                Run = subprocess.run([sys.executable, os.path.join(HERE, "send_error_report.py"), Pending[0], "--no"],
+                                     capture_output=True, text=True, stdin=subprocess.DEVNULL, env=Env)
+                self.Check("error report: --no deletes it and sends nothing",
+                           Run.returncode == 0 and not os.path.exists(Pending[0]), Run.stdout + Run.stderr)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckErrorPattern")
             return

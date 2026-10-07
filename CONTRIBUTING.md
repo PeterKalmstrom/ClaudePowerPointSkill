@@ -67,7 +67,9 @@ PowerShell code. `tools/check_kpattern.py` enforces it (CI and the self-test run
 `scripts/kErrorWebhook.url`, kept out of the repository); without one nothing is sent. **Nothing is ever sent without a
 person's yes:** the report is shown and the person is asked "Do you want to send this error message? (yes/no)";
 no means nothing is sent. Without a terminal the report is saved and Claude asks the user, sending it with
-`scripts/send_error_report.py <file> --yes` only on yes. PowerPoint Live asks with Yes/No buttons in its view.
+`scripts/send_error_report.py <file> --yes` only on yes; the script exits **4** and prints
+`ERROR-REPORT-PENDING: <file>` so Claude knows. Errors that escape every guarded method (uncaught, other threads,
+asyncio) are captured by `kS.InstallUnhandledExceptionCapture()` (installed by `kRun.Main` and PowerPoint Live). PowerPoint Live asks with Yes/No buttons in its view.
 `KPS_ERROR_REPORT=0` switches reporting off (the self-test sets it).
 
 ## Sanity check before opening a PR

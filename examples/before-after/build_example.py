@@ -100,7 +100,7 @@ def after():
     for r in tf.paragraphs[0].runs:
         r.font.size, r.font.bold, r.font.color.rgb = Pt(54), True, INK
     text(s, "+8 %", 80, 250, 560, 260, 160, color=ACCENT, bold=True, name="HeroStat")
-    text(s, "East revenue vs Q4. Every other region within ±3 %.", 80, 540, 560, 120, 24,
+    text(s, "East revenue vs Q4. Every other region within ±3 %.", 80, 540, 560, 120, 28,
          color=MUTED, name="Caption")
 
     data = CategoryChartData()
@@ -116,7 +116,7 @@ def after():
     ch.value_axis.visible = False
     ch.value_axis.has_major_gridlines = False
     ch.category_axis.tick_label_position = XL_TICK_LABEL_POSITION.LOW  # below negative bars
-    ch.category_axis.tick_labels.font.size = Pt(20)
+    ch.category_axis.tick_labels.font.size = Pt(24)
     ch.category_axis.tick_labels.font.color.rgb = MUTED
     plot = ch.plots[0]
     plot.gap_width = 60
@@ -124,7 +124,7 @@ def after():
     labels = plot.data_labels
     labels.number_format, labels.number_format_is_linked = '+0.0;-0.0', False
     labels.position = XL_LABEL_POSITION.OUTSIDE_END
-    labels.font.size, labels.font.bold = Pt(20), True
+    labels.font.size, labels.font.bold = Pt(24), True
     for i, point in enumerate(plot.series[0].points):  # only the finding gets the accent colour
         point.format.fill.solid()
         point.format.fill.fore_color.rgb = ACCENT if i == 0 else QUIET

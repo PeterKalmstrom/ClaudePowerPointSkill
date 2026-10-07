@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **`scripts/build_deck.py`**: builds a deck from a JSON/YAML spec — 14 patterns (title, section, statement,
+  big number, KPI, bullets, compare, process, timeline, quote, chart, table, image, 2×2 matrix), per-pattern
+  limits checked before building, a design direction written into the theme or a company template, native
+  charts with one highlighted finding, generated alt text, structured speaker notes, stable slide ids.
+  `--lint` lints the result. Sample spec in `examples/spec/`.
+- **20 design directions** (`scripts/directions.json`, written for this skill) and **reference/DESIGN.md**
+  (Full HD type scale, spacing, chart and table defaults); **reference/BUILDER.md** (spec format).
+- **Font sizes scale with slide width:** the 18 pt body floor is 27 pt on Full HD (1440 pt) slides, in
+  `lint_deck.py`, `audit_deck.py` and the docs. The same text is two-thirds as big on a wider slide.
+- `lint_deck.py` looks behind text boxes for the card or band they sit on when checking contrast, and
+  measures rotated shapes as drawn.
+
 - `scripts/lint_deck.py`: lints a deck from the file alone, on any OS — titles, body floor (with
   `--room-depth`), bullets, off-slide shapes, overlaps, empty placeholders (`--fix`), colour count, contrast,
   alt text, stretched pictures, chart palette/title/labels, notes, duplicate titles, font drift. JSON output.

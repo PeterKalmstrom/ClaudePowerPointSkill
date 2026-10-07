@@ -44,12 +44,20 @@ OVERLAP_WARN_PT2 = 4.0     # PointClaw thresholds: >= 4 pt2 warn, >= 200 pt2 err
 OVERLAP_ERROR_PT2 = 200.0
 EDGE_TOLERANCE_PT = 2.0
 STRETCH_TOLERANCE = 0.03
+SCALE = 1.0                # slide width / 960 pt, set per deck in lint()
 
 
 # ---------------------------------------------------------------- helpers
 
 def rect(sh):
-    return (Emu(sh.left or 0).pt, Emu(sh.top or 0).pt, Emu(sh.width or 0).pt, Emu(sh.height or 0).pt)
+    """(left, top, width, height) in pt as drawn - a box turned 90/270 degrees swaps width and height
+    around its centre."""
+    l, t, w, h = (Emu(sh.left or 0).pt, Emu(sh.top or 0).pt, Emu(sh.width or 0).pt, Emu(sh.height or 0).pt)
+    rot = round(getattr(sh, "rotation", 0) or 0) % 180
+    if rot == 90:
+        cx, cy = l + w / 2, t + h / 2
+        l, t, w, h = cx - h / 2, cy - w / 2, h, w
+    return (l, t, w, h)
 
 
 def walk(shapes):
@@ -287,17 +295,28 @@ def lint_slide(n, slide, sw, sh_, floor, budget, f, theme):
                 if len(pt_text) >= 80 and p.alignment == 2:  # PP_ALIGN.CENTER
                     f.add(n, "warn", "centered_long_body", "Long centred text is hard to read; left-align body "
                           "text and keep centring for one-line headlines and quotes.", s.name)
-                if len(pt_text) >= 90 and size <= 28:
+                if len(pt_text) >= 90 and size <= 28 * SCALE:
                     cpl = chars_per_line(Emu(s.width or 0).pt, size)
                     if cpl > 75:
                         f.add(n, "warn", "measure_too_wide", f"About {cpl:.0f} characters per line (comfortable: "
                               "45–75); narrow the box or raise the size.", s.name)
-                if size >= 24:
+                if size >= 24 * SCALE:
                     big_tokens.update(w.lower() for w in re.findall(r"[^\W\d_]{4,}", pt_text)
                                       if w.lower() not in STOP_WORDS)
             # contrast: run colour (or theme text colour) against shape fill (or slide background)
-            if not contrast_done and not has_other_fill(s):
-                bg = fill or slide_bg
+            backing = fill
+            if backing is None and not has_other_fill(s):  # a card or band drawn behind the text box
+                for o in content:
+                    if o is s:
+                        break
+                    if contains(rect(o), rect(s), tol=2.0):
+                        if has_other_fill(o):
+                            backing = "?"
+                        else:
+                            backing = shape_fill(o, theme) or backing
+            if not contrast_done and not has_other_fill(s) and backing != "?":
+                bg = backing or slide_bg
+                fill = backing
                 default_fg = theme.colours.get(theme.map.get("tx1", "dk1"))
                 for p in paras:
                     size = para_size(s, p) or 18.0
@@ -307,7 +326,7 @@ def lint_slide(n, slide, sw, sh_, floor, budget, f, theme):
                         fg = run_colour(r, theme) or (default_fg if fill else None)
                         if not fg or not bg:
                             continue
-                        need = 3.0 if is_large_text(size, bool(r.font.bold)) else 4.5
+                        need = 3.0 if is_large_text(size / SCALE, bool(r.font.bold)) else 4.5
                         ratio = contrast_ratio(fg, bg)
                         if ratio < need:
                             f.add(n, "error" if ratio < 3.0 else "warn", "a11y_low_text_contrast",
@@ -440,10 +459,15 @@ def lint_chart(n, s, f, theme):
 
 
 def lint(path, floor, budget):
+    """Sizes are judged relative to a standard 960-pt-wide slide: on a 1440-pt (Full HD) slide an
+    18 pt floor becomes 27 pt, because the same text is two-thirds as big on screen."""
+    global LABEL_MAX_PT, SCALE
     prs = Presentation(path)
     f = Findings()
     theme = Theme(prs.slide_master)
     sw, sh_ = Emu(prs.slide_width).pt, Emu(prs.slide_height).pt
+    scale = SCALE = max(1.0, sw / 960)
+    floor, LABEL_MAX_PT = round(floor * scale, 1), round(12.0 * scale, 1)
     if (round(sw), round(sh_)) != (1440, 810):
         ratio = sw / sh_
         f.add(0, "warn" if abs(ratio - 16 / 9) > 0.01 else "info", "slide_size",
@@ -479,6 +503,7 @@ def lint(path, floor, budget):
     if resolved and len(resolved) <= 1 and set(resolved) <= DEFAULT_FACES:
         f.add(0, "info", "default_font_only", f"Only {next(iter(resolved)).title()} is used. Fine for a quick "
               "internal deck; for anything branded, pair a distinctive heading face with the body font.")
+    f.floor = floor
     return prs, f
 
 
@@ -512,7 +537,7 @@ def main():
     prs, f = lint(a.file, floor, a.budget)
     sev = Counter(i["severity"] for i in f.items)
     if a.json:
-        print(json.dumps({"file": a.file, "floor_pt": floor, "counts": dict(sev), "findings": f.items},
+        print(json.dumps({"file": a.file, "floor_pt": f.floor, "counts": dict(sev), "findings": f.items},
                          ensure_ascii=False, indent=2))
     else:
         if hasattr(sys.stdout, "reconfigure"):
@@ -522,7 +547,7 @@ def main():
             shape = f" [{i['shape']}]" if i["shape"] else ""
             print(f"{i['severity']:<5}  {where:<9} {i['code']:<24}{shape} {i['message']}")
         print(f"\n{sev.get('error', 0)} error(s), {sev.get('warn', 0)} warning(s), {sev.get('info', 0)} info  "
-              f"(body floor {floor:g} pt)")
+              f"(body floor {f.floor:g} pt)")
     if a.fix:
         done = fix(prs, f)
         prs.save(a.out)

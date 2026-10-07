@@ -6,7 +6,7 @@
     uvx --with python-pptx --with pillow --with pywin32 python scripts/selftest.py --com
 
 The test deck (5 slides, 1440 x 810 pt) has known defects, so each check knows what to expect:
-  1 "Decisions"       topic-label title, a 4-word body paragraph at 14 pt   -> ** AUDIT, label?
+  1 "Decisions"       topic-label title, a 4-word body paragraph at 22 pt   -> ** AUDIT, label?
   2 claim title       short body at 24 pt                                    -> OK
   3 claim title       one long word in a narrow box at 60 pt                 -> broken word
   4 claim title       speaker notes                                          -> notes in bulk_read
@@ -64,7 +64,7 @@ def build_deck(path):
         for r in tb.text_frame.paragraphs[0].runs:
             r.font.size = Pt(size)
 
-    text(slide("Decisions"), "Small text below the floor", 14)
+    text(slide("Decisions"), "Small text below the floor", 22)
     text(slide("The check comes first"), "Plan, check, run", 24)
     text(slide("Long words break lines"), "Internationalization", 60, width=200, name="Narrow")
     s = slide("Notes carry the depth")
@@ -177,7 +177,7 @@ def main():
     code, out = run("lint_deck.py", deck, "--json")
     try:
         found = {(i["slide"], i["code"]) for i in json.loads(out.split("\nfixed")[0])["findings"]}
-        check("lint_deck: slide 1 body below 18 pt floor", (1, "body_below_floor") in found)
+        check("lint_deck: slide 1 body below the floor (27 pt at Full HD)", (1, "body_below_floor") in found)
         check("lint_deck: slide 1 title is a label", (1, "title_is_label") in found)
         check("lint_deck: slide 2 has no body/title findings",
               not {c for sl, c in found if sl == 2} & {"body_below_floor", "title_is_label", "empty_title"})
@@ -214,6 +214,31 @@ def main():
             check(f"lint_deck: finds {want}", want in got, ", ".join(sorted(got)))
     except Exception as e:
         check("lint_deck: taste deck JSON", False, f"{e}: {out[:300]}")
+
+    # build_deck: the sample spec must build and lint with no errors or warnings
+    sample = os.path.join(HERE, "..", "examples", "spec", "sample-deck.json")
+    built = os.path.join(tmp, "built.pptx")
+    code, out = run("build_deck.py", sample, "--out", built)
+    check("build_deck: sample spec builds", code == 0 and os.path.exists(built), out)
+    code, out = run("lint_deck.py", built, "--json")
+    try:
+        counts = json.loads(out)["counts"]
+        check("build_deck: output lints clean (no errors or warnings)",
+              not counts.get("error") and not counts.get("warn"), out[-600:])
+    except Exception as e:
+        check("build_deck: lint JSON", False, f"{e}: {out[:300]}")
+    bad = os.path.join(tmp, "bad-spec.json")
+    json.dump({"slides": [{"pattern": "kpi", "title": "Too few", "metrics": [{"value": "1", "label": "x"}]},
+                          {"pattern": "bullets", "items": ["no title"]}]}, open(bad, "w"))
+    code, out = run("build_deck.py", bad, "--out", os.path.join(tmp, "bad.pptx"))
+    check("build_deck: rejects a spec that breaks pattern limits", code == 2 and "needs 3-6" in out
+          and "needs a 'title'" in out, out)
+    sys.path.insert(0, HERE)
+    from _rules import contrast_ratio
+    dirs = json.load(open(os.path.join(HERE, "directions.json"), encoding="utf-8"))["directions"]
+    weak = [d["id"] for d in dirs if contrast_ratio(d["text"], d["background"]) < 7
+            or contrast_ratio(d["muted"], d["background"]) < 4.5 or contrast_ratio(d["accent"], d["background"]) < 3]
+    check(f"directions: all {len(dirs)} pass contrast (text 7:1, muted 4.5:1, accent 3:1)", not weak, ", ".join(weak))
 
     # extract_theme
     code, out = run("extract_theme.py", deck)
@@ -257,7 +282,7 @@ def main():
         code, out = run("audit_deck.py", "--file", deck)
         rows = {ln.split()[0]: ln for ln in out.splitlines() if ln[:3].strip().isdigit()}
         check("audit_deck: slide 1 flagged", "** AUDIT" in rows.get("1", ""), out)
-        check("audit_deck: slide 1 min font 14pt", "14pt" in rows.get("1", ""), out)
+        check("audit_deck: slide 1 min font 22pt", "22pt" in rows.get("1", ""), out)
         check("audit_deck: slide 1 label? warning", "label?" in rows.get("1", ""), out)
         check("audit_deck: slide 2 OK", " OK " in rows.get("2", "") + " ", out)
         check("audit_deck: hidden slide skipped", "[skip]" in rows.get("5", ""), out)

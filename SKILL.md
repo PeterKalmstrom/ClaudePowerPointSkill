@@ -1,6 +1,6 @@
 ---
 name: building-powerpoint-decks
-description: Build, edit, audit and present PowerPoint decks with Claude — via the powerpoint-mcp server and COM on Windows, or python-pptx anywhere. Load when creating or editing a .pptx, auditing a deck, preparing to present one, adding animation, video or AI images to slides, or when PowerPoint MCP tools are missing or failing.
+description: Build, edit, audit and present PowerPoint decks with Claude — via COM automation of desktop PowerPoint on Windows, or python-pptx anywhere. Load when creating or editing a .pptx, auditing a deck, preparing to present one, adding animation, video or AI images to slides, or when PowerPoint automation on Windows is failing.
 ---
 
 # Building PowerPoint decks
@@ -18,7 +18,7 @@ only the reference file the task needs.
 | **Review / audit a deck** | `scripts/lint_deck.py` first (any OS) · `scripts/fix_deck.py` for the mechanical fixes · then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
 | **Before a talk** | Audit clean first, then [PRESENTING](reference/PRESENTING.md) |
 | **Images, video, Remotion, Veo** | [MEDIA](reference/MEDIA.md), then [ANIMATION](reference/ANIMATION.md) if it moves |
-| **PowerPoint tools missing / MCP failing** | [SETUP](reference/SETUP.md) → Troubleshooting |
+| **PowerPoint automation failing (Windows)** | [SETUP](reference/SETUP.md) → Troubleshooting |
 | **No Windows (Linux, macOS, CI)** | [AUTOMATION](reference/AUTOMATION.md) → *Building .pptx without PowerPoint* |
 | **Company template / brand** | `scripts/extract_theme.py` → [LAYOUT](reference/LAYOUT.md) → *Building from a template* |
 | **Corporate / labelled deck** | [LABELS](reference/LABELS.md) before choosing a toolchain |
@@ -27,7 +27,8 @@ only the reference file the task needs.
 
 | File | Covers | Runs on |
 |---|---|---|
-| [SETUP.md](reference/SETUP.md) | Installing `powerpoint-mcp`, troubleshooting, MCP tool list | Windows + PowerPoint |
+| [SETUP.md](reference/SETUP.md) | Windows setup, driving PowerPoint from Python, troubleshooting | Windows + PowerPoint |
+| [mcp-app/](mcp-app/README.md) | PowerPoint Live: own MCP server with a live view of the current slide | Windows + PowerPoint |
 | [COM.md](reference/COM.md) | Snapshots, multi-deck safety, UTF-8, idempotent builds, keeping hand edits, shape filtering | Windows + PowerPoint |
 | [LAYOUT.md](reference/LAYOUT.md) | Slide size, pictures, text wrap, embedded fonts, word budgets, anchor types, layout patterns | Mostly any OS; rendering needs Windows |
 | [MEDIA.md](reference/MEDIA.md) | AI images, Remotion, Veo, compression, embedding, combined patterns | Generation any OS; embedding Windows |
@@ -101,7 +102,7 @@ Never run more than 4 iterations on the same defect without escalating.
 
 - *Source-look-only iteration* — reading COM properties or script values, declaring success without exporting
 - *Patch on patch on patch* — each patch tweaks one element without considering layout interactions; backing rectangles drift, z-order shifts, third patch produces shape soup. **Three patches = rewrite the build script.**
-- *Tool-output as ground truth* — `{"success": true}` from an MCP tool is not the same as a correctly rendered slide
+- *Tool-output as ground truth* — `{"success": true}` from a script or tool is not the same as a correctly rendered slide
 - *Optimistic font sizing* — "36pt should fit" is a guess until the PNG confirms it
 - *Caching trust* — replacing an image at the same path doesn't always update the embedded version; re-add the picture explicitly
 - *Active context drift* — see [Multi-presentation safety](reference/COM.md#multi-presentation-safety--never-trust-activepresentation); pin to a specific presentation by name, never trust `ActivePresentation`
@@ -110,9 +111,8 @@ Never run more than 4 iterations on the same defect without escalating.
 
 These depend on upstream releases. Re-check them when something that used to work breaks:
 
-- `powerpoint-mcp` 1.30.0 needs `--with "mcp<2"` in the uvx args ([SETUP](reference/SETUP.md#connection_closed-at-startup-no-module-named-mcpserverfastmcp)).
 - Veo model ids `veo-3.1-generate-preview` and `veo-3.1-fast-generate-preview` are confirmed; a `lite` id is not ([MEDIA](reference/MEDIA.md#key-details)).
-- The MCP's `slide_snapshot` renders through `Slide.Export`, so it shows fallback fonts for embedded fonts.
+- `Slide.Export` shows fallback fonts for embedded fonts; `scripts/render_slides.py` does not.
 - python-pptx 1.0.2 behaviour is assumed in the slide-copy notes ([COM](reference/COM.md#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite)).
 
 ---
@@ -136,8 +136,7 @@ A consolidated catalog of the silent failures that have actually shipped broken 
 | Sentinel-text check uses a phrase from the pre-build slide | Idempotency check skips structural step (Duplicate / Insert), then rewrites text — destroys adjacent unrelated slides | [Idempotent build scripts](reference/COM.md#idempotent-build-scripts) (Sentinel rule) |
 | `AddPicture` to replace a picture inside a Group | New picture lands as a sibling outside the group; old picture remains; layout breaks | [Swapping a picture inside a Group](reference/MEDIA.md#swapping-a-picture-that-lives-inside-a-group) |
 | Hardcoded `OUT = r"C:\Users\<somebody>\..."` in chart scripts | Script does nothing useful on any other machine; PNG fails to update; embedded chart looks stale forever | [Portable OUT paths](reference/MEDIA.md#portable-out-paths-in-chart-scripts) |
-| Trusting `Slide.Export` / `slide_snapshot` for decks with embedded fonts | Renders a fallback font; real mid-word breaks look clean and pass review | [Embedded fonts](reference/LAYOUT.md#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg) |
-| Pinning nothing in the uvx args | A new `mcp` 2.x release kills the server at startup (`CONNECTION_CLOSED`) | [`CONNECTION_CLOSED` at startup](reference/SETUP.md#connection_closed-at-startup-no-module-named-mcpserverfastmcp) |
+| Trusting `Slide.Export` for decks with embedded fonts | Renders a fallback font; real mid-word breaks look clean and pass review | [Embedded fonts](reference/LAYOUT.md#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg) |
 | Rebuilding a generated deck over a hand-edited one | A day of human edits silently erased | [Harvest before you overwrite](reference/COM.md#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite) |
 | `Presentations.Add()` then `InsertFromFile` without setting the size | Whole deck silently scaled to 720p, all fonts a third smaller | [Slide size](reference/LAYOUT.md#slide-size--set-it-before-inserting-anything) |
 | `AddPicture` / `add_picture` with both width and height | Photos stretched by up to ~60 %, unnoticed | [Pictures stretch](reference/LAYOUT.md#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly) |

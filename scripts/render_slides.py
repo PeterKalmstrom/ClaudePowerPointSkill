@@ -1,6 +1,6 @@
 """Render every slide to JPEG through PowerPoint's own Save As JPEG.
 
-Use this, not Slide.Export: Slide.Export (and the MCP's slide_snapshot) draws a FALLBACK
+Use this, not Slide.Export: Slide.Export draws a FALLBACK
 font for embedded-but-not-installed fonts, which hides real mid-word line breaks.
 SaveCopyAs never rebinds the open presentation.
 

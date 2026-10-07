@@ -2,9 +2,33 @@
   "name": "building-powerpoint-decks",
   "version": "2.0.0",
   "description": "Build, lint, fix and render PowerPoint decks that look designed: spec-driven builder, layout and contrast lint, automatic fixes, renders on any OS, real PowerPoint on Windows.",
-  "author": { "name": "Peter Kalmstrom" },
+  "author": {
+    "name": "Peter Kalmstrom"
+  },
   "license": "MIT",
   "repository": "https://github.com/PeterKalmstrom/claude-powerpoint-skill",
-  "keywords": ["powerpoint", "pptx", "slides", "presentation", "design", "lint"],
-  "skills": ["./"]
+  "keywords": [
+    "powerpoint",
+    "pptx",
+    "slides",
+    "presentation",
+    "design",
+    "lint"
+  ],
+  "skills": [
+    "./"
+  ],
+  "mcpServers": {
+    "powerpoint-live": {
+      "command": "uvx",
+      "args": [
+        "--with",
+        "mcp<2",
+        "--with",
+        "pywin32; sys_platform == 'win32'",
+        "python",
+        "${CLAUDE_PLUGIN_ROOT}/mcp-app/server.py"
+      ]
+    }
+  }
 }

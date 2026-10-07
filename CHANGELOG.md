@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **No third-party PowerPoint server any more:** Windows mode drives PowerPoint directly through COM
+  (`pywin32`) with the skill's own scripts. `powerpoint-mcp` and every reference to its tools are removed;
+  `reference/SETUP.md` is rewritten (install uv, verify with `selftest.py --com`).
+
+- **PowerPoint Live (`mcp-app/`):** the skill's own MCP server for Windows — open, run Python against and show
+  slides — with an MCP App view that shows the current slide live as Claude, a script or a person changes it.
+  A slide sorter view groups thumbnails by section and rearranges slides by drag and drop. Registered by the plugin.
+
 ## 2.0.0
 
 - **`scripts/fix_deck.py`:** repairs what `lint_deck.py` finds mechanically — empty placeholders, text below the

@@ -33,7 +33,7 @@ If you hit a defect and figured out the fix, send a PR with:
 - **Rules over options.** The skill is most useful when it tells Claude what to *do*, not when it enumerates every possible approach. If two patterns work, pick the one you'd want Claude to use by default.
 - **State the why.** A rule without a reason becomes cargo-cult behavior; one with a reason can be applied to edge cases. The "why" line is where the value lives.
 - **Cite the incident.** "We hit this in November 2025 when the auto-export silently used the cached image" is more useful than "the cache can be stale." Specifics earn trust.
-- **Avoid abstraction creep.** If a rule only applies to one specific anchor type or one specific MCP tool, name it. Don't generalize until you've seen the same failure mode three different ways.
+- **Avoid abstraction creep.** If a rule only applies to one specific anchor type or one specific COM call, name it. Don't generalize until you've seen the same failure mode three different ways.
 - **No nested headings deeper than three.** Skills are read top-to-bottom by an LLM; deep hierarchies hurt retrieval.
 - **Keep `SKILL.md` short.** It is loaded every time the skill triggers; CI fails it above 500 lines. New detail
   goes in `reference/`. Only a rule that applies to *every* deck belongs in *Core rules*.

@@ -13,7 +13,7 @@ only the reference file the task needs.
 
 | Task | Read, in order |
 |---|---|
-| **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · showcase-first (below) · the build loop (below) |
+| **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · write a spec and build it with `scripts/build_deck.py` ([BUILDER](reference/BUILDER.md), looks in [DESIGN](reference/DESIGN.md)) · showcase-first (below) · the build loop (below) |
 | **Edit an existing deck** | Snapshot first · find the deck by name ([COM](reference/COM.md)) · bulk-read before judging ([AUDIT](reference/AUDIT.md)) |
 | **Review / audit a deck** | `scripts/lint_deck.py` first (any OS), then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
 | **Before a talk** | Audit clean first, then [PRESENTING](reference/PRESENTING.md) |
@@ -32,6 +32,8 @@ only the reference file the task needs.
 | [LAYOUT.md](reference/LAYOUT.md) | Slide size, pictures, text wrap, embedded fonts, word budgets, anchor types, layout patterns | Mostly any OS; rendering needs Windows |
 | [MEDIA.md](reference/MEDIA.md) | AI images, Remotion, Veo, compression, embedding, combined patterns | Generation any OS; embedding Windows |
 | [ANIMATION.md](reference/ANIMATION.md) | When motion earns its place, effect table, native timing traps | Any OS (COM/XML parts marked) |
+| [BUILDER.md](reference/BUILDER.md) | Spec-driven deck builder: patterns, limits, chart and type defaults | Any OS |
+| [DESIGN.md](reference/DESIGN.md) | Type scale for Full HD, spacing, chart and table defaults, 20 design directions | Any OS |
 | [CONTENT.md](reference/CONTENT.md) | Audience, claim titles, cognitive load, speaker notes, showcase-first | Any OS |
 | [AUDIT.md](reference/AUDIT.md) | Bulk read, defect catalogue with severities, full audit procedure | Scripts Windows; catalogue any OS |
 | [PRESENTING.md](reference/PRESENTING.md) | Timing markers, Q&A sheet, notes PDF, rehearsal | Windows + PowerPoint |
@@ -47,7 +49,7 @@ These apply to every deck. Each links to its full explanation.
 3. **Rebuild, don't patch** — one idempotent `build_slide_NN.py` per non-trivial slide; name every shape. Three patches = rewrite. ([COM](reference/COM.md#idempotent-build-scripts))
 4. **Never overwrite people's edits** — harvest hand-edited slides before regenerating a deck. ([COM](reference/COM.md#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite))
 5. **Full HD = 1440 × 810 pt**, set before inserting slides. ([LAYOUT](reference/LAYOUT.md#slide-size--set-it-before-inserting-anything))
-6. **About 10 visible words per slide (by anchor type), body ≥ 18 pt**, claim titles. ([LAYOUT](reference/LAYOUT.md#anchor-types-and-word-budgets), [CONTENT](reference/CONTENT.md#titles-make-a-claim-not-a-topic))
+6. **About 10 visible words per slide (by anchor type), body ≥ 18 pt on a 960-pt slide — ≥ 27 pt on Full HD (1440 pt)**, claim titles. ([LAYOUT](reference/LAYOUT.md#anchor-types-and-word-budgets), [CONTENT](reference/CONTENT.md#titles-make-a-claim-not-a-topic))
 7. **No text baked into images or video** — overlay it in PowerPoint. ([MEDIA](reference/MEDIA.md#generate-images-without-text--overlay-text-in-powerpoint))
 8. **Crop pictures, never stretch them.** ([LAYOUT](reference/LAYOUT.md#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly))
 9. **The slide carries the punch, the notes carry the depth** — notes first, fixed order. ([CONTENT](reference/CONTENT.md#write-the-notes-first-in-a-fixed-order))

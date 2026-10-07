@@ -54,6 +54,13 @@ Keep the licence terms with the image file so the next build can rewrite the cre
 
 ---
 
+## Font sizes scale with the slide
+
+Every point size in this skill (the 18 pt body floor, the 12–14 pt label exception, the type ceilings) was
+learned on 960 × 540 pt slides. **On Full HD (1440 × 810 pt) multiply by 1.5**: body floor 27 pt, labels
+down to 18 pt. The same 18 pt text is two-thirds as big on screen on the wider slide. `lint_deck.py` and
+`audit_deck.py` scale automatically; the full scale is in [DESIGN.md](DESIGN.md).
+
 ## Building from a template
 
 When the user has a company template or brand deck, build **on it**, not next to it:

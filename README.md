@@ -20,6 +20,14 @@ git clone https://github.com/PeterKalmstrom/claude-powerpoint-skill ~/.claude/sk
 
 Then ask Claude Code: *"Make a 6-slide deck from notes.md"* — or *"Review deck.pptx before my talk"*.
 
+Or build one yourself from a spec — [`examples/spec/sample-deck.json`](examples/spec/sample-deck.json) has every slide pattern:
+
+```bash
+uvx --with python-pptx --with pillow python scripts/build_deck.py examples/spec/sample-deck.json --out deck.pptx --lint
+```
+
+![The 14-slide sample deck built from that spec](examples/spec/sample-deck.png)
+
 ---
 
 ## How it works
@@ -61,7 +69,7 @@ the shapes, rendering and looking, putting the citation in the notes.
 
 | Mode | Needs | You get |
 |---|---|---|
-| **Any OS** (Linux, macOS, Windows, CI) | Python + [`python-pptx`](https://python-pptx.readthedocs.io/) (via `uvx`); LibreOffice optional for rough renders | Building and editing .pptx files, all the content and layout rules, **`lint_deck.py`** (overlaps, stretched pictures, small text, missing alt text, contrast, empty placeholders…), theme and template extraction, approximate LibreOffice renders, before/after render diffs |
+| **Any OS** (Linux, macOS, Windows, CI) | Python + [`python-pptx`](https://python-pptx.readthedocs.io/) (via `uvx`); LibreOffice optional for rough renders | **`build_deck.py`** (spec → deck: 14 slide patterns, 20 design directions or your template, native charts), editing .pptx files, all the content and layout rules, **`lint_deck.py`** (overlaps, stretched pictures, small text, missing alt text, contrast, empty placeholders…), theme and template extraction, approximate LibreOffice renders, before/after render diffs |
 | **Windows power mode** | Desktop PowerPoint + the [`powerpoint-mcp`](https://pypi.org/project/powerpoint-mcp/) server | Live editing of the open deck, pixel-exact renders (including embedded fonts), word-break checks, contact sheets, notes/handout PDFs |
 
 Optional media: [Remotion](https://www.remotion.dev/) for animated video, Google
@@ -102,6 +110,8 @@ Troubleshooting: [`reference/SETUP.md`](reference/SETUP.md).
 | [`reference/SETUP.md`](reference/SETUP.md) | Installing `powerpoint-mcp`, troubleshooting, MCP tool list | Windows |
 | [`reference/COM.md`](reference/COM.md) | Snapshots, multi-deck safety, idempotent builds, keeping hand edits, shape filtering | Windows |
 | [`reference/LAYOUT.md`](reference/LAYOUT.md) | Slide size, cropping, text wrap, embedded fonts, word budgets, layout patterns | Mostly any OS |
+| [`reference/BUILDER.md`](reference/BUILDER.md) | Spec format, the 14 patterns and their limits, what the builder decides | Any OS |
+| [`reference/DESIGN.md`](reference/DESIGN.md) | Full HD type scale, spacing, chart/table defaults, 20 design directions | Any OS |
 | [`reference/CONTENT.md`](reference/CONTENT.md) | Audience, claim titles, cognitive load, speaker notes | Any OS |
 | [`reference/AUDIT.md`](reference/AUDIT.md) | Defect catalogue with severities, full audit procedure | Catalogue any OS; scripts Windows |
 | [`reference/ANIMATION.md`](reference/ANIMATION.md) | When motion earns its place, native timing traps | Any OS |
@@ -109,7 +119,7 @@ Troubleshooting: [`reference/SETUP.md`](reference/SETUP.md).
 | [`reference/PRESENTING.md`](reference/PRESENTING.md) | Timing markers, Q&A sheet, notes PDF, rehearsal | Windows |
 | [`reference/AUTOMATION.md`](reference/AUTOMATION.md) | Headless PowerPoint, building without COM | Mixed |
 | [`reference/LABELS.md`](reference/LABELS.md) | Sensitivity labels and what encryption breaks | Any OS |
-| [`scripts/`](scripts/README.md) | Audit, bulk read, render, contact sheet, PDF, checks, self-test | See its README |
+| [`scripts/`](scripts/README.md) | Build, lint, theme extraction, renders and diffs, audit, PDF, self-test | See its README |
 
 ---
 

@@ -1,0 +1,84 @@
+# Building decks from a spec
+
+*Runs on: any OS (python-pptx).* Part of the `building-powerpoint-decks` skill — start at [`SKILL.md`](../SKILL.md). Paths like `scripts/…` are relative to the skill folder.
+
+## When to use it
+
+For a new deck, write a **spec** (JSON or YAML) and let `scripts/build_deck.py` draw it, instead of writing
+a new python-pptx script per slide. The builder applies the core rules by construction — 1440 × 810 pt, a
+real title placeholder on every slide, theme colours and fonts, named shapes, stable slide ids
+(`<p:cSld name>` = the slide's `id`), cropped pictures, native charts with one highlighted finding, alt text
+and speaker notes — and refuses specs that break a pattern's limits. Then lint, render and LOOK as usual.
+
+```bash
+uvx --with python-pptx --with pillow python scripts/build_deck.py spec.json --out deck.pptx --lint
+uvx --with python-pptx --with pillow --with pyyaml python scripts/build_deck.py spec.yaml --out deck.pptx
+python scripts/build_deck.py --list-directions
+```
+
+Exit code 2 means the spec broke a limit (each problem is printed); fix the content rather than reaching
+for `--force` — the limits are the word budgets in [LAYOUT.md](LAYOUT.md) made concrete. A complete
+example covering every pattern is [`examples/spec/sample-deck.json`](../examples/spec/sample-deck.json);
+its output, rendered with LibreOffice, is [`sample-deck.png`](../examples/spec/sample-deck.png).
+
+Hand-edit a built deck freely, but before rebuilding, harvest the edits — see *A generated deck that
+people also edit* in [COM.md](COM.md#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite).
+
+## Spec shape
+
+```json
+{
+  "direction": "clean-corporate",
+  "template": "brand.potx",
+  "slides": [
+    {"id": "growth", "pattern": "big_number", "title": "East grew faster than any region",
+     "number": "+8", "unit": "%", "caption": "East revenue vs Q4.",
+     "notes": {"key_fact": "...", "facts": ["..."], "qa": [{"q": "...", "a": "..."}],
+               "pitfalls": ["..."], "sources": ["..."]}}
+  ]
+}
+```
+
+- **`direction`** — one of the 20 looks in [DESIGN.md](DESIGN.md); written into the deck's *theme*, so the
+  deck re-themes cleanly. Ignored when `template` is set.
+- **`template`** — a .pptx/.potx to build on: its masters, layouts, colours and fonts are kept, its slides
+  dropped. The builder picks the *Title Only* layout and leaves fonts and colours to the theme. Run
+  `scripts/extract_theme.py` on it first.
+- **`id`** — stable slide id; keep it when content changes, so diffs and hand-edit harvesting can match slides.
+- **`title`** — required on every content slide; write it as a claim ([CONTENT.md](CONTENT.md#titles-make-a-claim-not-a-topic)).
+- **`notes`** — a string, or the fixed structure (key fact, facts, Q&A, pitfalls, sources).
+- **`highlight`** — on most patterns: the one item that gets the accent colour. Everything else stays quiet.
+- Image paths and `template` are relative to the spec file.
+
+## Patterns and limits
+
+| Pattern | Fields | Limits | Use for |
+|---|---|---|---|
+| `title` | `title`, `subtitle` | 70 / 120 chars | Cover |
+| `section` | `title`, `eyebrow` | 60 / 30 | Chapter break every 7–10 slides |
+| `statement` | `title`, `support` | 90 / 140 | One big claim or the close |
+| `big_number` | `title`, `number`, `unit`, `caption` | number ≤ 12, unit ≤ 10, caption ≤ 90 | One figure that is the point |
+| `kpi` | `title`, `metrics[{value, label}]`, `highlight` | 3–6 metrics; value ≤ 12, label ≤ 28 | A few headline numbers |
+| `bullets` | `title`, `items[]` | 1–7 items, ≤ 100 chars | Asks, agendas, short lists |
+| `compare` | `title`, `columns[{heading, points[]}]`, `highlight` | 2–3 columns, 1–4 points ≤ 70 | Before/after, us/them, options |
+| `process` | `title`, `steps[{label, detail}]`, `highlight` | 3–8 steps; label ≤ 30, detail ≤ 60 | Ordered steps (chevrons up to 5) |
+| `timeline` | `title`, `events[{date, label}]`, `highlight` | 3–7 events; date ≤ 16, label ≤ 40 | Dates and milestones |
+| `quote` | `quote`, `attribution`, `role`, `title` | quote ≤ 240 | A real person's words (credit in notes) |
+| `chart` | `title`, `type`, `categories[]`, `series[{name, values}]`, `highlight`, `number_format`, `caption`, `alt` | 2–24 categories, 1–6 series | Native, editable chart (`column`, `bar`, `line`, `pie`) |
+| `table` | `title`, `header[]`, `rows[[]]`, `highlight_row` | 2–6 columns, 1–8 rows | Numbers people will read |
+| `image` | `title`, `image`, `caption`, `alt`, `focus_x`, `focus_y` | caption ≤ 120 | A photo, cover-cropped to the body box |
+| `matrix` | `title`, `quadrants[{heading, text}]`, `x_axis`, `y_axis`, `highlight` | 4 quadrants; heading ≤ 30, text ≤ 90 | 2 × 2 prioritisation |
+
+## What the builder decides for you
+
+- **Charts:** no legend for one series, legend on the right otherwise (never top/bottom); data labels on pies
+  and single-series bars/columns, never on lines; when labels are on, the value axis and gridlines go;
+  0.5 pt gridlines otherwise; 75 % bar gap; 2.25 pt lines; the `highlight` category in the accent and
+  every other bar quiet; several series as shades of the accent. Alt text is generated from the data
+  unless you give `alt`.
+- **Type:** sizes for a 1440-pt slide (body 34, captions 28, labels 24 — all at or above the 27 pt Full HD
+  floor for sentences); headings use the theme's heading font, everything else the body font.
+- **Colour:** text, muted text, accent, background and a quiet neutral, all as theme colours.
+
+The builder does not check line breaks or overflow — that needs a render. Always finish with
+`lint_deck.py`, a render, and a look at every slide.

@@ -20,7 +20,7 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `missing_title` / `empty_title` | warn | No title placeholder / it's empty (screen readers and the outline need one, even hidden) |
 | `headline_too_long` / `headline_two_line` | warn | Title > 55 characters / has a hard line break |
 | `title_is_label` | info | 1–2 words, no verb, not a question — a topic, not a claim |
-| `body_below_floor` | warn | A paragraph of 4+ words between 12 pt and the floor (18 pt; `--room-depth` raises it) |
+| `body_below_floor` | warn | A paragraph of 4+ words between the label ceiling and the floor. Both scale with slide width: 12 / 18 pt on a 960-pt slide, **18 / 27 pt on Full HD**; `--room-depth` raises the floor |
 | `too_many_bullets` | warn | More than 7 paragraphs in one shape |
 | `word_budget` | info | More than 12 visible words — accept for gallery, matrix, chart, quote, reference slides |
 | `offslide_shape` | warn | A shape sticks out past the slide edge (2 pt tolerance) |

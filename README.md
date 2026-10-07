@@ -145,7 +145,7 @@ You don't invoke it explicitly — Claude reads the description and loads the sk
 
 ## What's in `SKILL.md`
 
-Top-level sections (each is substantial — the file is ~1500 lines):
+Top-level sections (each is substantial — the file is ~1750 lines):
 
 | Section | What it covers |
 |---|---|
@@ -158,15 +158,18 @@ Top-level sections (each is substantial — the file is ~1500 lines):
 | **Available Tools** | Reference table of every MCP tool the PowerPoint server exposes, plus bulk-read and audit-deck strategies. |
 | **Nanobanana Integration** | When to use AI-generated images vs. native shapes, the on-slide word budget (~10 words), anchor types with their word budgets (hero stat, comparison pair, gallery, knowledge graph, etc.), label vs. body floor, hero-stat pattern, two-column comparison pattern, balanced-layout sizing math, the "no text in images" rule with overlay pattern. |
 | **Remotion Integration** | Project setup, required files, key APIs, render command with `--browser-executable`, animation design patterns (hub-and-spoke, progressive reveal), iteration workflow. |
-| **Veo Integration** | Generating video via google-genai, polling pattern, prompt tips, known failure modes (chain reactions, counting, text), image-to-video for direction-sensitive scenes. |
-| **Embedding Media in Slides** | COM snippets for `AddMediaObject2` (video) and `AddPicture` (image), plus hybrid image-background + PowerPoint-overlay pattern. |
+| **Veo Integration** | Generating video via google-genai, polling pattern, prompt tips, 1080p/muted settings, fake-lettering and content-filter fixes, character sheets, known failure modes (chain reactions, counting, text), image-to-video for direction-sensitive scenes. |
+| **Embedding Media in Slides** | H.264 compression command and size/quality table, COM snippets for `AddMediaObject2` (video) and `AddPicture` (image), plus hybrid image-background + PowerPoint-overlay pattern. |
+| **Animation** | When motion earns its place (cause and effect, or order), effect-by-purpose table, ~2 s build budget, native timing traps and preset ids. |
 | **Combined Workflow Patterns** | Four named patterns: animated visualization, dramatic reveal, data + narrative, prompt-to-video-in-a-slide. Plus a decision guide flowchart. |
-| **Speaker notes** | What goes in notes (citations, anticipated Q&A, methodology caveats, pacing notes), the slide-vs-notes contract, idempotent notes-append using DOIs as markers. |
+| **Audience, titles and load** | Pick the audience first, claim titles instead of topic labels, cognitive-load limits (bullets, typefaces, line length, chapter breaks). |
+| **Speaker notes** | Write notes first in a fixed order (key fact, facts, Q&A, pitfalls, sources), what goes in notes (citations, anticipated Q&A, methodology caveats, pacing notes), the slide-vs-notes contract, idempotent notes-append using DOIs as markers. |
 | **Showcase-first for multi-slide sections** | The rule that saves the most time: build slide 1 and one detail slide, get sign-off, *then* batch the rest. |
-| **Common defects to self-check** | Nine taste-defect codes Claude scans against before declaring a slide done. |
+| **Common defects to self-check** | ~40 defect codes (slop, brand, rhythm, typography, charts, accessibility) with an error / warn / taste severity model. |
 | **Auditing a deck** | Five-step procedure: structural audit, taste pass, anchor-type exceptions table, fixing in batches, contact-sheet review, how to report. |
 | **Presenter prep** | Timing markers in notes, Q&A panic sheet, notes-page / handout PDF, rehearsal checklist. |
 | **Headless PowerPoint for checks** | Opening copies windowless, `DisplayAlerts` and silent repairs, deterministic rendering, stable slide ids, sections. |
+| **Sensitivity labels** | What encryption labels break (non-COM readers, rebuilt decks lose the label), EXTRACT and Copilot, unprotected renders. |
 | **Building .pptx without PowerPoint** | The python-pptx / no-COM route for Linux, macOS and CI, and what changes without a renderer. |
 | **Anti-patterns** | Consolidated catalog of recurring COM and build traps that fail silently. Each anti-pattern points back to the rule that prevents it. |
 

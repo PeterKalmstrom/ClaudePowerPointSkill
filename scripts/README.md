@@ -6,7 +6,7 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 |---|---|---|
 | `backup_snapshot.py` | Python only | Timestamped side copy of a deck before a risky edit |
 | `bulk_read.py` | Windows + PowerPoint, `pywin32` | All slide text + notes to JSON in one COM session |
-| `audit_deck.py` | Windows + PowerPoint, `pywin32` | Words per slide, smallest body font, status per slide |
+| `audit_deck.py` | Windows + PowerPoint, `pywin32` | Words per slide, smallest body font, status per slide, topic-label titles |
 | `check_word_breaks.py` | Windows + PowerPoint, `pywin32` | Fails if any word is broken across two lines |
 | `render_slides.py` | Windows + PowerPoint, `pywin32` | Slides to JPEG via Save As JPEG (renders embedded fonts correctly) |
 | `contact_sheet.py` | Windows + PowerPoint, `pywin32`, `pillow` | All slides as one thumbnail grid PNG |

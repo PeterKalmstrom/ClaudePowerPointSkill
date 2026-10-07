@@ -4,12 +4,25 @@ BODY font size. Body = a paragraph with 4+ words; shorter runs are labels (12-14
     uvx --with pywin32 python audit_deck.py --file deck.pptx [--budget 12] [--floor 18]
 
 Status: OK | ok-tight (within 2 words of budget) | ** AUDIT | [skip] (hidden slide).
+"label?" after the status: the title looks like a topic label, not a claim (1-2 words, no
+common verb, not a question). It is a prompt to look - dividers, agenda and Q&A are fine.
 An ** AUDIT row is either a defect to fix or an accepted anchor-type exception (gallery,
 knowledge graph, quote, chart, reference) - see "Auditing a deck" in SKILL.md.
 """
 import argparse
+import re
 
 from _ppt import is_title, open_deck, shape_texts, utf8_stdout
+
+VERBS = set("""is are was were be been has have had do does did can will must should may
+need needs wins leads beats grows drops rises fails ships pays
+comes goes stays decides""".split())
+
+
+def looks_like_label(title):
+    words = [w for w in re.findall(r"[^\W\d_]{2,}", title.lower())]
+    return bool(words) and len(words) <= 2 and "?" not in title and not VERBS & set(words)
+
 
 utf8_stdout()
 ap = argparse.ArgumentParser()
@@ -23,11 +36,12 @@ print(f"{'#':>3}  {'words':>5}  {'min_pt':>6}  {'status':<10}  title")
 print("-" * 80)
 with open_deck(a.file) as pres:
     for s in pres.Slides:
-        title, words, min_pt = "", 0, None
+        title, full_title, words, min_pt = "", "", 0, None
         for sh in shape_texts(s.Shapes):
             tr = sh.TextFrame.TextRange
             if is_title(sh):
-                title = tr.Text.replace("\r", " ")[:45]
+                full_title = tr.Text.replace("\r", " ").strip()
+                title = full_title[:45]
                 continue
             words += len(tr.Text.split())
             for p in range(1, tr.Paragraphs().Count + 1):
@@ -46,5 +60,6 @@ with open_deck(a.file) as pres:
         else:
             status = "OK"
         pt = f"{min_pt:g}pt" if min_pt else "-"
-        print(f"{s.SlideIndex:>3}  {words:>5}  {pt:>6}  {status:<10}  {title}")
+        hint = "  label?" if status != "[skip]" and looks_like_label(full_title) else ""
+        print(f"{s.SlideIndex:>3}  {words:>5}  {pt:>6}  {status:<10}  {title}{hint}")
     print(f"\n{pres.Slides.Count} slides, {flagged} flagged")

@@ -23,13 +23,16 @@ Installs `powerpoint-mcp` so Claude Code can open, read, edit, and create PowerP
 - Remotion Integration (Animated Video)
 - Veo Integration (AI Video Generation)
 - Embedding Media in Slides
+- Animation — when and how
 - Combined Workflow Patterns
+- Audience, titles and load
 - Speaker notes — load them up
 - Showcase-first for multi-slide sections
 - Common defects to self-check
 - Auditing a deck (full procedure)
 - Presenter prep
 - Headless PowerPoint for checks
+- Sensitivity labels
 - Building .pptx without PowerPoint (no COM)
 - Anti-patterns (recurring COM / build traps)
 
@@ -1181,6 +1184,23 @@ Be specific and cinematic:
 - Specify direction of motion: "walks from left to right"
 - **Keep prompts to 3–5 sentences.** Long rule lists with numbered "must" requirements actually degrade results — Veo trains on natural cinematic descriptions, not specifications. Anything over ~150 words confuses the model.
 
+### Settings and prompt lessons that held up in production
+
+- **1080p, muted.** `veo-3.1-fast-generate-preview` at 1080p gives 1920×1080, 24 fps, 8 s, H.264, ~7–15 MB. The
+  Developer API always adds audio (`generate_audio` is rejected), so strip it afterwards:
+  `ffmpeg -i in.mp4 -an -c:v copy out.mp4`.
+- **Colours as words, never hex.** A hex code in the prompt (`#0078D4`) came back printed on the object.
+- **Fake lettering is the default.** Machines and screens grow made-up words even with "no text" in the prompt.
+  Add a negative prompt (`"text, letters, logos, captions"`) *and* say what the surface looks like: "a completely
+  blank, unmarked surface" fixed about 3 of 5 retries. The standard model was cleaner than fast on the hardest clips.
+- **Characters drift.** Keep a *character sheet* — one fixed description per recurring character — and paste it
+  identically into every prompt. Plan retries anyway: diffusion adds extra characters or swaps one for another.
+- **Content filter.** A blocked clip returns no video (`op.response` is `None`) rather than an error. Check for it,
+  reword the action ("taps the glass" was blocked; "presses a button" passed) and retry.
+- **API keys:** if both `GOOGLE_API_KEY` and `GEMINI_API_KEY` are set, the SDK uses `GOOGLE_API_KEY`.
+- **Folders:** keep Veo originals in `videos/master/` (superseded takes in `v1/`, `v2/`) and compressed copies in
+  `videos/final/`. Only `final/` goes into the deck.
+
 ### Known limits — when not to use Veo
 
 Diffusion video models reliably fail at certain physics scenarios. Don't waste reprompts on these — go straight to a real-footage clip:
@@ -1209,6 +1229,29 @@ When the result depends on a specific starting state (orientation, subject posit
 
 ### Embedding video (Remotion output)
 
+**Compress first — PowerPoint wants H.264, and embedded video is most of a deck's size.** Veo and Remotion output
+runs at ~7 Mbps. Re-encode before embedding:
+
+```bash
+ffmpeg -i in.mp4 -c:v libx264 -preset slow -crf 23 -pix_fmt yuv420p -movflags +faststart -an out.mp4
+```
+
+That took 20 clips from 202 MB to 122 MB (~40 %) with no visible loss. Measured on one 7.1 MB clip (SSIM vs source,
+1.0 = identical):
+
+| Setting | Size | SSIM |
+|---|---|---|
+| x264 crf 20 | 7.0 MB | .990 |
+| x264 crf 22 | 5.2 MB | .987 |
+| x264 crf 24 | 3.9 MB | .979 |
+| x264 crf 28 | 2.0 MB | .969 |
+| x265 crf 26 | 2.8 MB | .975 |
+| AV1 crf 32 | 2.4 MB | .979 |
+| VP9 crf 34 | 3.3 MB | .949 |
+
+x265, AV1 and VP9 are smaller but not safe in every PowerPoint install; stay on x264 (`yuv420p`). Drop `-an` if the
+clip needs its sound.
+
 ```python
 # In evaluate tool:
 s = presentation.Slides(slide_number)
@@ -1224,7 +1267,7 @@ video = s.Shapes.AddMediaObject2(
     False,  # LinkToFile — False embeds the video in the .pptx
     True,   # SaveWithDocument
     0, 0,   # Left, Top
-    960, 540  # Width, Height (full slide at standard size)
+    presentation.PageSetup.SlideWidth, presentation.PageSetup.SlideHeight   # full slide, whatever the size
 )
 video.Name = "VideoName"
 video.AnimationSettings.PlaySettings.PlayOnEntry = True
@@ -1257,6 +1300,46 @@ title = slide.Shapes.AddTextbox(1, 20, 20, 920, 60)
 title.TextFrame.TextRange.Text = "Title Over Image"
 title.TextFrame.TextRange.Font.Color.RGB = 16777215  # White
 ```
+
+---
+
+## Animation — when and how
+
+### The rule: animation shows cause and effect, or order
+
+> **If the audience learns nothing from seeing it *move* that they wouldn't learn from the still, it is decoration.**
+
+Use at most one decorative effect per slide, or none. Pick the effect by what it explains:
+
+| What the motion explains | Use for | PowerPoint effect | Not for |
+|---|---|---|---|
+| **Sequence** — the next point arrives | headline, then sentence, then card | Float Up (or Fade) | something that *happens* |
+| **A new part** with weight | a node, icon or part joining a system | Zoom | long text |
+| **Before / after**, a reveal | a result replacing a blank, a panel revealed | Wipe | — |
+| **Path of travel** | arrows, flow lines, connectors | Wipe in the direction of the line | filled shapes |
+| **Scale** — how many | one big number | Fade (number already final) | a number people must read mid-count |
+| **Outcome confirmed** | check mark, "approved", "passed" | Zoom from large to 100 % | anything that isn't an outcome |
+| **Order of a list** | 3–6 steps, cards, rows | Float Up, one item after another | unrelated items |
+
+Keep the whole build of a slide short — about **2 seconds** from slide start to the last element in place. People
+wait for motion to finish before they read.
+
+### Native animation traps
+
+- **Start everything automatically from one trigger, with absolute delays.** First effect "After Previous" (it
+  starts when the slide shows), every other effect "With Previous" plus its own delay from slide start. A chain of
+  "After Previous" effects waits for each one in turn, so one slow effect shifts everything after it.
+- **Click-triggered builds** are right for a live talk where the speaker paces the reveal; automatic builds are
+  right for recorded or self-running decks. Decide per deck, not per slide.
+- **A filled shape with text:** animate it as one object (in XML, `animBg="1"` on the build entry), or only the
+  text moves and the box sits there from the start.
+- **In XML** (no-COM builds): effects live in `<p:timing>`, inserted after `p:clrMapOvr`. Use the right preset ids —
+  Fade 10, Float Up 37, Wipe 22 (subtype by direction: left 8, right 2, top 1, bottom 4), Zoom 53 (subtype 16),
+  Appear 1. Only `p:sp` shapes get a `grpId`/`bldP` entry; a picture or group given the shape form is rejected.
+- **PowerPoint silently drops animation XML it doesn't like.** Re-open the file and read the effects back (COM:
+  `slide.TimeLine.MainSequence.Count`) — a file that opens is not proof the animation survived.
+- Honour the audience: no endless loops on content people must read, and no motion lasting more than ~5 s without
+  the presenter's control (`a11y_motion_overload`).
 
 ---
 
@@ -1320,6 +1403,54 @@ Need text overlays on media?
 
 ---
 
+## Audience, titles and load
+
+### Pick the audience before the first slide
+
+When the brief doesn't say who the deck is for, ask — or write down your assumption and show it to the user. One
+line per field is enough:
+
+- **Who** — role and what they already know about the topic (beginner / practitioner / expert)
+- **Goal** — what they should be able to do or decide after the talk
+- **Setting** — live in a room (projector distance), video call (small screen, compression), or read alone later
+  (the slides must carry more, the notes become the handout)
+- **Accessibility** — low vision, colour blindness, captions needed, non-native language
+- **Tolerance** — how dense and how much motion this audience accepts
+
+Every later choice — word budget, font floor (raise it to 24 pt for big rooms), motion, how much goes in notes —
+follows from these. "Is 18 pt enough?" has no answer in the abstract; "is 18 pt readable from the back of a 200-seat
+hall?" does.
+
+### Titles make a claim, not a topic
+
+A topic title ("Decisions", "Cloud costs") gives the audience nothing to agree or disagree with. A claim title
+("The check comes first", "East leads Q1, up 8 %") *is* the slide; the body proves it. Titles still count toward
+the word budget.
+
+Quick test: a title of **1–2 words with no verb** is almost always a label. Exempt by design: section dividers,
+agenda, Q&A and closing slides — and questions, which are fine as titles. Chart titles follow the same rule
+(`chart_descriptive_title`). `scripts/audit_deck.py` prints a `label?` warning for such titles; it is a prompt to
+look, not a failure.
+
+### Cognitive load limits
+
+Upper bounds — going under is fine, going over is a defect to fix or justify:
+
+- **≤ 7 bullets or ≤ 6 tiles per slide.** Past that the audience stops reading and waits for you to summarise.
+- **4–5 items per visual group**; the gap *between* groups ≈ 3× the gap *within* a group, or the grouping
+  doesn't read.
+- **≤ 3 typefaces per deck** — display + body + optional mono. A fourth reads as an accident.
+- **Headline ≤ 55 characters**; a two-line headline is a smell unless line 2 is a deliberate subhead.
+- **Line length ≤ 75 characters** in any text block.
+- **A chapter break every 7–10 slides** in a long deck — the audience needs a place to exhale.
+- **One place for sources** (notes or a consistent footer), never scattered across slides.
+- **Lists longer than the limit → reveal one item at a time** (see *Animation*), or split the slide.
+
+**Five-second test:** show the slide for five seconds, hide it, ask what was remembered. If it isn't the title's
+claim, the hierarchy is wrong.
+
+---
+
 ## Speaker notes — load them up
 
 **Rule:** Speaker notes are unbounded and parallel to the slide. Put **everything that doesn't fit the 10-word visible budget** here. Notes are the deep version of the slide.
@@ -1334,6 +1465,20 @@ Need text overlays on media?
 - Pacing notes: "spend ~15 sec here", "skip if running long"
 
 **Pattern:** the slide carries the punch; the notes carry the depth. A presenter should be able to deliver a 90-second talk from the slide alone, *and* a 10-minute deep dive from the notes alone, on the same content.
+
+### Write the notes first, in a fixed order
+
+Write a slide's notes **before** its visible text — the notes hold the full argument, the slide is the compression.
+Use the same order on every slide so the presenter always knows where to look:
+
+1. **Key fact** — the one sentence the slide exists to land
+2. **Facts** — supporting points, numbers and context to browse (no word cap)
+3. **Q&A** — likely questions with short answers
+4. **Pitfalls** — what is commonly misunderstood, or what not to say
+5. **Sources** — citations with DOI or URL
+
+Write facts to browse, not a script to read aloud. A fixed structure also lets a script check notes coverage
+(every content slide has a key fact and at least one source) and feeds the Q&A panic sheet in *Presenter prep*.
 
 **API:**
 ```python
@@ -1375,19 +1520,83 @@ For any section of **4+ slides** that share a design grammar, build the **opener
 
 ## Common defects to self-check
 
-Before declaring a slide done, scan against these common defects:
+Before declaring a slide done, scan against these codes. Each finding gets a severity:
+
+- **`error`** — broken; must fix before shipping (text off-slide, unreadable contrast)
+- **`warn`** — likely problem; should fix
+- **`taste`** — works, but reads as machine-made, generic or off-brand. Acceptable to ship **only with the user's
+  explicit consent** ("yes, the purple gradient is our brand").
+
+**Two cadences.** Check only the objectively broken (`error`, contrast, overflow, broken images) after every edit;
+run the full catalogue once, when the deck is done. Running every taste rule on every edit produces noise that
+gets dismissed wholesale.
+
+**Slop patterns**
 
 | Code | What to check |
 |---|---|
-| `body_below_floor` | Any sentence text below 18pt? Bump to 18pt or downgrade to a label. |
-| `slop_default_font` | Using only Aptos / Calibri / Inter? Pair with a distinctive display face. |
-| `monotone_anchor` | Three consecutive slides share the same anchor type? Insert variety. |
+| `slop_gradient` | Multi-stop gradient outside the brand palette (purple→pink, blue→purple)? Use a solid accent or a 2-stop brand gradient. |
+| `slop_emoji_icon` | Emoji used as icons (📊 🚀)? Use a real icon set with a text label. |
+| `slop_generic_card` | Rounded card + coloured left border + drop shadow + grey text? Use a top strip, a full-bleed header, or spacing alone. |
+| `slop_default_font` | Only Aptos / Calibri / Inter / Arial? Pair with a distinctive display face. |
+| `slop_stock_imagery` | Handshakes, team-around-a-laptop, overhead desk shots? Use real photos or none. |
+| `slop_svg_cartoon_people` | Flat faceless figures in one accent colour? Use photography, abstract shapes or brand illustration. |
+| `slop_lorem_ipsum` | Placeholder text left in? Real copy or one labelled TODO. |
+| `slop_drop_shadow_overuse` | Shadow on every surface? Reserve elevation for one or two. |
+| `italic_serif_display` | Big italic serif headline for "premium" with no brand reason? Use the brand display face. |
+| `nested_cards` | Card inside a card? Flatten; use spacing and a heading. |
+
+**Brand and palette**
+
+| Code | What to check |
+|---|---|
+| `brand_missing_logo` | Branded deck without the real logo file (or a text imitation of it)? Add the real asset. |
+| `brand_off_palette` | Colours not in the brand palette or theme accents? Snap to theme colours. |
+| `palette_too_many_colours` | More hues than items, or colours that mean nothing? ≤ 3 hues, tied to meaning. |
+| `low_contrast_palette` | Two near-identical accents on one surface? One accent per surface. |
+| `gray_on_color` | Grey text on a coloured panel? Use a tint of the panel's hue, or white/ink. |
+
+**Composition and rhythm**
+
+| Code | What to check |
+|---|---|
+| `monotone_anchor` | Three consecutive slides share the same anchor type? Insert variety or a divider. |
 | `density_imbalance` | One slide packed, neighbours sparse? Rebalance. |
-| `centered_long_body` | Long body copy centered? Left-align body; reserve center for hero/quote. |
-| `inconsistent_spacing` | Mixing 8/12/16pt gaps? Pick one unit and stick to it. |
-| `redundant_word_repeat` | Same key noun appearing 3+ times in dominant typography? Demote duplicates. |
-| `attribution_truncated` | Author/source visibly cut off? Widen container or shorten attribution. |
-| `chart_contrast_fail` | Chart bar labels below WCAG 3:1 contrast? Use chart-aware palette. |
+| `centered_long_body` | Long body copy (> 2 lines) centred? Left-align body; centre only hero/quote. |
+| `inconsistent_spacing` | Mixing 8/12/16pt gaps? Pick one unit. |
+
+**Typography**
+
+| Code | What to check |
+|---|---|
+| `body_below_floor` | Sentence text below 18 pt (24 pt for large rooms)? Raise it, or make it a label. |
+| `headline_two_line` | Headline wraps? Tighten to ≤ 55 characters or split into headline + sub. |
+| `mixed_font_families` | More than two families without a brand reason? Display + body only. |
+| `attribution_truncated` | Author/source cut off? Widen, shorten, or give it its own line. |
+
+**Content and charts**
+
+| Code | What to check |
+|---|---|
+| `redundant_word_repeat` | Same key noun 3+ times in big type? Demote the repeats. |
+| `chart_descriptive_title` | Chart title names the data ("Revenue by region, Q1") not the finding? Headline the insight ("East leads Q1, up 8 %"). |
+| `chart_contrast_fail` | Bar labels below 3:1 against their bar? Dark labels on light bars, light on dark. |
+| `chart_label_collision` (warn) | Data labels overlap? Drop per-bar labels or label only the key bar. |
+| `chart_redundant_labels` | Data labels *and* a gridlined value axis? Keep one. |
+| `chart_legend_steals_plot` | Legend inside the frame shrinking the bars? Move it to a corner or colour-code the title. |
+| `chart_default_palette` | Office default series colours (4472C4, ED7D31, A5A5A5…)? Bind series to theme accents. |
+| `chart_ordinal_categorical_color` | Ordered series (months, years) in unrelated hues? Use one hue, light → dark. |
+| `chart_accounting_zero_dash` | Axis shows `$-` instead of `$0`? Use Currency or Number format on axes. |
+
+**Accessibility (WCAG 2.1 AA)**
+
+| Code | What to check |
+|---|---|
+| `a11y_low_text_contrast` | Text below 4.5:1 (3:1 for large text/labels) against its backing? Fix colours. |
+| `a11y_color_only_signal` | Meaning carried by colour alone (red = bad)? Add a label, icon or pattern. |
+| `a11y_missing_alt_text` | Pictures, charts, icons without alt text? Set `shape.AlternativeText`. |
+| `a11y_motion_overload` | Everything animates, or motion > 5 s without control? One or two beats per slide. |
+| `a11y_tiny_target` | Clickable shapes in a self-running/kiosk deck under 44 × 44 pt? Enlarge. |
 
 `scripts/audit_deck.py` catches `body_below_floor` and word-budget problems automatically; `scripts/check_word_breaks.py` catches broken words. The rest need eyes — see the procedure below.
 
@@ -1484,6 +1693,30 @@ user's PowerPoint or leave debris behind:
 
 ---
 
+## Sensitivity labels
+
+Corporate decks often carry a Microsoft Purview sensitivity label. Labels that **apply encryption** change what
+automation can do:
+
+- **Files outside PowerPoint can't read an encrypted deck.** The .pptx is no longer a plain zip, so python-pptx and
+  other OOXML readers fail on it, as do any of the no-COM checks above. COM through a signed-in PowerPoint works
+  if that user holds the rights. Check the label before choosing a toolchain.
+- **Rebuilding a deck from scratch drops its label.** A file generated by python-pptx or a fresh
+  `Presentations.Add()` carries no label, even if every slide was copied from a labelled deck. Re-apply the label
+  (or build from the labelled original) — and tell the user, because an unlabelled copy of confidential content is
+  a leak.
+- **Copilot and copy/paste need the EXTRACT right.** On an encrypted deck, Copilot can summarise or quote the
+  content only if the user's grant includes EXTRACT (as well as VIEW); EXTRACT also governs clipboard copy and
+  screen capture. Adding one group at Editor or Owner level silently re-enables Copilot for everyone in it.
+- **A label narrower than the library locks colleagues out.** Encryption applies inside SharePoint too, so people
+  who can see the file in the library can still be unable to open it.
+- **Rendered copies are not protected.** JPEG renders, contact sheets, PDFs you export and images pasted into chat
+  carry no label. Keep render output next to the deck, not in a shared or synced folder, and clean it up.
+- **Revocation is slow.** Removing someone's rights doesn't reach copies already on their device until the cached
+  licence expires (30 days by default).
+
+---
+
 ## Building .pptx without PowerPoint (no COM)
 
 On Linux, macOS or CI there is no COM. Write the OOXML directly with **python-pptx** (Python) or a library such as
@@ -1531,6 +1764,9 @@ A consolidated catalog of the silent failures that have actually shipped broken 
 | `Presentations.Add()` then `InsertFromFile` without setting the size | Whole deck silently scaled to 720p, all fonts a third smaller | [Slide size](#slide-size--set-it-before-inserting-anything) |
 | `AddPicture` / `add_picture` with both width and height | Photos stretched by up to ~60 %, unnoticed | [Pictures stretch](#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly) |
 | Validating a generated .pptx with `DisplayAlerts` off | PowerPoint silently repairs the broken file and the check passes | [Headless PowerPoint](#headless-powerpoint-for-checks) |
+| Embedding raw Veo / Remotion MP4s | Deck balloons by hundreds of MB; some installs won't play non-H.264 | [Embedding video](#embedding-video-remotion-output) |
+| Chaining effects with "After Previous" | One slow effect shifts every later one; builds drift | [Native animation traps](#native-animation-traps) |
+| Rebuilding an encrypted / labelled deck with python-pptx or `Presentations.Add()` | Output carries no sensitivity label — confidential content leaks unlabelled | [Sensitivity labels](#sensitivity-labels) |
 | `for p in app.Presentations: if ...: target = p` without `break` | Picks the *last* matching presentation in enumeration order (effectively random when multiple match the substring) | [Multi-presentation safety](#multi-presentation-safety--never-trust-activepresentation) |
 
 When one of these bites, fix it and **add a row here** if it's a new variant. The signal is: "I lost an hour to a silent failure" → it belongs in this table.

@@ -142,6 +142,7 @@ A consolidated catalog of the silent failures that have actually shipped broken 
 | Embedding raw Veo / Remotion MP4s | Deck balloons by hundreds of MB; some installs won't play non-H.264 | [Embedding video](reference/MEDIA.md#embedding-video-remotion-output) |
 | Chaining effects with "After Previous" | One slow effect shifts every later one; builds drift | [Native animation traps](reference/ANIMATION.md#native-animation-traps) |
 | Rebuilding an encrypted / labelled deck with python-pptx or `Presentations.Add()` | Output carries no sensitivity label — confidential content leaks unlabelled | [Sensitivity labels](reference/LABELS.md#sensitivity-labels) |
+| Calling `ExportAsFixedFormat` positionally from pywin32 | `TypeError: The Python instance can not be converted to a COM object` — no PDF | [Presenter prep](reference/PRESENTING.md#presenter-prep) |
 | `for p in app.Presentations: if ...: target = p` without `break` | Picks the *last* matching presentation in enumeration order (effectively random when multiple match the substring) | [Multi-presentation safety](reference/COM.md#multi-presentation-safety--never-trust-activepresentation) |
 
 When one of these bites, fix it and **add a row here** if it's a new variant. The signal is: "I lost an hour to a silent failure" → it belongs in this table.

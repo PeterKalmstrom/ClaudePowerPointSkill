@@ -69,7 +69,7 @@ the shapes, rendering and looking, putting the citation in the notes.
 
 | Mode | Needs | You get |
 |---|---|---|
-| **Any OS** (Linux, macOS, Windows, CI) | Python + [`python-pptx`](https://python-pptx.readthedocs.io/) (via `uvx`); LibreOffice optional for rough renders | **`build_deck.py`** (spec → deck: 14 slide patterns, 20 design directions or your template, native charts), editing .pptx files, all the content and layout rules, **`lint_deck.py`** (text overflow, overlaps, stretched pictures, small text, missing alt text, contrast, empty placeholders…), **`read_deck.py`** (whole deck to JSON), **`harvest_edits.py`** (keep people's edits across rebuilds), theme and template extraction, approximate LibreOffice renders, before/after render diffs |
+| **Any OS** (Linux, macOS, Windows, CI) | Python + [`python-pptx`](https://python-pptx.readthedocs.io/) (via `uvx`); LibreOffice optional for rough renders | **`build_deck.py`** (spec → deck: 14 slide patterns, 20 design directions or your template, native charts), editing .pptx files, all the content and layout rules, **`lint_deck.py`** (text overflow, overlaps, stretched pictures, small text, missing alt text, contrast, empty placeholders…), **`fix_deck.py`** (safe automatic fixes), **`read_deck.py`** (whole deck to JSON), **`harvest_edits.py`** (keep people's edits across rebuilds), theme and template extraction, approximate LibreOffice renders, before/after render diffs |
 | **Windows power mode** | Desktop PowerPoint + the [`powerpoint-mcp`](https://pypi.org/project/powerpoint-mcp/) server | Live editing of the open deck, pixel-exact renders (including embedded fonts), word-break checks, contact sheets, notes/handout PDFs |
 
 Optional media: [Remotion](https://www.remotion.dev/) for animated video, Google
@@ -94,6 +94,8 @@ Troubleshooting: [`reference/SETUP.md`](reference/SETUP.md).
 <details>
 <summary><b>Other install options</b></summary>
 
+- **As a Claude Code plugin:** `/plugin marketplace add PeterKalmstrom/claude-powerpoint-skill`, then
+  `/plugin install building-powerpoint-decks@kalmstrom`.
 - **Pick the files yourself:** the skill is `SKILL.md`, `reference/` and `scripts/`. Copy them into
   `<your skills folder>/building-powerpoint-decks/`.
 - **Upgrading from `configuring-powerpoint-mcp`:** the skill was renamed in October 2026. Delete the old folder, or

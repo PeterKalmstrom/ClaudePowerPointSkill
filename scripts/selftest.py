@@ -459,6 +459,45 @@ def main():
     check("lint_deck: figures without a source in the notes flagged; sourced ones not",
           "slide 1   figure_without_source" in out and "slide 2   figure_without_source" not in out, out)
 
+    # spec schema: generated from the builder, committed, and the sample validates against it
+    code, out = run("build_deck.py", "--print-schema")
+    committed = open(os.path.join(HERE, "spec.schema.json"), encoding="utf-8").read()
+    check("spec schema: committed spec.schema.json matches build_deck --print-schema",
+          code == 0 and json.loads(out) == json.loads(committed), "run: python scripts/build_deck.py --print-schema "
+          "> scripts/spec.schema.json")
+    try:
+        import jsonschema
+        jsonschema.validate(json.load(open(sample, encoding="utf-8")), json.loads(committed))
+        check("spec schema: the sample spec validates", True)
+        typo = {"slides": [{"pattern": "kpi", "title": "Typos are caught", "colour": "red", "metrics": [
+            {"value": "1", "label": "a"}, {"value": "2", "label": "b"}, {"value": "3", "lable": "c"}]}]}
+        json.dump(typo, open(os.path.join(edge, "typo.json"), "w"))
+        code, out = run("build_deck.py", os.path.join(edge, "typo.json"), "--out", os.path.join(tmp, "t.pptx"))
+        check("build_deck: misspelt fields named, nested ones too", code == 2 and "'colour'" in out
+              and "'lable' in metrics/2" in out, out)
+    except ImportError:
+        say("(skipped schema validation: pip install jsonschema)")
+    code, out = run("build_deck.py", sample, "--plan")
+    check("build_deck --plan: prints the story without building", code == 0 and "Deck plan (14 slides" in out, out)
+
+    # fix_deck: mechanical repairs on the defect fixtures, then lint again
+    fixed = os.path.join(tmp, "taste.fixed.pptx")
+    code, out = run("fix_deck.py", taste, "--out", fixed)
+    for want in ("palette", "legend", "numfmt", "alt"):
+        check(f"fix_deck: '{want}' fix applied on the taste deck", f"\n{want} " in "\n" + out, out[-600:])
+    after = out.split("What's left")[-1]
+    check("fix_deck: chart defects gone after fixing", not any(c in after for c in (
+        "chart_default_palette", "chart_legend_steals_plot", "chart_accounting_zero_dash")), after)
+    code, out = run("fix_deck.py", messy, "--out", os.path.join(tmp, "messy.fixed.pptx"))
+    after = out.split("What's left")[-1]
+    check("fix_deck: empty placeholder removed and stretched picture un-stretched",
+          "unused_placeholder" not in after and "picture_stretched" not in after, out[-600:])
+    code, out = run("fix_deck.py", ov, "--out", os.path.join(tmp, "overflow.fixed.pptx"), "--only", "fit")
+    check("fix_deck: overflowing text shrunk (not below the floor)", "\nfit " in "\n" + out and "-> 27 pt" in out
+          or "-> 2" in out, out[-500:])
+    code, out = run("fix_deck.py", taste, "--out", taste)
+    check("fix_deck: refuses to overwrite its input", code == 2, out)
+
     # extract_theme
     code, out = run("extract_theme.py", deck)
     try:

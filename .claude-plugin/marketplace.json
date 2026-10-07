@@ -1,0 +1,11 @@
+{
+  "name": "kalmstrom",
+  "owner": { "name": "Peter Kalmstrom" },
+  "plugins": [
+    {
+      "name": "building-powerpoint-decks",
+      "source": "./",
+      "description": "Build, lint, fix and render PowerPoint decks that look designed."
+    }
+  ]
+}

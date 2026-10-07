@@ -85,6 +85,114 @@ LIMITS = {  # pattern: {field: max characters} plus list-length ranges, checked 
 }
 
 
+# ---------------------------------------------------------------- JSON Schema (generated from LIMITS)
+
+FIELDS = {  # pattern: {field: kind}; kinds: text, int, number, list[text], list[obj:{...}], obj
+    "title": {"subtitle": "text"},
+    "section": {"eyebrow": "text"},
+    "statement": {"support": "text"},
+    "big_number": {"number": "text", "unit": "text", "caption": "text"},
+    "kpi": {"metrics": {"value": "text", "label": "text"}, "highlight": "int"},
+    "bullets": {"items": "list[text]"},
+    "compare": {"columns": {"heading": "text", "points": "list[text]"}, "highlight": "int"},
+    "process": {"steps": {"label": "text", "detail": "text"}, "highlight": "int"},
+    "timeline": {"events": {"date": "text", "label": "text"}, "highlight": "int"},
+    "quote": {"quote": "text", "attribution": "text", "role": "text"},
+    "chart": {"type": "enum:column,bar,line,pie", "categories": "list[text]",
+              "series": {"name": "text", "values": "list[number]"}, "highlight": "int|text",
+              "number_format": "text", "caption": "text", "alt": "text"},
+    "table": {"header": "list[text]", "rows": "list[list[text]]", "highlight_row": "int", "alt": "text"},
+    "image": {"image": "text", "caption": "text", "alt": "text", "focus_x": "number", "focus_y": "number"},
+    "matrix": {"quadrants": {"heading": "text", "text": "text"}, "x_axis": "text", "y_axis": "text",
+               "highlight": "int"},
+}
+REQUIRED = {"title": ["title"], "section": ["title"], "statement": ["title"], "quote": ["quote"],
+            "big_number": ["title", "number"], "kpi": ["title", "metrics"], "bullets": ["title", "items"],
+            "compare": ["title", "columns"], "process": ["title", "steps"], "timeline": ["title", "events"],
+            "chart": ["title", "categories", "series"], "table": ["title", "header", "rows"],
+            "image": ["title", "image"], "matrix": ["title", "quadrants"]}
+_STRS = {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}
+NOTES_SCHEMA = {"description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources "
+                               "(lists may be a single string; a Q&A item may be a string).", "oneOf": [
+    {"type": "string"},
+    {"type": "object", "additionalProperties": False, "properties": {
+        "key_fact": {"type": "string"}, "facts": _STRS, "pitfalls": _STRS, "sources": _STRS,
+        "qa": {"oneOf": [{"type": "object"}, {"type": "array", "items": {"oneOf": [
+            {"type": "string"},
+            {"type": "object", "additionalProperties": False, "required": ["q"],
+             "properties": {"q": {"type": "string"}, "a": {"type": "string"}}}]}}]}}}]}
+
+
+def _kind_schema(kind, max_len=None):
+    text = {"type": ["string", "number"]} if max_len is None else {"type": ["string", "number"], "maxLength": max_len}
+    if isinstance(kind, dict):
+        return {"type": "object", "additionalProperties": False, "properties": {}}
+    if kind == "text":
+        return text
+    if kind == "int":
+        return {"type": "integer", "minimum": 0}
+    if kind == "number":
+        return {"type": "number"}
+    if kind == "int|text":
+        return {"type": ["integer", "string"]}
+    if kind.startswith("enum:"):
+        return {"enum": kind[5:].split(",")}
+    if kind == "list[text]":
+        return {"type": "array", "items": text}
+    if kind == "list[number]":
+        return {"type": "array", "items": {"type": ["number", "null"]}}
+    if kind == "list[list[text]]":
+        return {"type": "array", "items": {"type": "array", "items": {"type": ["string", "number"]}}}
+    raise ValueError(kind)
+
+
+def spec_schema():
+    """JSON Schema for a build_deck spec, generated from FIELDS / LIMITS / REQUIRED."""
+    variants = []
+    for pat, fields in FIELDS.items():
+        lim = LIMITS[pat]
+        props = {"pattern": {"const": pat}, "id": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$",
+                                                     "description": "Stable slide id; keep it when the content changes."},
+                 "title": {"type": ["string", "number"], "maxLength": lim.get("title", 90),
+                           "description": "Write it as a claim, not a topic."},
+                 "notes": NOTES_SCHEMA}
+        for name, kind in fields.items():
+            if isinstance(kind, dict):
+                item = {"type": "object", "additionalProperties": False, "properties": {}, "required": []}
+                for sub, sk in kind.items():
+                    sub_lim = lim.get(f"{name}.{sub}")
+                    if isinstance(sub_lim, tuple):
+                        item["properties"][sub] = dict(_kind_schema(sk, lim.get(f"{name}.{sub}.*")),
+                                                       minItems=sub_lim[0], maxItems=sub_lim[1])
+                    else:
+                        item["properties"][sub] = _kind_schema(sk, sub_lim)
+                    if sk in ("text", "list[text]", "list[number]") and sub not in ("detail", "text"):
+                        item["required"].append(sub)
+                schema = {"type": "array", "items": item}
+            else:
+                star = lim.get(f"{name}.*")
+                schema = _kind_schema(kind, star if kind.startswith("list") else lim.get(name))
+            rng = lim.get(name)
+            if isinstance(rng, tuple):
+                schema["minItems"], schema["maxItems"] = rng
+            props[name] = schema
+        variants.append({"type": "object", "additionalProperties": False, "properties": props,
+                         "required": ["pattern"] + REQUIRED[pat]})
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://github.com/PeterKalmstrom/claude-powerpoint-skill/scripts/spec.schema.json",
+        "title": "build_deck.py spec",
+        "description": "A deck as data: a design direction or template, then slides by pattern. "
+                       "Generated by `build_deck.py --print-schema`; see reference/BUILDER.md.",
+        "type": "object", "additionalProperties": False, "required": ["slides"],
+        "properties": {
+            "$schema": {"type": "string"},
+            "direction": {"enum": [d["id"] for d in json.load(open(os.path.join(HERE, "directions.json"),
+                                                                     encoding="utf-8"))["directions"]]},
+            "template": {"type": "string", "description": ".pptx or .potx, relative to the spec"},
+            "slides": {"type": "array", "minItems": 1, "items": {"oneOf": variants}}}}
+
+
 # ---------------------------------------------------------------- spec checks
 
 def check_spec(spec):
@@ -691,6 +799,48 @@ def _texts(obj, key=None):
     return obj
 
 
+def schema_errors(spec):
+    """Validate against the JSON Schema when the jsonschema package is installed (optional). Each slide is
+    checked against its own pattern's schema, so every misspelt or misplaced field is named."""
+    try:
+        import jsonschema
+    except ImportError:
+        return []
+    schema = spec_schema()
+    variants = {v["properties"]["pattern"]["const"]: v for v in schema["properties"]["slides"]["items"]["oneOf"]}
+    top = dict(schema, properties=dict(schema["properties"], slides={"type": "array", "minItems": 1}))
+    out = [f"{'/'.join(map(str, e.absolute_path)) or 'spec'}: {e.message}"
+           for e in jsonschema.Draft202012Validator(top).iter_errors(spec)]
+    for i, sl in enumerate(spec.get("slides", []), 1):
+        v = variants.get(sl.get("pattern")) if isinstance(sl, dict) else None
+        if v is None:
+            continue  # unknown pattern: check_spec reports it
+        for e in jsonschema.Draft202012Validator(v).iter_errors(sl):
+            where = "/".join(map(str, e.absolute_path))
+            if e.validator == "additionalProperties":
+                extra = sorted(set(e.instance) - set(e.schema.get("properties", {})))
+                out.append(f"slide {i} ({sl['pattern']}): unknown field {', '.join(map(repr, extra))}"
+                           + (f" in {where}" if where else "") + " - see reference/BUILDER.md")
+            elif e.validator in ("maxLength", "minItems", "maxItems"):
+                continue  # check_spec already reports limits, with friendlier wording
+            else:
+                out.append(f"slide {i} ({sl['pattern']}): {where or 'slide'}: {e.message}")
+    return sorted(set(out))
+
+
+def print_plan(spec):
+    """The deck as a story: one line per slide - the claim, then the key fact from the notes."""
+    look = spec.get("template") or spec.get("direction", "clean-corporate")
+    print(f"Deck plan ({len(spec['slides'])} slides, look: {look})\n")
+    for n, sl in enumerate(spec["slides"], 1):
+        title = sl.get("title") or sl.get("quote", "")[:60]
+        notes = sl.get("notes")
+        key = notes.get("key_fact") if isinstance(notes, dict) else (notes or "").split("\n")[0]
+        print(f"{n:>2}. [{sl.get('pattern')}] {title}")
+        if key:
+            print(f"      {key[:110]}")
+
+
 def load_spec(path):
     with open(path, encoding="utf-8") as fh:
         if path.lower().endswith((".yml", ".yaml")):
@@ -709,14 +859,19 @@ def main():
     ap.add_argument("--lint", action="store_true", help="run lint_deck.py on the result")
     ap.add_argument("--force", action="store_true", help="build even if the spec breaks a pattern limit")
     ap.add_argument("--list-directions", action="store_true")
+    ap.add_argument("--print-schema", action="store_true", help="print the spec's JSON Schema")
+    ap.add_argument("--plan", action="store_true", help="print the story (titles and key facts) and stop")
     a = ap.parse_args()
+    if a.print_schema:
+        print(json.dumps(spec_schema(), indent=2, ensure_ascii=False))
+        return
     if a.list_directions:
         for d in json.load(open(os.path.join(HERE, "directions.json"), encoding="utf-8"))["directions"]:
             print(f"{d['id']:<18} {d['tone']:<10} {d['heading']} / {d['body']}  #{d['accent']} on #{d['background']}"
                   f"  — {d['mood']}")
         return
-    if not a.spec or not a.out:
-        ap.error("spec and --out are required")
+    if not a.spec or not (a.out or a.plan):
+        ap.error("spec and --out are required (or --plan)")
     spec = load_spec(a.spec)
     base = os.path.dirname(os.path.abspath(a.spec))
     for sl in spec.get("slides", []):  # image paths are relative to the spec
@@ -724,7 +879,12 @@ def main():
             sl["image"] = os.path.join(base, sl["image"])
     if spec.get("template") and not os.path.isabs(spec["template"]):
         spec["template"] = os.path.join(base, spec["template"])
-    errors = check_spec(spec)
+    errors = check_spec(spec) + schema_errors(spec)
+    if a.plan:
+        print_plan(spec)
+        for e in errors:
+            print(f"spec: {e}")
+        sys.exit(2 if errors else 0)
     for e in errors:
         print(f"spec: {e}", file=sys.stderr)
     if errors and not a.force:

@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **Text overflow, any OS:** `scripts/_measure.py` wraps text with real font metrics (or metric-compatible twins:
+  Carlito for Calibri, Liberation for Arial/Times) — 24 of 24 test boxes matched LibreOffice's line count.
+  `lint_deck.py` adds `text_overflow`, `text_shrinks` and `word_breaks`, and uses the grown height of
+  "resize to fit" boxes for overlap and off-slide checks. `build_deck.py` shrinks text to fit (never below the
+  floor) and exits 3 with a list of anything that still doesn't fit.
+- **`scripts/harvest_edits.py`:** manifest → harvest → restore keeps people's edited, added and deleted slides
+  (with pictures and charts) across a rebuild; a plain re-save is not an edit.
+- **`scripts/read_deck.py`** (any OS) replaces `bulk_read.py`: ids, layouts, shapes with positions and sizes,
+  charts, tables, notes; `--text` outline. **`audit_deck.py` is retired** — `lint_deck.py` covers it on any OS.
+- `lint_deck.py`: `figure_without_source`; group shapes measured in slide coordinates; text on photos no longer
+  misreported; table cell contrast; `--fix` matches by shape id.
+- `build_deck.py` fixes: CMYK and EXIF-rotated photos, pie slices labelled and shaded, line series shaded,
+  template mode keeps the template's size and drops subtitle placeholders, YAML numbers, ragged tables and unknown
+  highlights rejected, loose notes accepted, no temp files; quiet card colour chosen per direction so muted text
+  keeps 4.5:1 (12 of 20 directions failed before).
+- `render_lo.py` numbers renders by slide (hidden slides skipped, not renumbered); `diff_renders.py` reports
+  size changes and pairs names case-insensitively; `extract_theme.py` reads .potx in memory.
+- Docs: every size example converted to Full HD (1440 × 810).
+
 - **`scripts/build_deck.py`**: builds a deck from a JSON/YAML spec — 14 patterns (title, section, statement,
   big number, KPI, bullets, compare, process, timeline, quote, chart, table, image, 2×2 matrix), per-pattern
   limits checked before building, a design direction written into the theme or a company template, native

@@ -26,7 +26,8 @@ def dhash(img, size=16):
 def compare(a_path, b_path):
     a = Image.open(a_path).convert("RGB")
     b = Image.open(b_path).convert("RGB")
-    if a.size != b.size:
+    resized = a.size != b.size
+    if resized:
         b = b.resize(a.size)
     da = np.abs(np.asarray(a, dtype=np.int16) - np.asarray(b, dtype=np.int16)).mean(axis=2) / 255.0
     h, w = da.shape
@@ -35,7 +36,7 @@ def compare(a_path, b_path):
     worst = int(np.argmax(cells))
     return {"mean_pct": round(float(da.mean()) * 100, 3), "worst_cell_pct": round(float(cells[worst]) * 100, 2),
             "worst_cell": f"r{worst // GRID + 1}c{worst % GRID + 1}",
-            "hash_distance": int((dhash(a) != dhash(b)).sum())}, da
+            "hash_distance": int((dhash(a) != dhash(b)).sum()), "size_changed": resized}, da
 
 
 def heatmap(diff, path):
@@ -50,19 +51,22 @@ if __name__ == "__main__":
     ap.add_argument("--threshold", type=float, default=0.0, help="mean %% difference that counts as changed")
     ap.add_argument("--heatmaps", help="folder for per-slide difference images of changed slides")
     a = ap.parse_args()
-    names = sorted(set(os.listdir(a.before)) | set(os.listdir(a.after)))
-    names = [n for n in names if n.lower().endswith((".png", ".jpg"))]
+    def index(folder):  # pair names case-insensitively (s002.png == S002.PNG)
+        return {n.lower(): os.path.join(folder, n) for n in os.listdir(folder) if n.lower().endswith((".png", ".jpg"))}
+    before, after = index(a.before), index(a.after)
+    names = sorted(set(before) | set(after))
     changed = 0
     for n in names:
-        pa, pb = os.path.join(a.before, n), os.path.join(a.after, n)
-        if not os.path.exists(pa) or not os.path.exists(pb):
-            print(f"{n:<10} {'ADDED' if os.path.exists(pb) else 'REMOVED'}")
+        pa, pb = before.get(n), after.get(n)
+        if not pa or not pb:
+            print(f"{n:<10} {'ADDED' if pb else 'REMOVED'}")
             changed += 1
             continue
         r, diff = compare(pa, pb)
-        moved = r["mean_pct"] > a.threshold or (a.threshold == 0 and r["worst_cell_pct"] > 0)
+        moved = r["size_changed"] or r["mean_pct"] > a.threshold or (a.threshold == 0 and r["worst_cell_pct"] > 0)
         changed += moved
-        print(f"{n:<10} {'CHANGED' if moved else 'same':<8} mean {r['mean_pct']:.3f}%  worst cell "
+        size = "  (image size changed)" if r["size_changed"] else ""
+        print(f"{n:<10} {'CHANGED' if moved else 'same':<8}{size} mean {r['mean_pct']:.3f}%  worst cell "
               f"{r['worst_cell']} {r['worst_cell_pct']:.2f}%  hash dist {r['hash_distance']}")
         if moved and a.heatmaps:
             os.makedirs(a.heatmaps, exist_ok=True)

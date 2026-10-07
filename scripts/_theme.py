@@ -34,7 +34,8 @@ class Theme:
             node = scheme.find(f"a:{slot}", NS) if scheme is not None else None
             if node is not None and len(node):
                 c = node[0]
-                self.colours[slot] = (c.get("val") if c.tag == _q("srgbClr") else c.get("lastClr") or "000000").upper()
+                self.colours[slot] = (c.get("val") if c.tag == _q("srgbClr") else c.get("lastClr")
+                                      or ("FFFFFF" if c.get("val") == "window" else "000000")).upper()
         fonts = theme_el.find(".//a:fontScheme", NS)
         self.major = fonts.find("a:majorFont/a:latin", NS).get("typeface") if fonts is not None else None
         self.minor = fonts.find("a:minorFont/a:latin", NS).get("typeface") if fonts is not None else None

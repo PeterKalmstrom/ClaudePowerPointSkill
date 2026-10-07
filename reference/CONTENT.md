@@ -19,8 +19,8 @@ line per field is enough:
 - **Tolerance** — how dense and how much motion this audience accepts
 
 Every later choice — word budget, font floor (raise it to 24 pt for big rooms), motion, how much goes in notes —
-follows from these. "Is 18 pt enough?" has no answer in the abstract; "is 18 pt readable from the back of a 200-seat
-hall?" does.
+follows from these. "Is 27 pt enough?" has no answer in the abstract; "is 27 pt on a Full HD slide readable from the
+back of a 200-seat hall?" does.
 
 ### Titles make a claim, not a topic
 
@@ -30,7 +30,7 @@ the word budget.
 
 Quick test: a title of **1–2 words with no verb** is almost always a label. Exempt by design: section dividers,
 agenda, Q&A and closing slides — and questions, which are fine as titles. Chart titles follow the same rule
-(`chart_descriptive_title`). `scripts/audit_deck.py` prints a `label?` warning for such titles; it is a prompt to
+(`chart_descriptive_title`). `scripts/lint_deck.py` reports such titles as `title_is_label`; it is a prompt to
 look, not a failure.
 
 ### Cognitive load limits

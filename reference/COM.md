@@ -97,7 +97,8 @@ def clear_and_bg(slide, img):
             sh.Delete()
         except:
             pass
-    slide.Shapes.AddPicture(img, 0, -1, 0, 0, 960, 540).Name = "BgImage"
+    w, h = pres.PageSetup.SlideWidth, pres.PageSetup.SlideHeight   # never hard-code 960 x 540
+    slide.Shapes.AddPicture(img, 0, -1, 0, 0, w, h).Name = "BgImage"
 ```
 
 Each run produces the same result. To tweak typography or layout, edit the script and re-run — no manual element-by-element fixing in PowerPoint.
@@ -129,7 +130,20 @@ if slide_motto(target.Slides(start_n + 1)) == "We are lying.":
 made it worse by treating the edits as defects against the slide rules and reverting some of them. **A person's edit
 is content: keep it exactly, and report anything that looks accidental.**
 
-**Working pattern:**
+**Use the tool** — [`scripts/harvest_edits.py`](../scripts/harvest_edits.py) (any OS) does all of this:
+
+```bash
+python scripts/harvest_edits.py manifest deck.pptx                    # after every build
+python scripts/harvest_edits.py harvest deck.pptx --store edits/      # before rebuilding
+python scripts/build_deck.py spec.json --out new.pptx                 # rebuild
+python scripts/harvest_edits.py restore new.pptx --store edits/ --out final.pptx
+```
+
+It keeps edited slides XML-exactly (with their pictures and charts), re-inserts added slides after the slide they
+followed, keeps deleted slides deleted, and lets everything else take the new build. Read its output: every
+decision is listed.
+
+**Working pattern (what the tool does):**
 1. Before saving a rebuild, fingerprint the deck on disk against the last build's manifest, and copy every changed,
    added, deleted or moved slide into a frozen store.
 2. Key each generated slide by `<p:cSld name="…">` (the slide's `Name` in COM) — set it to a permanent id in the build.

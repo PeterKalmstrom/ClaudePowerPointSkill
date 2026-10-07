@@ -28,6 +28,7 @@ from _rules import (CARTOON_HOSTS, DEFAULT_FACES, INSIGHT_WORDS, OFFICE_DEFAULT_
                     STOCK_HOSTS, STOP_WORDS, chars_per_line, contains, contrast_ratio, floor_for_room,
                     has_emoji, is_large_text, looks_like_label, overlap_area)
 from _theme import Theme, hue, saturation
+from _measure import text_height
 
 PT = 12700  # EMU per point
 NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main",
@@ -49,23 +50,47 @@ SCALE = 1.0                # slide width / 960 pt, set per deck in lint()
 
 # ---------------------------------------------------------------- helpers
 
+GROUP_TF = {}  # shape_id -> (sx, tx, sy, ty): child coordinates -> slide coordinates (pt)
+GROWN = {}     # shape_id -> estimated height (pt) of a "resize to fit text" box once its text is laid out
+
+
 def rect(sh):
-    """(left, top, width, height) in pt as drawn - a box turned 90/270 degrees swaps width and height
-    around its centre."""
+    """(left, top, width, height) in pt as drawn on the slide. Shapes inside groups are mapped out of
+    the group's child coordinate space; a box turned 90/270 degrees swaps width and height."""
     l, t, w, h = (Emu(sh.left or 0).pt, Emu(sh.top or 0).pt, Emu(sh.width or 0).pt, Emu(sh.height or 0).pt)
+    sx, tx, sy, ty = GROUP_TF.get(sh.shape_id, (1.0, 0.0, 1.0, 0.0))
+    l, t, w, h = l * sx + tx, t * sy + ty, w * sx, h * sy
     rot = round(getattr(sh, "rotation", 0) or 0) % 180
+    if sh.shape_id in GROWN and GROWN[sh.shape_id] > h:
+        h = GROWN[sh.shape_id]
     if rot == 90:
         cx, cy = l + w / 2, t + h / 2
         l, t, w, h = cx - h / 2, cy - w / 2, h, w
     return (l, t, w, h)
 
 
-def walk(shapes):
-    """Every shape, descending into groups (group children keep absolute coordinates in python-pptx)."""
+def walk(shapes, tf=(1.0, 0.0, 1.0, 0.0)):
+    """Every shape, descending into groups. python-pptx reports group children in the group's own
+    child coordinate space (a:chOff/a:chExt), so record how to map them back onto the slide."""
     for sh in shapes:
+        if tf != (1.0, 0.0, 1.0, 0.0):
+            GROUP_TF[sh.shape_id] = tf
         yield sh
         if sh.shape_type == MSO_SHAPE_TYPE.GROUP:
-            yield from walk(sh.shapes)
+            xfrm = sh._element.find("p:grpSpPr/a:xfrm", NS)
+            inner = tf
+            if xfrm is not None:
+                off, ext = xfrm.find("a:off", NS), xfrm.find("a:ext", NS)
+                choff, chext = xfrm.find("a:chOff", NS), xfrm.find("a:chExt", NS)
+                if None not in (off, ext, choff, chext):
+                    v = lambda el, k: int(el.get(k)) / PT
+                    kx = v(ext, "cx") / v(chext, "cx") if v(chext, "cx") else 1.0
+                    ky = v(ext, "cy") / v(chext, "cy") if v(chext, "cy") else 1.0
+                    # local: x_parent = off + (x_child - chOff) * k ; then apply the outer transform
+                    sx, tx = kx, v(off, "x") - v(choff, "x") * kx
+                    sy, ty = ky, v(off, "y") - v(choff, "y") * ky
+                    inner = (tf[0] * sx, tf[0] * tx + tf[1], tf[2] * sy, tf[2] * ty + tf[3])
+            yield from walk(sh.shapes, inner)
 
 
 def ph_type(sh):
@@ -171,9 +196,9 @@ class Findings:
     def __init__(self):
         self.items = []
 
-    def add(self, slide, severity, code, message, shape=None):
+    def add(self, slide, severity, code, message, shape=None, shape_id=None):
         self.items.append({"slide": slide, "severity": severity, "code": code,
-                           "shape": shape, "message": message})
+                           "shape": shape, "shape_id": shape_id, "message": message})
 
 
 def shape_fill(s, theme):
@@ -204,6 +229,8 @@ def run_colour(run, theme):
 
 
 def lint_slide(n, slide, sw, sh_, floor, budget, f, theme):
+    GROUP_TF.clear()  # shape ids repeat across slides
+    GROWN.clear()
     shapes = list(walk(slide.shapes))
     titles = [s for s in shapes if is_title(s)]
     title_text = titles[0].text_frame.text.strip() if titles and titles[0].has_text_frame else ""
@@ -226,6 +253,20 @@ def lint_slide(n, slide, sw, sh_, floor, budget, f, theme):
             f.add(n, "info", "title_is_label", f"'{title_text}' reads as a topic label, not a claim "
                   "(fine for dividers, agenda and Q&A).", titles[0].name)
 
+    content_all = [s for s in shapes if s.shape_type != MSO_SHAPE_TYPE.GROUP]
+    for s in content_all:  # first pass: estimate text layout, so later checks see grown boxes
+        if s.has_text_frame and s.text_frame.text.strip():
+            base = rect(s)
+            fit_check(n, s, theme, f)
+            if s.shape_id in GROWN:
+                grown = rect(s)
+                for o in content_all:
+                    if o is s or o.has_text_frame and o.text_frame.text.strip():
+                        continue
+                    if contains(rect(o), base, tol=2.0) and not contains(rect(o), grown, tol=2.0):
+                        f.add(n, "warn", "text_overflow", f"Text needs ~{grown[3]:.0f} pt and spills out of "
+                              f"'{o.name}' behind it; cut words or enlarge the card.", s.name)
+                        break
     words, colours, raw_fills, shadows, accents = 0, set(), 0, 0, set()
     sizes, big_tokens, contrast_done = [], Counter(), False
     content = [s for s in shapes if not is_title(s) and s.shape_type != MSO_SHAPE_TYPE.GROUP]
@@ -264,7 +305,7 @@ def lint_slide(n, slide, sw, sh_, floor, budget, f, theme):
                                    or (o.has_text_frame and o.text_frame.text.strip() and not is_title(o)))
                    for o in content):
                 f.add(n, "error", "unused_placeholder", "Empty placeholder next to real content shows "
-                      "'Click to add text' in edit view and confuses screen readers.", s.name)
+                      "'Click to add text' in edit view and confuses screen readers.", s.name, s.shape_id)
 
         # text
         if s.has_text_frame and s.text_frame.text.strip():
@@ -310,7 +351,7 @@ def lint_slide(n, slide, sw, sh_, floor, budget, f, theme):
                     if o is s:
                         break
                     if contains(rect(o), rect(s), tol=2.0):
-                        if has_other_fill(o):
+                        if has_other_fill(o) or o.shape_type == MSO_SHAPE_TYPE.PICTURE:  # text on a photo
                             backing = "?"
                         else:
                             backing = shape_fill(o, theme) or backing
@@ -340,6 +381,29 @@ def lint_slide(n, slide, sw, sh_, floor, budget, f, theme):
         if s.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART) or getattr(s, "has_chart", False):
             if not alt_text(s) and not is_decorative(s):
                 f.add(n, "warn", "a11y_missing_alt_text", "No alt text (and not marked decorative).", s.name)
+        if getattr(s, "has_table", False) and s.has_table:
+            for cell in s.table.iter_cells():
+                tc = cell._tc
+                solid = tc.find("a:tcPr/a:solidFill", NS)
+                cbg = theme.colour_in(solid) if solid is not None else slide_bg
+                for p in cell.text_frame.paragraphs:
+                    for r in p.runs:
+                        fg = run_colour(r, theme)
+                        if not r.text.strip() or not fg or not cbg:
+                            continue
+                        size = (r.font.size.pt if r.font.size else 18.0)
+                        need = 3.0 if is_large_text(size / SCALE, bool(r.font.bold)) else 4.5
+                        ratio = contrast_ratio(fg, cbg)
+                        if ratio < need:
+                            f.add(n, "error" if ratio < 3.0 else "warn", "a11y_low_text_contrast",
+                                  f"Table cell text #{fg} on #{cbg} is {ratio:.1f}:1 (needs {need}:1).", s.name)
+                            break
+                    else:
+                        continue
+                    break
+                else:
+                    continue
+                break
         if s.shape_type == MSO_SHAPE_TYPE.PICTURE:
             stretch = picture_stretch(s)
             if abs(stretch) > STRETCH_TOLERANCE:
@@ -396,12 +460,70 @@ def lint_slide(n, slide, sw, sh_, floor, budget, f, theme):
                 f.add(n, "error" if ov >= OVERLAP_ERROR_PT2 else "warn", "shape_overlap",
                       f"'{na}' and '{nb}' overlap by {ov:.0f} pt².", na)
 
-    if not slide.has_notes_slide or not slide.notes_slide.notes_text_frame.text.strip():
+    notes = slide.notes_slide.notes_text_frame.text if slide.has_notes_slide else ""
+    if not notes.strip():
         f.add(n, "info", "missing_notes", "No speaker notes.")
+    shown = " ".join(x.text_frame.text for x in shapes if x.has_text_frame) + " " + " ".join(
+        c.text for x in shapes if getattr(x, "has_table", False) and x.has_table for c in x.table.iter_cells())
+    has_chart = any(getattr(x, "has_chart", False) and x.has_chart for x in shapes)
+    has_figure = has_chart or re.search(r"\d+(?:[.,]\d+)?\s*(?:%|percent|pt\b|[kKmMbB]n?\b|x\b)|[$€£¥]\s?\d", shown)
+    if has_figure and notes.strip() and not re.search(r"source|doi|https?://|www\.|according to|\(\d{4}\)|©|källa|quelle",
+                                                       notes, re.I):
+        f.add(n, "info", "figure_without_source", "The slide shows figures but the notes name no source; add where "
+              "the numbers come from (SOURCES: …).")
     return title_text
 
 
 C_NS = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+
+
+def fit_check(n, s, theme, f):
+    """Estimate wrapped text height from font metrics and flag text that won't fit its box."""
+    tf = s.text_frame
+    body = tf._txBody
+    bp = body.find("a:bodyPr", NS)
+    if bp is not None and bp.get("wrap") == "none":
+        return
+    grows = bp is not None and bp.find("a:spAutoFit", NS) is not None
+    if round(getattr(s, "rotation", 0) or 0) % 180 == 90:
+        return
+    ins = lambda k, d: (int(bp.get(k)) / PT if bp is not None and bp.get(k) else d)
+    l, t, w, h = rect(s)
+    width = w - ins("lIns", 7.2) - ins("rIns", 7.2)
+    height = h - ins("tIns", 3.6) - ins("bIns", 3.6)
+    if width <= 0 or height <= 0:
+        return
+    heading = is_title(s)
+    paras = []
+    for p in tf.paragraphs:
+        size = para_size(s, p) or 18.0
+        run = next((r for r in p.runs if r.text.strip()), None)
+        name = run.font.name if run is not None and run.font.name else None
+        family = theme.font(name) if name else (theme.major if heading else theme.minor)
+        bold = bool(run.font.bold) if run is not None and run.font.bold is not None else heading
+        before = p.space_before.pt if p.space_before is not None else 0
+        paras.append((p.text, family, size, bold, before))
+    need, widest, lines = text_height(paras, width)
+    if grows:  # "resize shape to fit text": the box will be as tall as its text; overlap/off-slide use that
+        grown = need + ins("tIns", 3.6) + ins("bIns", 3.6)
+        if grown > h:
+            GROWN[s.shape_id] = grown
+        if widest > width + 1:
+            f.add(n, "warn", "word_breaks", f"A word is wider than its box ({widest:.0f} pt in {width:.0f} pt) and "
+                  "will break mid-word.", s.name)
+        return
+    if widest > width + 1:
+        f.add(n, "warn", "word_breaks", f"A word is wider than its box ({widest:.0f} pt in {width:.0f} pt) and will "
+              "break mid-word; shorten it, widen the box or lower the size.", s.name)
+    shrink = bp is not None and bp.find("a:normAutofit", NS) is not None
+    if need > height * 1.08:
+        if shrink:
+            f.add(n, "info", "text_shrinks", f"Text needs ~{need:.0f} pt in a {height:.0f} pt box; PowerPoint will "
+                  "shrink it to fit — check it stays above the floor.", s.name)
+        else:
+            f.add(n, "warn" if need < height * 1.5 else "error", "text_overflow",
+                  f"Text needs ~{need:.0f} pt ({lines} lines) but the box is {height:.0f} pt tall; it will spill "
+                  "out. Cut words, widen or heighten the box, or split the slide.", s.name)
 
 
 def lint_chart(n, s, f, theme):
@@ -459,6 +581,7 @@ def lint_chart(n, s, f, theme):
 
 
 def lint(path, floor, budget):
+    GROUP_TF.clear()
     """Sizes are judged relative to a standard 960-pt-wide slide: on a 1440-pt (Full HD) slide an
     18 pt floor becomes 27 pt, because the same text is two-thirds as big on screen."""
     global LABEL_MAX_PT, SCALE
@@ -510,10 +633,10 @@ def lint(path, floor, budget):
 def fix(prs, findings):
     """Safe fixes only: delete empty placeholders flagged as unused."""
     done = 0
-    targets = {(i["slide"], i["shape"]) for i in findings.items if i["code"] == "unused_placeholder"}
+    targets = {(i["slide"], i["shape_id"]) for i in findings.items if i["code"] == "unused_placeholder"}
     for n, slide in enumerate(prs.slides, 1):
         for s in list(slide.shapes):
-            if (n, s.name) in targets:
+            if (n, s.shape_id) in targets and s.is_placeholder and not s.text_frame.text.strip():
                 s._element.getparent().remove(s._element)
                 done += 1
     return done

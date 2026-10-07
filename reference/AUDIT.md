@@ -23,6 +23,9 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `body_below_floor` | warn | A paragraph of 4+ words between the label ceiling and the floor. Both scale with slide width: 12 / 18 pt on a 960-pt slide, **18 / 27 pt on Full HD**; `--room-depth` raises the floor |
 | `too_many_bullets` | warn | More than 7 paragraphs in one shape |
 | `word_budget` | info | More than 12 visible words — accept for gallery, matrix, chart, quote, reference slides |
+| `text_overflow` | warn / error > 1.5× | Text needs more height than its box (estimated from real font metrics, measured against LibreOffice to the line), or a box that grows with its text spills out of the card behind it |
+| `text_shrinks` | info | The box is set to shrink text on overflow — check the shrunk size stays above the floor |
+| `word_breaks` | warn | A single word is wider than its box and will break mid-word (on Windows, `check_word_breaks.py` gives the exact answer) |
 | `offslide_shape` | warn | A shape sticks out past the slide edge (2 pt tolerance) |
 | `shape_overlap` | warn ≥ 4 pt², error ≥ 200 pt² | Two text/picture/chart shapes partly overlap (a box fully inside another is a card, not a defect) |
 | `unused_placeholder` | error | Empty title/body placeholder next to real content — `--fix` deletes it |
@@ -51,40 +54,32 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `grid_monotony` | info | 4+ identical boxes in a row |
 | `stock_or_cartoon_image` | info | Picture name, alt text or link points at a stock or generic-illustration site |
 | `missing_notes` | info | No speaker notes |
+| `figure_without_source` | info | The slide shows numbers (%, currency, a chart or table figures) but the notes name no source |
 | `duplicate_titles` / `mixed_font_families` | warn | Deck-wide: repeated titles / more than 3 fonts set directly on text |
 | `default_font_only` | info | Deck-wide: one default face (Calibri, Aptos, Arial, Inter…) for everything |
 
-**What it cannot see:** real line breaks, text overflowing its box, z-order, what is behind text that sits on a
-picture or gradient, and anything about how the slide *looks*. Those need a render — `render_slides.py` (Windows,
+**What it cannot see exactly:** line breaks and overflow are *estimates* (font metrics, or metric-compatible
+stand-ins when the real font isn't installed); it can't judge what is behind text on a picture or gradient, and
+it can't tell how the slide *looks*. Those need a render — `render_slides.py` (Windows,
 exact) or `render_lo.py` (any OS, approximate) — and your eyes. An `info` finding is a prompt to check,
 not a defect. Thresholds follow the skill's rules; the overlap areas and 55-character title limit
 match the ones PointClaw (the author's PowerPoint add-in) uses.
 
-## Bulk reading and the quick audit
+## Reading a whole deck — `scripts/read_deck.py` (any OS)
 
-### Bulk reading the deck
-
-For analyzing a deck as a whole (critiquing content, building a relationship map, counting words, finding contradictions), `slide_snapshot` is too slow — one round trip per slide. Use [`scripts/bulk_read.py`](../scripts/bulk_read.py): it opens the presentation once and dumps all text + speaker notes to JSON in a single COM session (~6s for 70 slides vs. minutes one slide at a time).
-
-```bash
-uvx --with pywin32 python scripts/bulk_read.py --file "C:/path/to/deck.pptx" [--slides 5-20] --out dump.json --pretty
-```
-
-**When to use bulk read vs slide_snapshot:**
-- **bulk_read.py**: analyzing ≥5 slides, reviewing whole sections, building any cross-slide reasoning
-- **slide_snapshot**: editing or inspecting a single slide with visual reference
-
-### Auditing a deck
-
-For a one-shot check across an entire deck, run [`scripts/audit_deck.py`](../scripts/audit_deck.py). It walks every slide and prints a flat report flagging slides over the word budget or under the 18pt body floor:
+For analysing a deck as a whole (critiquing content, building a relationship map, counting words, finding
+contradictions), one screenshot per slide is far too slow. `read_deck.py` reads the file once and returns every
+slide's id, layout, title, shapes (kind, name, position in pt, text, font sizes, alt text), chart data, table
+cells and speaker notes:
 
 ```bash
-uvx --with pywin32 python scripts/audit_deck.py --file "C:/path/to/deck.pptx"
+uvx --with python-pptx python scripts/read_deck.py deck.pptx --pretty --out dump.json
+uvx --with python-pptx python scripts/read_deck.py deck.pptx --text          # outline: titles, text, notes
 ```
 
-Columns: slide #, word count, min body font size, status, title. Statuses: `OK`, `ok-tight` (within budget but close), `** AUDIT` (needs review), `[skip]` (hidden slide).
-
-Run this before declaring any deck done. The full procedure — taste pass, anchor exceptions, batching fixes, reporting — is in **Auditing a deck (full procedure)** below.
+**When to use it vs a screenshot:** `read_deck.py` for anything about 5+ slides or cross-slide reasoning; a render
+or `slide_snapshot` when you need to *see* one slide. Then run `lint_deck.py` (above) for the automatic checks and
+`check_word_breaks.py` on Windows for exact line breaks.
 
 ---
 
@@ -139,7 +134,7 @@ gets dismissed wholesale.
 
 | Code | What to check |
 |---|---|
-| `body_below_floor` | Sentence text below 18 pt (24 pt for large rooms)? Raise it, or make it a label. |
+| `body_below_floor` | Sentence text below the floor — 27 pt on Full HD (18 pt on a 960-pt slide), more for large rooms? Raise it, or make it a label. |
 | `headline_two_line` | Headline wraps? Tighten to ≤ 55 characters or split into headline + sub. |
 | `mixed_font_families` | More than two families without a brand reason? Display + body only. |
 | `attribution_truncated` | Author/source cut off? Widen, shorten, or give it its own line. |
@@ -168,7 +163,7 @@ gets dismissed wholesale.
 | `a11y_motion_overload` | Everything animates, or motion > 5 s without control? One or two beats per slide. |
 | `a11y_tiny_target` | Clickable shapes in a self-running/kiosk deck under 44 × 44 pt? Enlarge. |
 
-`scripts/audit_deck.py` catches `body_below_floor` and word-budget problems automatically; `scripts/check_word_breaks.py` catches broken words. The rest need eyes — see the procedure below.
+`scripts/lint_deck.py` catches most of these automatically, on any OS; `scripts/check_word_breaks.py` catches broken words. The rest need eyes — see the procedure below.
 
 ---
 
@@ -176,7 +171,7 @@ gets dismissed wholesale.
 
 Use for any deck of 5+ slides, after any bulk edit, and when reviewing a deck someone else (or an earlier session) built.
 
-**Step 1 — Structural audit.** Run `scripts/audit_deck.py` and `scripts/check_word_breaks.py`.
+**Step 1 — Structural audit.** Run `scripts/lint_deck.py` (any OS) and, on Windows, `scripts/check_word_breaks.py`.
 
 **Step 2 — Taste pass on the flagged slides.** Render each `** AUDIT` slide and check it against the codes in
 *Common defects to self-check*.
@@ -199,7 +194,7 @@ types legitimately exceed that:
 
 If the anchor type allows the excess, record it as accepted and move on; otherwise fix it.
 
-**Step 4 — Fix in batches by type:** font bumps (one script raising anything below 18pt), trim cuts (taglines,
+**Step 4 — Fix in batches by type:** font bumps (one script raising anything below the floor — 27 pt on Full HD), trim cuts (taglines,
 sub-attributions, decorative dashes), layout reflows (edit and re-run `build_slide_NN.py`). Snapshot first, and re-run
 the audit after each batch. **An `OK` status only proves word count and font size** — render every fixed slide
 before calling it done; the audit cannot see text floating outside its backing or a mis-grouped picture.

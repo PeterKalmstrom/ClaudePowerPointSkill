@@ -15,12 +15,11 @@ Patterns: title, section, statement, big_number, kpi, bullets, compare, process,
 chart, table, image, matrix.
 """
 import argparse
-import copy
+import io
 import json
 import os
 import subprocess
 import sys
-import tempfile
 
 from lxml import etree
 from pptx import Presentation
@@ -28,7 +27,7 @@ from pptx.chart.data import CategoryChartData
 from pptx.dml.color import RGBColor
 from pptx.enum.chart import XL_CHART_TYPE, XL_LABEL_POSITION, XL_LEGEND_POSITION, XL_TICK_LABEL_POSITION
 from pptx.enum.dml import MSO_THEME_COLOR
-from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.shapes import MSO_SHAPE, PP_PLACEHOLDER
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.util import Pt
@@ -45,7 +44,24 @@ BODY_TOP, BODY_BOTTOM = 196, 730
 SIZE = {"title": 54, "section": 84, "statement": 72, "hero": 220, "kpi": 84, "h2": 46, "body": 34,
         "small": 30, "caption": 28, "label": 24}  # 1.5x a 960-pt slide: body 34 ~ 23 pt, floor 27 ~ 18 pt
 GAP = 24
+KX = KY = 1.0  # template mode: slide size / 1440 x 810, so the layout grid follows the template
 
+
+def X(v):
+    return Pt(v * KX)
+
+
+def Y(v):
+    return Pt(v * KY)
+
+
+def F(v):
+    # never shrink type below two-thirds: the sizes are set for 1440 pt, where the floor is 27 pt,
+    # so on any smaller template body text stays at or above 18 pt
+    return Pt(round(v * max(min(KX, KY), 2 / 3), 1))
+
+TITLE_TYPES = {PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE}
+FOOTER_TYPES = {PP_PLACEHOLDER.DATE, PP_PLACEHOLDER.FOOTER, PP_PLACEHOLDER.SLIDE_NUMBER}
 TEXT, MUTED, ACCENT, BG, QUIET = (MSO_THEME_COLOR.TEXT_1, MSO_THEME_COLOR.TEXT_2, MSO_THEME_COLOR.ACCENT_1,
                                   MSO_THEME_COLOR.BACKGROUND_1, MSO_THEME_COLOR.BACKGROUND_2)
 
@@ -96,6 +112,25 @@ def check_spec(spec):
                 errors.append(f"slide {i} ({pat}): missing '{need}'")
         if pat == "image" and not os.path.exists(sl.get("image", "")):
             errors.append(f"slide {i} (image): image file not found: {sl.get('image')}")
+        if pat == "table":
+            width = len(sl.get("header", []))
+            for r, row in enumerate(sl.get("rows", [])):
+                if len(row) != width:
+                    errors.append(f"slide {i} (table): row {r + 1} has {len(row)} cells, the header has {width}")
+            hr = sl.get("highlight_row")
+            if hr is not None and not (isinstance(hr, int) and 0 <= hr < len(sl.get("rows", []))):
+                errors.append(f"slide {i} (table): highlight_row {hr!r} is not a row index (0-based)")
+        if pat == "chart":
+            hi = sl.get("highlight")
+            if isinstance(hi, str) and hi not in sl.get("categories", []):
+                errors.append(f"slide {i} (chart): highlight '{hi}' is not one of the categories")
+            if sl.get("type", "column") not in CHART_TYPES:
+                errors.append(f"slide {i} (chart): type '{sl.get('type')}' (one of: {', '.join(CHART_TYPES)})")
+        items_key = {"kpi": "metrics", "compare": "columns", "process": "steps", "timeline": "events",
+                     "matrix": "quadrants", "chart": "categories"}.get(pat)
+        hi = sl.get("highlight")
+        if items_key and isinstance(hi, int) and not 0 <= hi < len(sl.get(items_key, [])):
+            errors.append(f"slide {i} ({pat}): highlight {hi} is out of range (0-based, {len(sl.get(items_key, []))} items)")
         if pat == "chart":
             cats = len(sl.get("categories", []))
             for s in sl.get("series", []):
@@ -137,14 +172,33 @@ def mix(a, b, t):
     return "".join(f"{round(x + (y - x) * t):02X}" for x, y in zip(ca, cb))
 
 
+def quiet_and_muted(d):
+    """The quiet card colour (a light mix of text into the background) and the muted text colour,
+    chosen so muted text stays at 4.5:1 or better on both the background and the quiet card."""
+    sys.path.insert(0, HERE)
+    from _rules import contrast_ratio
+    muted = d["muted"]
+    for t in (0.12, 0.10, 0.08, 0.06, 0.05):
+        quiet = mix(d["background"], d["text"], t)
+        if contrast_ratio(muted, quiet) >= 4.5:
+            return quiet, muted
+    quiet = mix(d["background"], d["text"], 0.06)
+    for k in range(1, 11):  # darken (or lighten, on dark themes) the muted colour towards the text colour
+        muted = mix(d["muted"], d["text"], k / 10)
+        if contrast_ratio(muted, quiet) >= 4.5:
+            break
+    return quiet, muted
+
+
 def apply_direction(prs, d):
     """Write the direction into the theme so everything below uses theme colours and fonts."""
     part = prs.slide_master.part.part_related_by(RT.THEME)
     theme = etree.fromstring(part.blob)
     scheme = theme.find(".//a:clrScheme", NS)
-    slots = {"dk1": d["text"], "lt1": d["background"], "dk2": d["muted"],
-             "lt2": mix(d["background"], d["text"], 0.18), "accent1": d["accent"],
-             "accent2": mix(d["accent"], d["background"], 0.45), "accent3": d["muted"],
+    quiet, muted = quiet_and_muted(d)
+    slots = {"dk1": d["text"], "lt1": d["background"], "dk2": muted,
+             "lt2": quiet, "accent1": d["accent"],
+             "accent2": mix(d["accent"], d["background"], 0.45), "accent3": muted,
              "accent4": mix(d["accent"], d["text"], 0.4), "accent5": mix(d["muted"], d["background"], 0.4),
              "accent6": mix(d["accent"], d["background"], 0.7)}
     for slot, hexv in slots.items():
@@ -170,23 +224,58 @@ def open_template(path):
 
 def title_only_layout(prs):
     for layout in prs.slide_layouts:
-        types = [ph.placeholder_format.type for ph in layout.placeholders]
         if layout.name.lower().replace("-", " ").startswith("title only"):
             return layout
-    for layout in prs.slide_layouts:  # fallback: a layout whose only text placeholder is the title
-        kinds = {str(ph.placeholder_format.type) for ph in layout.placeholders}
-        if any("TITLE" in k for k in kinds) and not any("BODY" in k or "OBJECT" in k for k in kinds):
-            return layout
-    return prs.slide_layouts[0]
+    # fallback: the layout with a title placeholder and the fewest other text placeholders
+    best = None
+    for layout in prs.slide_layouts:
+        types = [ph.placeholder_format.type for ph in layout.placeholders]
+        if any(t in TITLE_TYPES for t in types):
+            others = sum(1 for t in types if t not in TITLE_TYPES and t not in FOOTER_TYPES)
+            if best is None or others < best[0]:
+                best = (others, layout)
+    if best is None:
+        sys.exit("the template has no layout with a title placeholder")
+    return best[1]
 
 
 # ---------------------------------------------------------------- drawing helpers
+
+FLOOR = 27        # body text never shrinks below this (1440-pt grid; scaled by F())
+LABEL_MIN = 24    # short labels (< 4 words) may go this small
+
 
 class Builder:
     def __init__(self, prs, themed):
         self.prs = prs
         self.themed = themed  # True when a direction was applied (we own fonts/colours)
         self.layout = title_only_layout(prs)
+        sys.path.insert(0, HERE)
+        from _theme import Theme
+        th = Theme(prs.slide_master)
+        self.major, self.minor = th.major, th.minor
+        self.problems = []    # text that could not be made to fit
+        self.slide_no, self.slide_id = 0, ""
+
+    def fit(self, lines, size, w, h, heading=False, bold=False, what="text"):
+        """Largest size <= `size` at which `lines` fit a w x h box (1440-grid points), never below the
+        floor. Records a problem when even the floor doesn't fit."""
+        from _measure import text_height
+        sentences = any(len(str(x).split()) >= 4 for x in lines)
+        smallest = (min(size, 40) if heading else (FLOOR if sentences else LABEL_MIN)) if size > LABEL_MIN else size
+        family = self.major if heading else self.minor
+        k = max(min(KX, KY), 2 / 3)  # the same factor F() applies to sizes
+        cur = size
+        while True:
+            paras = [(str(x), family, cur * k, bold or heading, cur * k * 0.5) for x in lines]
+            need, widest, _ = text_height(paras, (w - 1) * KX)
+            if (need <= h * KY * 1.02 and widest <= w * KX) or cur <= smallest:
+                break
+            cur = max(smallest, cur - 2)
+        if need > h * KY * 1.08 or widest > w * KX + 1:
+            self.problems.append(f"slide {self.slide_no} ({self.slide_id}): {what} does not fit even at {cur:g} pt "
+                                 f"(needs ~{need / KY:.0f} pt of {h:.0f}); cut words or split the slide")
+        return cur
 
     def new_slide(self, spec, n):
         s = self.prs.slides.add_slide(self.layout)
@@ -195,13 +284,16 @@ class Builder:
             s.background.fill.solid()
             s.background.fill.fore_color.theme_color = BG
         for ph in list(s.placeholders):
-            if "TITLE" not in str(ph.placeholder_format.type):
+            if ph.placeholder_format.type not in TITLE_TYPES:
                 ph._element.getparent().remove(ph._element)
+        if s.shapes.title is None:
+            sys.exit(f"layout '{self.layout.name}' has no title placeholder; the template needs a layout with one")
         return s
 
     def title(self, s, text, size=None, top=TITLE_TOP, height=TITLE_H, align=PP_ALIGN.LEFT, colour=TEXT):
+        size = self.fit([text], size or SIZE["title"], W - 2 * M - 15, height - 8, heading=True, what="title")
         t = s.shapes.title
-        t.left, t.top, t.width, t.height = Pt(M), Pt(top), Pt(W - 2 * M), Pt(height)
+        t.left, t.top, t.width, t.height = X(M), Y(top), X(W - 2 * M), Y(height)
         t.text = text
         tf = t.text_frame
         tf.word_wrap = True
@@ -209,7 +301,7 @@ class Builder:
         for p in tf.paragraphs:
             p.alignment = align
             for r in p.runs:
-                r.font.size = Pt(size or SIZE["title"])
+                r.font.size = F(size or SIZE["title"])
                 r.font.bold = True
                 if self.themed:
                     r.font.color.theme_color = colour
@@ -218,7 +310,9 @@ class Builder:
 
     def text(self, s, name, txt, x, y, w, h, size, colour=TEXT, bold=False, align=PP_ALIGN.LEFT,
              anchor=MSO_ANCHOR.TOP, heading=False):
-        tb = s.shapes.add_textbox(Pt(x), Pt(y), Pt(w), Pt(h))
+        lines_ = txt if isinstance(txt, list) else [txt]
+        size = self.fit(lines_, size, w, h, heading=heading, bold=bold, what=f"'{name}'")
+        tb = s.shapes.add_textbox(X(x), Y(y), X(w), Y(h))
         tb.name = name
         tf = tb.text_frame
         tf.word_wrap = True
@@ -231,16 +325,16 @@ class Builder:
             p.text = line
             p.alignment = align
             if i:
-                p.space_before = Pt(size * 0.5)
+                p.space_before = F(size * 0.5)
             for r in p.runs:
-                r.font.size, r.font.bold = Pt(size), bold
+                r.font.size, r.font.bold = F(size), bold
                 r.font.color.theme_color = colour
                 if self.themed:
                     r.font.name = "+mj-lt" if heading else "+mn-lt"
         return tb
 
     def rect(self, s, name, x, y, w, h, colour=QUIET, shape=MSO_SHAPE.RECTANGLE):
-        r = s.shapes.add_shape(shape, Pt(x), Pt(y), Pt(w), Pt(h))
+        r = s.shapes.add_shape(shape, X(x), Y(y), X(w), Y(h))
         r.name = name
         r.fill.solid()
         r.fill.fore_color.theme_color = colour
@@ -262,10 +356,15 @@ def notes_text(notes):
     if notes.get("key_fact"):
         out.append(f"KEY FACT: {notes['key_fact']}")
     for label, key in (("FACTS", "facts"), ("PITFALLS", "pitfalls"), ("SOURCES", "sources")):
-        if notes.get(key):
-            out.append(f"{label}:\n" + "\n".join(f"- {x}" for x in notes[key]))
-    if notes.get("qa"):
-        out.append("Q&A:\n" + "\n".join(f"Q: {q['q']}\nA: {q['a']}" for q in notes["qa"]))
+        items = notes.get(key)
+        if items:
+            items = [items] if isinstance(items, str) else items
+            out.append(f"{label}:\n" + "\n".join(f"- {x}" for x in items))
+    qa = notes.get("qa")
+    if qa:
+        qa = [qa] if isinstance(qa, dict) else qa
+        out.append("Q&A:\n" + "\n".join(f"Q: {q.get('q', '')}\nA: {q.get('a', '')}" if isinstance(q, dict)
+                                          else f"- {q}" for q in qa))
     return "\n\n".join(out)
 
 
@@ -357,9 +456,9 @@ def p_timeline(b, s, sl):
         cx = M + step * i + step / 2
         b.rect(s, f"Dot{i + 1}", cx - 14, y - 14, 28, 28, ACCENT if i == hi or hi is None else MUTED, MSO_SHAPE.OVAL)
         top = i % 2 == 0
-        b.text(s, f"Date{i + 1}", e["date"], cx - step / 2 + 8, y - 150 if top else y + 40, step - 16, 50,
+        b.text(s, f"Date{i + 1}", e["date"], cx - step / 2 + 8, y - 165 if top else y + 36, step - 16, 62,
                SIZE["h2"] - 2, ACCENT, bold=True, align=PP_ALIGN.CENTER, heading=True)
-        b.text(s, f"Event{i + 1}", e["label"], cx - step / 2 + 8, y - 100 if top else y + 90, step - 16, 80,
+        b.text(s, f"Event{i + 1}", e["label"], cx - step / 2 + 8, y - 100 if top else y + 100, step - 16, 80,
                SIZE["label"], TEXT, align=PP_ALIGN.CENTER)
 
 
@@ -374,6 +473,7 @@ def p_quote(b, s, sl):
         b.text(s, "Attribution", "\u2014 " + who, M + 120, 620, W - 2 * M - 240, 60, SIZE["small"], MUTED)
 
 
+RAMP = [0, 0.35, -0.3, 0.6, -0.5, 0.75]  # shades of the accent for series 1..6
 CHART_TYPES = {"column": XL_CHART_TYPE.COLUMN_CLUSTERED, "bar": XL_CHART_TYPE.BAR_CLUSTERED,
                "line": XL_CHART_TYPE.LINE_MARKERS, "pie": XL_CHART_TYPE.PIE}
 
@@ -387,15 +487,15 @@ def p_chart(b, s, sl):
         data.add_series(ser["name"], ser["values"])
     has_side = bool(sl.get("caption"))
     cw = W - 2 * M - (380 if has_side else 0)
-    gf = s.shapes.add_chart(CHART_TYPES[kind], Pt(M), Pt(BODY_TOP), Pt(cw), Pt(BODY_BOTTOM - BODY_TOP), data)
+    gf = s.shapes.add_chart(CHART_TYPES[kind], X(M), Y(BODY_TOP), X(cw), Y(BODY_BOTTOM - BODY_TOP), data)
     gf.name = "Chart"
     ch = gf.chart
     single = len(sl["series"]) == 1
     hi = sl.get("highlight")
     if isinstance(hi, str):
-        hi = sl["categories"].index(hi) if hi in sl["categories"] else None
+        hi = sl["categories"].index(hi)  # check_spec guarantees it exists
     ch.has_title = False
-    ch.font.size = Pt(SIZE["label"])
+    ch.font.size = F(SIZE["label"])
     ch.font.color.theme_color = MUTED
     # legend: none for a single series; on the right otherwise (never top/bottom - it steals plot height)
     ch.has_legend = not single and kind != "pie"
@@ -408,10 +508,13 @@ def p_chart(b, s, sl):
     plot.has_data_labels = labels
     if labels:
         dl = plot.data_labels
-        dl.font.size, dl.font.bold = Pt(SIZE["label"]), True
+        dl.font.size, dl.font.bold = F(SIZE["label"]), True
         if sl.get("number_format"):
             dl.number_format, dl.number_format_is_linked = sl["number_format"], False
         if kind != "pie":
+            dl.position = XL_LABEL_POSITION.OUTSIDE_END
+        else:  # a pie has no axis or legend: name every slice on the slice
+            dl.show_category_name, dl.show_value = True, True
             dl.position = XL_LABEL_POSITION.OUTSIDE_END
     if kind in ("column", "bar"):
         plot.gap_width = 75
@@ -426,24 +529,28 @@ def p_chart(b, s, sl):
         if sl.get("number_format"):
             va.tick_labels.number_format, va.tick_labels.number_format_is_linked = sl["number_format"], False
         ca = ch.category_axis
-        ca.tick_labels.font.size = Pt(SIZE["label"])
+        ca.tick_labels.font.size = F(SIZE["label"])
         ca.tick_label_position = XL_TICK_LABEL_POSITION.LOW
         ca.has_major_gridlines = False
     # colour: one series -> highlight one point in the accent, the rest quiet; several -> accent ramp
     for si, ser in enumerate(plot.series):
         if kind == "line":
             ser.format.line.width = Pt(2.25)
-            ser.format.line.color.theme_color = ACCENT if si == 0 else MUTED
+            ser.format.line.color.theme_color = ACCENT
+            ser.format.line.color.brightness = RAMP[si % len(RAMP)]
             ser.smooth = False
             continue
         if single:
+            n_pts = len(sl["categories"])
             for pi_, point in enumerate(ser.points):
                 point.format.fill.solid()
                 point.format.fill.fore_color.theme_color = ACCENT if (hi is None or pi_ == hi) else QUIET
+                if kind == "pie" and hi is None:  # slices must differ: one hue, light to dark
+                    point.format.fill.fore_color.brightness = round(-0.4 + 0.8 * pi_ / max(1, n_pts - 1), 2)
         else:
             ser.format.fill.solid()
             ser.format.fill.fore_color.theme_color = ACCENT
-            ser.format.fill.fore_color.brightness = [0, 0.35, -0.3, 0.6, -0.5, 0.75][si % 6]
+            ser.format.fill.fore_color.brightness = RAMP[si % len(RAMP)]
     alt(gf, sl.get("alt") or chart_alt(sl))
     if has_side:
         b.text(s, "ChartNote", sl["caption"], W - M - 340, BODY_TOP + 40, 340, 400, SIZE["small"], MUTED)
@@ -452,7 +559,8 @@ def p_chart(b, s, sl):
 def chart_alt(sl):
     parts = []
     for ser in sl["series"]:
-        pairs = ", ".join(f"{c} {v:g}" for c, v in zip(sl["categories"], ser["values"]))
+        pairs = ", ".join(f"{c} {v:g}" if isinstance(v, (int, float)) else f"{c} n/a"
+                          for c, v in zip(sl["categories"], ser["values"]))
         parts.append(f"{ser['name']}: {pairs}")
     return f"{sl.get('type', 'column').title()} chart. " + "; ".join(parts) + "."
 
@@ -461,7 +569,7 @@ def p_table(b, s, sl):
     b.title(s, sl["title"])
     rows, cols = len(sl["rows"]) + 1, len(sl["header"])
     row_h = 56
-    gf = s.shapes.add_table(rows, cols, Pt(M), Pt(BODY_TOP + 20), Pt(W - 2 * M), Pt(row_h * rows))
+    gf = s.shapes.add_table(rows, cols, X(M), Y(BODY_TOP + 20), X(W - 2 * M), Y(row_h * rows))
     gf.name = "Table"
     tbl = gf.table
     hi = sl.get("highlight_row")
@@ -471,7 +579,7 @@ def p_table(b, s, sl):
         cell.fill.solid()
         cell.fill.fore_color.theme_color = TEXT
         for r in cell.text_frame.paragraphs[0].runs:
-            r.font.size, r.font.bold = Pt(SIZE["label"]), True
+            r.font.size, r.font.bold = F(SIZE["label"]), True
             r.font.color.theme_color = BG
     for ri, row in enumerate(sl["rows"], 1):
         for c, val in enumerate(row):
@@ -480,7 +588,7 @@ def p_table(b, s, sl):
             cell.fill.solid()
             cell.fill.fore_color.theme_color = ACCENT if hi == ri - 1 else (QUIET if ri % 2 == 0 else BG)
             for r in cell.text_frame.paragraphs[0].runs:
-                r.font.size = Pt(SIZE["label"])
+                r.font.size = F(SIZE["label"])
                 r.font.color.theme_color = BG if hi == ri - 1 else TEXT
             if c > 0 and str(val).replace(",", "").replace(".", "").replace("%", "").replace("-", "").strip().isdigit():
                 cell.text_frame.paragraphs[0].alignment = PP_ALIGN.RIGHT
@@ -493,10 +601,15 @@ def p_image(b, s, sl):
     sys.path.insert(0, HERE)
     from cover_crop import cover_crop
     box_w, box_h = W - 2 * M, BODY_BOTTOM - BODY_TOP - (90 if sl.get("caption") else 0)
-    img = Image.open(sl["image"])
-    out = os.path.join(tempfile.mkdtemp(prefix="crop-"), "image.png")
-    cover_crop(img, box_w, box_h, sl.get("focus_x", 0.5), sl.get("focus_y", 0.5)).save(out)
-    pic = s.shapes.add_picture(out, Pt(M), Pt(BODY_TOP), Pt(box_w), Pt(box_h))
+    from PIL import ImageOps
+    img = ImageOps.exif_transpose(Image.open(sl["image"]))  # phone photos: honour the rotation tag
+    img = img.convert("RGBA" if "A" in img.getbands() else "RGB")  # CMYK/P/L -> something PNG can hold
+    buf = io.BytesIO()
+    crop = cover_crop(img, box_w * KX, box_h * KY, sl.get("focus_x", 0.5), sl.get("focus_y", 0.5))
+    tw = max(crop.width, 960)  # resample to the exact box ratio: rounding on small images reads as stretch
+    crop.resize((tw, round(tw * box_h * KY / (box_w * KX))), Image.LANCZOS).save(buf, "PNG")
+    buf.seek(0)
+    pic = s.shapes.add_picture(buf, X(M), Y(BODY_TOP), X(box_w), Y(box_h))
     pic.name = "Photo"
     alt(pic, sl.get("alt") or sl["title"])
     if sl.get("caption"):
@@ -534,6 +647,7 @@ PATTERNS = {"title": p_title, "section": p_section, "statement": p_statement, "b
 # ---------------------------------------------------------------- main
 
 def build(spec, out):
+    global KX, KY
     if spec.get("template"):
         prs = open_template(spec["template"])
         for sld in list(prs.slides._sldIdLst):  # start from the template's masters, not its slides
@@ -544,24 +658,48 @@ def build(spec, out):
         prs = Presentation()
         apply_direction(prs, load_direction(spec.get("direction", "clean-corporate")))
         themed = True
-    prs.slide_width, prs.slide_height = Pt(W), Pt(H)
+    if themed:
+        prs.slide_width, prs.slide_height = Pt(W), Pt(H)
+        KX = KY = 1.0
+    else:  # keep the template's size; scale the 1440 x 810 grid onto it
+        KX, KY = prs.slide_width / Pt(W), prs.slide_height / Pt(H)
     b = Builder(prs, themed)
     for n, sl in enumerate(spec["slides"], 1):
+        b.slide_no, b.slide_id = n, sl.get("id", f"s{n:02d}")
         s = b.new_slide(sl, n)
         PATTERNS[sl["pattern"]](b, s, sl)
         text = notes_text(sl.get("notes"))
         if text:
             s.notes_slide.notes_text_frame.text = text
     prs.save(out)
-    return len(spec["slides"])
+    return len(spec["slides"]), b.problems
+
+
+NUMERIC_KEYS = {"values", "highlight", "highlight_row", "focus_x", "focus_y"}
+
+
+def _texts(obj, key=None):
+    """YAML turns 42 and 2024 into numbers; every text field must be a string."""
+    if key in NUMERIC_KEYS:
+        return obj
+    if isinstance(obj, dict):
+        return {k: _texts(v, k) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_texts(v, key) for v in obj]
+    if isinstance(obj, (int, float)) and not isinstance(obj, bool):
+        return f"{obj:g}" if isinstance(obj, float) else str(obj)
+    return obj
 
 
 def load_spec(path):
     with open(path, encoding="utf-8") as fh:
         if path.lower().endswith((".yml", ".yaml")):
             import yaml  # uvx --with pyyaml
-            return yaml.safe_load(fh)
-        return json.load(fh)
+            spec = yaml.safe_load(fh)
+        else:
+            spec = json.load(fh)
+    spec["slides"] = [_texts(sl) for sl in spec.get("slides", [])]
+    return spec
 
 
 def main():
@@ -591,11 +729,14 @@ def main():
         print(f"spec: {e}", file=sys.stderr)
     if errors and not a.force:
         sys.exit(2)
-    n = build(spec, a.out)
+    n, problems = build(spec, a.out)
     print(f"{n} slides -> {a.out}")
+    for p in problems:
+        print(f"fit: {p}", file=sys.stderr)
+    code = 0
     if a.lint:
-        r = subprocess.run([sys.executable, os.path.join(HERE, "lint_deck.py"), a.out])
-        sys.exit(r.returncode)
+        code = subprocess.run([sys.executable, os.path.join(HERE, "lint_deck.py"), a.out]).returncode
+    sys.exit(3 if problems else code)
 
 
 if __name__ == "__main__":

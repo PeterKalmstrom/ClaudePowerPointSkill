@@ -17,6 +17,9 @@ Once a deck is content-complete **and audits clean**, and there is a real talk c
    uvx --with pywin32 python scripts/export_pdf.py --file deck.pptx --mode notes
    uvx --with pywin32 python scripts/export_pdf.py --file deck.pptx --mode handout --slides-per-page 6   # audience
    ```
+   Writing your own export? Don't call `ExportAsFixedFormat` positionally from pywin32: it fails with
+   *"The Python instance can not be converted to a COM object"* because of the optional `PrintRange` argument.
+   Pass a real range (`pres.PrintOptions.Ranges.Add(1, n)`) and name every argument, as `scripts/export_pdf.py` does.
 4. **Dress-rehearsal contact sheet** — `scripts/contact_sheet.py`, printed on A3; mark the section breaks.
 5. **Rehearsal checklist** — run the deck in slideshow mode, out loud, with a stopwatch; cold-read the panic sheet
    (each answer ≤ 30 s); check projector, mic and clicker in the real room.

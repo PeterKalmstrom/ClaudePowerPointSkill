@@ -26,11 +26,17 @@ from pptx.util import Pt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 results = []
+report = []
+
+
+def say(line=""):
+    print(line)
+    report.append(line)
 
 
 def check(name, ok, detail=""):
     results.append(ok)
-    print(f"{'PASS' if ok else 'FAIL'}  {name}" + (f"  ({detail})" if detail and not ok else ""))
+    say(f"{'PASS' if ok else 'FAIL'}  {name}" + (f"  ({detail})" if detail and not ok else ""))
 
 
 def run(script, *args):
@@ -76,7 +82,7 @@ def main():
     tmp = tempfile.mkdtemp(prefix="pptskill-selftest-")
     deck = os.path.join(tmp, "selftest.pptx")
     build_deck(deck)
-    print(f"test deck: {deck}\n")
+    say(f"test deck: {deck}\n")
 
     # --- any OS
     code, out = run("check_slide_size.py", deck)
@@ -146,10 +152,13 @@ def main():
             ok = code == 0 and os.path.exists(pdf) and open(pdf, "rb").read(4) == b"%PDF"
             check(f"export_pdf: {mode} PDF written", ok, out)
     else:
-        print("\n(skipped the PowerPoint scripts; run with --com on Windows)")
+        say("\n(skipped the PowerPoint scripts; run with --com on Windows)")
 
     failed = results.count(False)
-    print(f"\n{len(results) - failed}/{len(results)} passed  -  output in {tmp}")
+    say(f"\n{len(results) - failed}/{len(results)} passed  -  output in {tmp}")
+    log = os.path.join(tmp, "selftest-report.txt")
+    open(log, "w", encoding="utf-8").write("\n".join(report) + "\n")
+    print(f"report: {log}  (paste or attach this file when reporting results)")
     sys.exit(1 if failed else 0)
 
 

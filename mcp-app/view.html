@@ -5,70 +5,178 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PowerPoint Live</title>
 <style>
-  :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --accent: #c43e1c; }
-  :root[data-theme="dark"] { --bg: #0d1117; --fg: #e6edf3; --muted: #8d96a0; --line: #30363d; --accent: #f0883e; }
+  :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --soft: #f6f8fa; --accent: #c43e1c;
+          --add: #1a7f37; --chg: #0969da; --del: #cf222e; --warn: #bf8700; --err: #cf222e; --info: #8250df; }
+  :root[data-theme="dark"] { --bg: #0d1117; --fg: #e6edf3; --muted: #8d96a0; --line: #30363d; --soft: #161b22;
+          --accent: #f0883e; --add: #3fb950; --chg: #58a6ff; --del: #f85149; --warn: #d29922; --err: #f85149; --info: #a371f7; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
   .wrap { padding: 8px; }
-  .stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--line); border-radius: 6px;
-           overflow: hidden; display: grid; place-items: center; color: var(--muted); }
-  .stage img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
-  .stage.flash { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .bar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-  .bar .info { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bar .muted { color: var(--muted); }
-  button { font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--line);
-           border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+  button, input, textarea { font: inherit; color: var(--fg); }
+  button { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
   button:disabled { opacity: .4; cursor: default; }
+  button.on, button[aria-selected="true"] { background: var(--line); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .muted { color: var(--muted); }
+  [hidden] { display: none !important; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
+  .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+  /* slide */
+  .stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--line); border-radius: 6px;
+           overflow: hidden; color: var(--muted); user-select: none; }
+  .stage > .placeholder { position: absolute; inset: 0; display: grid; place-items: center; }
+  .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
+  .stage img.after { clip-path: inset(0 0 0 var(--cut, 50%)); }
+  .divider { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); left: var(--cut, 50%);
+             pointer-events: none; }
+  .tag { position: absolute; top: 6px; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,.6); color: #fff;
+         font-size: 11px; }
+  .overlay { position: absolute; inset: 0; }
+  .ov { position: absolute; border: 2px solid; border-radius: 3px; pointer-events: none; }
+  .ov.added { border-color: var(--add); background: color-mix(in srgb, var(--add) 12%, transparent); }
+  .ov.changed { border-color: var(--chg); background: color-mix(in srgb, var(--chg) 12%, transparent); }
+  .ov.removed { border-color: var(--del); border-style: dashed; }
+  .ov.fade { transition: opacity 1.2s ease; opacity: 0; }
+  .ov.lint { border-width: 2px; pointer-events: auto; cursor: pointer; }
+  .ov.lint.error { border-color: var(--err); } .ov.lint.warn { border-color: var(--warn); } .ov.lint.info { border-color: var(--info); border-style: dotted; }
+  .ov.lint.hot { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .ov.lint .badge { position: absolute; right: -2px; top: -18px; font-size: 10px; padding: 0 4px; border-radius: 3px; color: #fff; }
+  .ov.lint.error .badge { background: var(--err); } .ov.lint.warn .badge { background: var(--warn); } .ov.lint.info .badge { background: var(--info); }
+  .ov.pick { border-color: var(--accent); border-style: solid; background: color-mix(in srgb, var(--accent) 15%, transparent); }
+  .ov.hover { border-color: var(--accent); border-style: dashed; }
+  .stage.asking { cursor: crosshair; }
+  .bar { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .bar .info { flex: 1; min-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
-  .dot.live { background: #2da44e; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 6px; }
-  .tabs button[aria-selected="true"] { background: var(--line); }
-  .sec { margin: 10px 0 4px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
-  .sec .muted { font-weight: 400; }
+  .dot.live { background: var(--add); }
+  input[type=range] { width: 100%; margin: 6px 0 0; accent-color: var(--accent); }
+  .ask { margin-top: 6px; border: 1px solid var(--line); border-radius: 6px; padding: 6px; background: var(--soft); }
+  .ask textarea { width: 100%; min-height: 54px; resize: vertical; border: 1px solid var(--line); border-radius: 4px;
+                  background: var(--bg); padding: 4px 6px; }
+  .findings { margin-top: 6px; display: grid; gap: 4px; }
+  .finding { display: flex; gap: 6px; align-items: baseline; padding: 4px 6px; border-radius: 4px; background: var(--soft); }
+  .finding .sev { width: 8px; height: 8px; border-radius: 50%; flex: none; transform: translateY(1px); }
+  .sev.error { background: var(--err); } .sev.warn { background: var(--warn); } .sev.info { background: var(--info); }
+  .finding .msg { flex: 1; min-width: 0; }
+  .finding code { font-size: 11px; color: var(--muted); }
+
+  /* sorter */
+  .sec { margin: 10px 0 4px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+  .sec .name { cursor: text; }
+  .sec input { font-weight: 600; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; background: var(--bg); }
+  .sec .x { border: 0; padding: 0 4px; color: var(--muted); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; min-height: 40px;
           padding: 4px; border-radius: 6px; }
   .grid.over-end { outline: 2px dashed var(--accent); outline-offset: -2px; }
   .thumb { position: relative; cursor: grab; user-select: none; }
-  .thumb .pic { aspect-ratio: 16 / 9; background: var(--line); border-radius: 4px; overflow: hidden;
+  .thumb .pic { position: relative; aspect-ratio: 16 / 9; background: var(--line); border-radius: 4px; overflow: hidden;
                 border: 2px solid transparent; }
   .thumb .pic img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
   .thumb.current .pic { border-color: var(--accent); }
-  .thumb.hidden .pic { opacity: .45; }
+  .thumb.selected .pic { border-color: var(--chg); box-shadow: 0 0 0 2px color-mix(in srgb, var(--chg) 35%, transparent); }
+  .thumb.hidden .pic img { opacity: .4; }
   .thumb.dragging { opacity: .35; }
   .thumb.over-before::before { content: ""; position: absolute; left: -6px; top: 0; bottom: 18px; width: 3px;
                                border-radius: 2px; background: var(--accent); }
+  .thumb .lintn { position: absolute; right: 4px; top: 4px; font-size: 10px; padding: 0 5px; border-radius: 8px;
+                  background: var(--warn); color: #fff; }
+  .thumb .hid { position: absolute; left: 4px; top: 4px; font-size: 10px; padding: 0 5px; border-radius: 3px;
+                background: rgba(0,0,0,.6); color: #fff; }
   .thumb .cap { display: flex; gap: 4px; font-size: 11px; color: var(--muted); margin-top: 2px; }
   .thumb .cap b { color: var(--fg); }
   .thumb .cap span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  [hidden] { display: none !important; }
-  .err { color: var(--accent); margin-top: 6px; white-space: pre-wrap; }
+  .toolbar { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 4px 0; }
+
+  /* storyline */
+  .story h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
+  .story ol { margin: 0; padding-left: 0; list-style: none; }
+  .story li { display: flex; gap: 8px; padding: 3px 6px; border-radius: 4px; cursor: pointer; align-items: baseline; }
+  .story li:hover { background: var(--soft); }
+  .story li.current { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .story li .n { width: 2.2em; text-align: right; color: var(--muted); flex: none; }
+  .story li .t { flex: 1; }
+  .story li.hidden .t { color: var(--muted); text-decoration: line-through; }
+  .story li .t.none { color: var(--err); font-style: italic; }
+  .pill { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); }
+
+  /* history */
+  .hist { display: grid; gap: 6px; }
+  .ver { display: flex; gap: 8px; align-items: center; padding: 4px; border-radius: 6px; background: var(--soft); }
+  .ver .pic { width: 120px; aspect-ratio: 16 / 9; background: var(--line); border-radius: 3px; overflow: hidden; flex: none; }
+  .ver .pic img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
+  .ver .what { flex: 1; min-width: 0; }
+  .err { color: var(--err); margin-top: 6px; white-space: pre-wrap; }
+  .note { color: var(--muted); margin-top: 6px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="tabs" role="tablist">
-    <button role="tab" id="tab-slide" aria-selected="true">Slide</button>
-    <button role="tab" id="tab-sorter" aria-selected="false">Slide sorter</button>
+    <button role="tab" data-tab="slide" aria-selected="true">Slide</button>
+    <button role="tab" data-tab="sorter" aria-selected="false">Slide sorter</button>
+    <button role="tab" data-tab="story" aria-selected="false">Storyline</button>
+    <button role="tab" data-tab="history" aria-selected="false">History</button>
   </div>
-  <div id="sorter" hidden></div>
-  <div id="single">
-  <div class="stage" id="stage"><span id="placeholder">Waiting for PowerPoint…</span></div>
-  <div class="bar">
-    <span class="dot" id="dot" title="live"></span>
-    <span class="info"><b id="pos">–</b> <span class="muted" id="deck"></span></span>
-    <span class="muted" id="when"></span>
-    <button id="prev" aria-label="Previous slide">‹</button>
-    <button id="next" aria-label="Next slide">›</button>
-  </div>
-  </div>
+
+  <section id="v-slide">
+    <div class="stage" id="stage"><div class="placeholder">Waiting for PowerPoint…</div>
+      <img id="img-before" alt="" hidden><img id="img" alt="" hidden>
+      <div class="divider" id="divider" hidden></div>
+      <span class="tag" id="tag-before" style="left:6px" hidden>Before</span>
+      <span class="tag" id="tag-after" style="right:6px" hidden>Now</span>
+      <div class="overlay" id="overlay"></div>
+    </div>
+    <input type="range" id="cut" min="0" max="100" value="50" aria-label="Before and after" hidden>
+    <div class="bar">
+      <span class="dot" id="dot" title="live"></span>
+      <span class="info"><b id="pos">–</b> <span class="muted" id="deck"></span></span>
+      <span class="muted" id="when"></span>
+      <button id="prev" aria-label="Previous slide">‹</button>
+      <button id="next" aria-label="Next slide">›</button>
+    </div>
+    <div class="bar">
+      <button id="b-checks" title="Show lint findings on the slide">Checks</button>
+      <button id="b-compare" title="Compare with the slide before the last change" disabled>Before / after</button>
+      <button id="b-ask" title="Point at a shape or drag an area, then ask Claude">Ask Claude</button>
+      <label class="row muted" title="Render through Save As (true embedded fonts). Slower."><input type="checkbox" id="accurate"> Accurate</label>
+    </div>
+    <div class="ask" id="askbox" hidden>
+      <div class="muted" id="ask-target">Click a shape or drag an area on the slide.</div>
+      <textarea id="ask-text" placeholder="What should Claude do here?"></textarea>
+      <div class="row"><button class="primary" id="ask-send" disabled>Send to Claude</button><button id="ask-cancel">Cancel</button>
+        <span class="muted" id="ask-note"></span></div>
+    </div>
+    <div class="findings" id="findings" hidden></div>
+  </section>
+
+  <section id="v-sorter" hidden>
+    <div class="toolbar row" id="sort-tools">
+      <span class="muted" id="sel-info">Click to select · Ctrl/Shift for more · double-click to open · drag to move</span>
+      <button id="s-hide" disabled>Hide</button>
+      <button id="s-unhide" disabled>Unhide</button>
+      <button id="s-section" disabled>New section here</button>
+      <button id="s-clear" disabled>Clear</button>
+    </div>
+    <div id="sorter"></div>
+  </section>
+
+  <section id="v-story" class="story" hidden></section>
+
+  <section id="v-history" hidden>
+    <p class="muted" style="margin:4px 0 8px">A version is saved before every change made through PowerPoint Live. Restoring replaces the deck file with that version and reopens it; the state you leave is saved as a version too.</p>
+    <div class="hist" id="hist"></div>
+  </section>
+
   <div class="err" id="err" hidden></div>
 </div>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  let nextId = 1, pending = new Map(), state = null, shown = null, busy = false;
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  let nextId = 1; const pending = new Map();
 
+  // ------------------------------------------------------------ host bridge
   function send(msg) { window.parent.postMessage({ jsonrpc: "2.0", ...msg }, "*"); }
   function request(method, params) {
     const id = nextId++;
@@ -78,19 +186,15 @@
   function structured(result) {
     if (result && result.structuredContent) {
       const s = result.structuredContent;
-      return s.result && typeof s.result === "object" ? s.result : s;
+      return s.result && typeof s.result === "object" && Object.keys(s).length === 1 ? s.result : s;
     }
     const t = result && result.content && result.content.find(c => c.type === "text");
     try { return t ? JSON.parse(t.text) : null; } catch { return null; }
   }
-  const call = async (name, args = {}) => {
+  async function call(name, args = {}) {
     const r = await request("tools/call", { name, arguments: args });
     if (r && r.isError) throw new Error((r.content || []).map(c => c.text).join(" ") || "tool error");
     return structured(r);
-  };
-
-  function applyTheme(ctx) {
-    if (ctx && ctx.theme) document.documentElement.dataset.theme = ctx.theme;
   }
   function reportSize() {
     send({ method: "ui/notifications/size-changed",
@@ -100,71 +204,310 @@
     $("err").hidden = !e; $("err").textContent = e ? String(e.message || e) : "";
     $("dot").classList.toggle("live", !e); reportSize();
   }
-  function render(s) {
+  const png = b64 => "data:image/png;base64," + b64;
+
+  // ------------------------------------------------------------ shared state
+  let mode = "slide", busy = false, state = null, shown = null, lint = null, lintKey = null, lintAt = 0;
+  let checks = false, comparing = false, asking = false, lastChangeStamp = 0;
+  let current = { id: null, src: null }, before = { id: null, src: null };
+
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === m));
+    for (const v of ["slide", "sorter", "story", "history"]) $("v-" + v).hidden = v !== m;
+    refresh(true);
+  }
+  document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => setMode(b.dataset.tab));
+
+  function renderPos(s) {
     $("pos").textContent = s.count ? `Slide ${s.slide} / ${s.count}` : "No slides";
     $("deck").textContent = s.deck || "";
     $("prev").disabled = !s.count || s.slide <= 1;
     $("next").disabled = !s.count || s.slide >= s.count;
   }
 
-  let mode = "slide", outline = null, outlineKey = null, thumbs = new Map(), dragId = null;
-  function setMode(m) {
-    mode = m;
-    $("tab-slide").setAttribute("aria-selected", m === "slide");
-    $("tab-sorter").setAttribute("aria-selected", m === "sorter");
-    $("single").hidden = m !== "slide"; $("sorter").hidden = m !== "sorter";
-    m === "sorter" ? refreshSorter(true) : refresh(true);
-  }
-  $("tab-slide").onclick = () => setMode("slide");
-  $("tab-sorter").onclick = () => setMode("sorter");
-
-  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-
-  function clearMarks() { document.querySelectorAll(".over-before,.over-end").forEach(e => e.classList.remove("over-before", "over-end")); }
-
-  async function move(args) {
-    try { await call("powerpoint_move", args); await refreshSorter(true); }
+  async function act(name, args) {   // a change through the server, then a fresh view
+    try { const r = await call(name, args); showError(null); await refresh(true); return r; }
     catch (e) { showError(e); }
+  }
+
+  // ------------------------------------------------------------ lint (shared by Slide, Sorter, Storyline)
+  async function ensureLint(force) {
+    if (!force && Date.now() - lintAt < 4000) return lint;
+    lintAt = Date.now();
+    try { lint = await call("deck_lint"); } catch (e) { showError(e); }
+    return lint;
+  }
+  const findingsFor = sid => (lint && lint.findings || []).filter(f => f.slide_id === sid);
+
+  // ------------------------------------------------------------ slide view
+  const pct = (box, s) => ({ left: box[0] / s.width_pt * 100 + "%", top: box[1] / s.height_pt * 100 + "%",
+                              width: box[2] / s.width_pt * 100 + "%", height: box[3] / s.height_pt * 100 + "%" });
+  function place(div, box) { Object.assign(div.style, pct(box, state)); return div; }
+
+  function drawOverlay() {
+    const ov = $("overlay"); ov.textContent = "";
+    if (!state || !state.width_pt) return;
+    if (checks && state.slide_id) {
+      for (const f of findingsFor(state.slide_id).filter(f => f.box)) {
+        const d = place(el("div", `ov lint ${f.severity}`), f.box);
+        d.title = `${f.code}: ${f.message}`; d.dataset.key = f.code + "|" + f.shape_id;
+        d.appendChild(el("span", "badge", f.code.replace(/_/g, " ")));
+        d.onclick = () => focusFinding(d.dataset.key);
+        ov.appendChild(d);
+      }
+    }
+    if (asking && pick) ov.appendChild(place(el("div", "ov pick"), pick.box));
+    if (asking && hoverBox) ov.appendChild(place(el("div", "ov hover"), hoverBox));
+  }
+
+  function flashChanges(ch) {
+    if (!ch || !ch.boxes || ch.stamp <= lastChangeStamp) return;
+    lastChangeStamp = ch.stamp;
+    if (Date.now() / 1000 - ch.stamp > 30) return;   // old news: don't flash on first open
+    for (const b of ch.boxes) {
+      const d = place(el("div", "ov " + b.kind), b.box);
+      d.title = `${b.kind}: ${b.name}`;
+      $("overlay").appendChild(d);
+      setTimeout(() => d.classList.add("fade"), 2500);
+      setTimeout(() => d.remove(), 4000);
+    }
+  }
+
+  function renderFindings() {
+    const box = $("findings"); box.textContent = "";
+    box.hidden = !checks;
+    if (!checks || !state) return;
+    const list = findingsFor(state.slide_id);
+    if (!lint) { box.appendChild(el("div", "note", "Checking…")); return; }
+    if (!list.length) { box.appendChild(el("div", "note", "No findings on this slide.")); return; }
+    const order = { error: 0, warn: 1, info: 2 };
+    for (const f of list.sort((a, b) => order[a.severity] - order[b.severity])) {
+      const row = el("div", "finding"); row.dataset.key = f.code + "|" + f.shape_id;
+      row.appendChild(el("span", "sev " + f.severity));
+      const msg = el("div", "msg"); msg.appendChild(el("code", null, f.code + (f.shape ? ` · ${f.shape}` : "")));
+      msg.appendChild(el("div", null, f.message)); row.appendChild(msg);
+      if (f.fixable) {
+        const b = el("button", null, "Fix"); b.onclick = () => act("powerpoint_fix", { slide_id: f.slide_id, shape_id: f.shape_id, code: f.code });
+        row.appendChild(b);
+      }
+      const a = el("button", null, "Ask Claude");
+      a.onclick = () => askClaude(`On slide ${state.slide} of ${state.deck}` + (f.shape ? `, shape "${f.shape}" (id ${f.shape_id})` : "") +
+                                  `: fix the lint finding ${f.code} - ${f.message}`);
+      row.appendChild(a);
+      row.onmouseenter = () => hot(row.dataset.key, true); row.onmouseleave = () => hot(row.dataset.key, false);
+      box.appendChild(row);
+    }
+  }
+  function hot(key, on) { document.querySelectorAll(`.ov.lint[data-key="${CSS.escape(key)}"]`).forEach(d => d.classList.toggle("hot", on)); }
+  function focusFinding(key) {
+    const row = document.querySelector(`.finding[data-key="${CSS.escape(key)}"]`);
+    if (row) { row.scrollIntoView({ block: "nearest" }); hot(key, true); setTimeout(() => hot(key, false), 900); }
+  }
+
+  function setImage(img) {
+    $("stage").querySelector(".placeholder").hidden = true;
+    if (current.id === img.slide_id && current.src && current.sig !== img.signature) before = { ...current };
+    if (before.id !== img.slide_id) before = { id: null, src: null };
+    current = { id: img.slide_id, src: png(img.png), sig: img.signature };
+    $("img").src = current.src; $("img").alt = `Slide ${img.slide} of ${state ? state.deck : ""}`; $("img").hidden = false;
+    $("b-compare").disabled = !before.src;
+    if (!before.src && comparing) toggleCompare(false);
+    if (comparing) $("img-before").src = before.src;
+    $("when").textContent = new Date().toLocaleTimeString() + (img.accurate ? " · accurate" : "");
+  }
+
+  function toggleCompare(on) {
+    comparing = on; $("b-compare").classList.toggle("on", on);
+    $("img-before").hidden = $("divider").hidden = $("tag-before").hidden = $("tag-after").hidden = $("cut").hidden = !on;
+    $("img").classList.toggle("after", on);
+    if (on) { $("img-before").src = before.src; $("img-before").alt = "The slide before the last change"; }
+    reportSize();
+  }
+  $("cut").oninput = () => $("stage").style.setProperty("--cut", $("cut").value + "%");
+  $("b-compare").onclick = () => toggleCompare(!comparing);
+  $("b-checks").onclick = async () => { checks = !checks; $("b-checks").classList.toggle("on", checks); renderFindings(); drawOverlay();
+                                        if (checks) { await ensureLint(true); renderFindings(); drawOverlay(); } reportSize(); };
+  $("accurate").onchange = () => refresh(true);
+
+  async function refreshSlide(force) {
+    const s = await call("slide_state");
+    state = s; renderPos(s); showError(null);
+    const key = `${s.path}|${s.slide}|${s.signature}`;
+    if (force || key !== shown) {
+      const width = Math.min(2560, Math.max(320, Math.round($("stage").clientWidth * (window.devicePixelRatio || 1))));
+      const img = await call("slide_image", { slide: s.slide, width, accurate: $("accurate").checked });
+      if (img && img.png) setImage(img);
+      shown = key;
+      if (checks) { await ensureLint(true); }
+      drawOverlay(); renderFindings(); reportSize();
+    }
+    flashChanges(s.changes);
+  }
+
+  async function go(delta) { if (state) await act("powerpoint_show", { slide: state.slide + delta }); }
+  $("prev").onclick = () => go(-1);
+  $("next").onclick = () => go(1);
+
+  // ------------------------------------------------------------ point and ask
+  let pick = null, hoverBox = null, dragFrom = null;
+  function toPt(ev) {
+    const r = $("stage").getBoundingClientRect();
+    return [(ev.clientX - r.left) / r.width * state.width_pt, (ev.clientY - r.top) / r.height * state.height_pt];
+  }
+  function shapeAt(p) {
+    const hits = (state.shapes || []).filter(s => p[0] >= s.box[0] && p[0] <= s.box[0] + s.box[2] && p[1] >= s.box[1] && p[1] <= s.box[1] + s.box[3]);
+    return hits.sort((a, b) => a.box[2] * a.box[3] - b.box[2] * b.box[3])[0] || null;
+  }
+  function setAsking(on) {
+    asking = on; pick = null; hoverBox = null;
+    $("b-ask").classList.toggle("on", on); $("askbox").hidden = !on; $("stage").classList.toggle("asking", on);
+    $("ask-target").textContent = "Click a shape or drag an area on the slide."; $("ask-send").disabled = true; $("ask-note").textContent = "";
+    if (on) $("ask-text").focus();
+    drawOverlay(); reportSize();
+  }
+  $("b-ask").onclick = () => setAsking(!asking);
+  $("ask-cancel").onclick = () => setAsking(false);
+  $("stage").addEventListener("pointerdown", ev => { if (!asking || !state) return; dragFrom = toPt(ev); $("stage").setPointerCapture(ev.pointerId); });
+  $("stage").addEventListener("pointermove", ev => {
+    if (!asking || !state) return;
+    const p = toPt(ev);
+    if (dragFrom) { hoverBox = [Math.min(p[0], dragFrom[0]), Math.min(p[1], dragFrom[1]), Math.abs(p[0] - dragFrom[0]), Math.abs(p[1] - dragFrom[1])]; }
+    else { const s = shapeAt(p); hoverBox = s ? s.box : null; }
+    drawOverlay();
+  });
+  $("stage").addEventListener("pointerup", ev => {
+    if (!asking || !state || !dragFrom) return;
+    const p = toPt(ev), from = dragFrom; dragFrom = null; hoverBox = null;
+    const box = [Math.min(p[0], from[0]), Math.min(p[1], from[1]), Math.abs(p[0] - from[0]), Math.abs(p[1] - from[1])].map(v => Math.round(v));
+    if (box[2] < 6 && box[3] < 6) {
+      const s = shapeAt(p);
+      pick = s ? { kind: "shape", shape: s, box: s.box } : null;
+    } else pick = { kind: "area", box };
+    $("ask-target").textContent = !pick ? "Nothing there - click a shape or drag an area."
+      : pick.kind === "shape" ? `Shape "${pick.shape.name}" (id ${pick.shape.id})${pick.shape.text ? ` - "${pick.shape.text.slice(0, 50)}"` : ""}`
+      : `Area at ${box[0]}, ${box[1]} pt, ${box[2]} × ${box[3]} pt`;
+    $("ask-send").disabled = !pick; drawOverlay(); reportSize();
+  });
+  $("ask-send").onclick = () => {
+    const what = $("ask-text").value.trim() || "Improve this.";
+    const where = pick.kind === "shape"
+      ? `shape "${pick.shape.name}" (Shape.Id ${pick.shape.id}, box ${pick.box.map(Math.round).join(", ")} pt)`
+      : `the area x ${pick.box[0]}, y ${pick.box[1]}, ${pick.box[2]} × ${pick.box[3]} pt`;
+    askClaude(`In PowerPoint Live, slide ${state.slide} of ${state.deck} (SlideID ${state.slide_id}), ${where}: ${what}`);
+  };
+  async function askClaude(text) {
+    try {
+      await request("ui/message", { role: "user", content: { type: "text", text } });
+      $("ask-note").textContent = "Sent."; $("ask-text").value = ""; setTimeout(() => setAsking(false), 600);
+    } catch {
+      try { await navigator.clipboard.writeText(text); showError("This host can't take messages from the view - the request is on the clipboard; paste it into the chat."); }
+      catch { showError("This host can't take messages from the view. Paste this into the chat:\n" + text); }
+    }
+  }
+
+  // ------------------------------------------------------------ sorter
+  let outline = null, outlineKey = null, thumbs = new Map(), dragIds = null, selected = new Set(), anchor = null;
+  function clearMarks() { document.querySelectorAll(".over-before,.over-end").forEach(e => e.classList.remove("over-before", "over-end")); }
+  function updateTools() {
+    const n = selected.size, ids = [...selected], byId = new Map((outline ? outline.slides : []).map(s => [s.id, s]));
+    $("sel-info").textContent = n ? `${n} selected` : "Click to select · Ctrl/Shift for more · double-click to open · drag to move";
+    $("s-hide").disabled = !ids.some(i => byId.get(i) && !byId.get(i).hidden);
+    $("s-unhide").disabled = !ids.some(i => byId.get(i) && byId.get(i).hidden);
+    $("s-section").disabled = n === 0; $("s-clear").disabled = n === 0;
+    document.querySelectorAll(".thumb").forEach(t => t.classList.toggle("selected", selected.has(Number(t.dataset.id))));
+  }
+  function firstSelected() { return outline.slides.filter(s => selected.has(s.id)).sort((a, b) => a.index - b.index)[0]; }
+  $("s-hide").onclick = () => act("powerpoint_hide", { slide_ids: [...selected], hidden: true });
+  $("s-unhide").onclick = () => act("powerpoint_hide", { slide_ids: [...selected], hidden: false });
+  $("s-clear").onclick = () => { selected.clear(); updateTools(); };
+  $("s-section").onclick = () => {
+    const first = firstSelected(); if (!first) return;
+    inlineInput("New section", name => act("powerpoint_sections", { action: "add", name, before_slide_id: first.id }));
+  };
+  function inlineInput(initial, done, host) {
+    const box = el("div", "sec"); const inp = el("input"); inp.value = initial; box.appendChild(inp);
+    (host || $("sorter")).prepend(box); inp.focus(); inp.select();
+    let finished = false;
+    const finish = ok => { if (finished) return; finished = true; box.remove(); if (ok && inp.value.trim()) done(inp.value.trim()); };
+    inp.onkeydown = e => { if (e.key === "Enter") finish(true); if (e.key === "Escape") finish(false); };
+    inp.onblur = () => finish(true);
+  }
+
+  function selectClick(ev, s) {
+    if (ev.shiftKey && anchor != null) {
+      const ids = outline.slides.map(x => x.id), a = ids.indexOf(anchor), b = ids.indexOf(s.id);
+      ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(i => selected.add(i));
+    } else if (ev.ctrlKey || ev.metaKey) {
+      selected.has(s.id) ? selected.delete(s.id) : selected.add(s.id); anchor = s.id;
+    } else { selected = new Set([s.id]); anchor = s.id; }
+    updateTools();
   }
 
   function buildSorter(o) {
     const root = $("sorter"); root.textContent = "";
     const byId = new Map(o.slides.map(s => [s.id, s]));
+    selected = new Set([...selected].filter(i => byId.has(i)));
     for (const sec of o.sections) {
-      if (sec.name || o.sections.length > 1) {
-        const h = el("div", "sec", sec.name || "Untitled section");
+      if (o.has_sections) {
+        const h = el("div", "sec");
+        const name = el("span", "name", sec.name || "Untitled section"); name.title = "Double-click to rename";
+        name.ondblclick = () => {
+          const inp = el("input"); inp.value = sec.name; name.replaceWith(inp); inp.focus(); inp.select();
+          let finished = false;
+          const finish = ok => { if (finished) return; finished = true;
+            if (ok && inp.value.trim() && inp.value.trim() !== sec.name) act("powerpoint_sections", { action: "rename", section: sec.index, name: inp.value.trim() });
+            else inp.replaceWith(name); };
+          inp.onkeydown = e => { if (e.key === "Enter") finish(true); if (e.key === "Escape") finish(false); };
+          inp.onblur = () => finish(true);
+        };
+        h.appendChild(name);
         h.appendChild(el("span", "muted", `${sec.slides.length} slide${sec.slides.length === 1 ? "" : "s"}`));
+        if (sec.index > 1 || o.sections.length > 1) {
+          const x = el("button", "x", "×"); x.title = "Delete section (keeps its slides)"; x.setAttribute("aria-label", `Delete section ${sec.name}`);
+          x.onclick = () => act("powerpoint_sections", { action: "delete", section: sec.index });
+          h.appendChild(x);
+        }
         root.appendChild(h);
       }
       const grid = el("div", "grid"); grid.dataset.section = sec.index;
       for (const id of sec.slides) {
         const s = byId.get(id);
-        const t = el("div", "thumb" + (s.index === o.slide ? " current" : "") + (s.hidden ? " hidden" : ""));
-        t.draggable = true; t.dataset.id = id; t.tabIndex = 0;
-        t.title = s.title || `Slide ${s.index}`;
+        const t = el("div", "thumb" + (s.index === o.slide ? " current" : "") + (s.hidden ? " hidden" : "") + (selected.has(id) ? " selected" : ""));
+        t.draggable = true; t.dataset.id = id; t.tabIndex = 0; t.title = s.title || `Slide ${s.index}`;
         const pic = el("div", "pic"); const cached = thumbs.get(id);
-        if (cached && cached.signature === s.signature) { const i = el("img"); i.alt = t.title; i.src = "data:image/png;base64," + cached.png; pic.appendChild(i); }
+        if (cached && cached.signature === s.signature) { const i = el("img"); i.alt = t.title; i.src = png(cached.png); pic.appendChild(i); }
+        if (s.hidden) pic.appendChild(el("span", "hid", "hidden"));
+        const n = lint && lint.counts ? lint.counts[id] : 0;
+        if (n) { const b = el("span", "lintn", String(n)); b.title = `${n} lint finding(s)`; pic.appendChild(b); }
         t.appendChild(pic);
         const cap = el("div", "cap"); cap.appendChild(el("b", null, String(s.index))); cap.appendChild(el("span", null, s.title));
         t.appendChild(cap);
-        t.addEventListener("click", async () => {
-          try { await call("powerpoint_show", { slide: s.index }); setMode("slide"); } catch (e) { showError(e); }
+        t.addEventListener("click", ev => selectClick(ev, s));
+        t.addEventListener("dblclick", async () => { await act("powerpoint_show", { slide: s.index }); setMode("slide"); });
+        t.addEventListener("keydown", async ev => { if (ev.key === "Enter") { await act("powerpoint_show", { slide: s.index }); setMode("slide"); } });
+        t.addEventListener("dragstart", ev => {
+          dragIds = selected.has(id) ? [...selected] : [id];
+          if (!selected.has(id)) { selected = new Set([id]); updateTools(); }
+          t.classList.add("dragging"); ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", dragIds.join(","));
         });
-        t.addEventListener("dragstart", ev => { dragId = id; t.classList.add("dragging"); ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", String(id)); });
-        t.addEventListener("dragend", () => { t.classList.remove("dragging"); clearMarks(); dragId = null; });
-        t.addEventListener("dragover", ev => { if (dragId == null) return; ev.preventDefault(); ev.stopPropagation(); clearMarks(); t.classList.add("over-before"); });
-        t.addEventListener("drop", ev => { ev.preventDefault(); ev.stopPropagation(); const d = dragId; clearMarks(); if (d != null && d !== id) move({ slide_id: d, before_slide_id: id }); });
+        t.addEventListener("dragend", () => { t.classList.remove("dragging"); clearMarks(); dragIds = null; });
+        t.addEventListener("dragover", ev => { if (!dragIds) return; ev.preventDefault(); ev.stopPropagation(); clearMarks(); t.classList.add("over-before"); });
+        t.addEventListener("drop", ev => {
+          ev.preventDefault(); ev.stopPropagation(); const d = dragIds; clearMarks();
+          if (d && !(d.length === 1 && d[0] === id)) act("powerpoint_move", { slide_ids: d, before_slide_id: id });
+        });
         grid.appendChild(t);
       }
-      grid.addEventListener("dragover", ev => { if (dragId == null) return; ev.preventDefault(); clearMarks(); grid.classList.add("over-end"); });
+      grid.addEventListener("dragover", ev => { if (!dragIds) return; ev.preventDefault(); clearMarks(); grid.classList.add("over-end"); });
       grid.addEventListener("dragleave", ev => { if (!grid.contains(ev.relatedTarget)) grid.classList.remove("over-end"); });
       grid.addEventListener("drop", ev => {
-        ev.preventDefault(); const d = dragId; clearMarks();
-        if (d != null) move(Number(grid.dataset.section) ? { slide_id: d, section: Number(grid.dataset.section) } : { slide_id: d });
+        ev.preventDefault(); const d = dragIds; clearMarks();
+        if (d) act("powerpoint_move", Number(grid.dataset.section) ? { slide_ids: d, section: Number(grid.dataset.section) } : { slide_ids: d });
       });
       root.appendChild(grid);
     }
-    reportSize();
+    updateTools(); reportSize();
   }
 
   async function loadThumbs(o) {
@@ -175,56 +518,97 @@
       for (const t of (r && r.thumbs) || []) {
         thumbs.set(t.id, t);
         const pic = document.querySelector(`.thumb[data-id="${t.id}"] .pic`);
-        if (pic) { pic.textContent = ""; const img = el("img"); img.alt = pic.parentElement.title; img.src = "data:image/png;base64," + t.png; pic.appendChild(img); }
+        if (pic) { pic.querySelector("img")?.remove(); const img = el("img"); img.alt = pic.parentElement.title; img.src = png(t.png); pic.prepend(img); }
       }
     }
   }
 
-  async function refreshSorter(force) {
-    if (busy || dragId != null) return;
-    busy = true;
-    try {
-      const o = await call("deck_outline");
-      outline = o; render(o); showError(null);
-      const key = JSON.stringify([o.slide, o.sections.map(s => [s.name, s.slides]), o.slides.map(s => [s.signature, s.title, s.hidden])]);
-      if (force || key !== outlineKey) { outlineKey = key; buildSorter(o); busy = false; await loadThumbs(o); }
-    } catch (e) { showError(e); }
-    finally { busy = false; }
+  async function refreshOutline(force, build) {
+    if (dragIds) return;
+    const o = await call("deck_outline");
+    outline = o; renderPos(o); showError(null);
+    const key = JSON.stringify([o.slide, o.sections.map(s => [s.name, s.slides]), o.slides.map(s => [s.signature, s.title, s.hidden])]);
+    if (force || key !== outlineKey) {
+      outlineKey = key;
+      await ensureLint(force);
+      build(o);
+      if (mode === "sorter") await loadThumbs(o);
+    }
   }
 
+  // ------------------------------------------------------------ storyline
+  const TITLE_FLAGS = { title_is_label: "label, not a claim", headline_too_long: "too long", headline_two_line: "two lines",
+                        empty_title: "empty", missing_title: "no title", duplicate_titles: "duplicate" };
+  function buildStory(o) {
+    const root = $("v-story"); root.textContent = "";
+    const byId = new Map(o.slides.map(s => [s.id, s]));
+    const head = el("div", "row muted");
+    const words = o.slides.reduce((n, s) => n + s.notes_words, 0);
+    head.textContent = `${o.count} slides · ${o.slides.filter(s => s.hidden).length} hidden · read the titles alone: do they tell the story?` +
+                       (words ? ` · ~${Math.round(words / 130)} min of notes` : "");
+    root.appendChild(head);
+    for (const sec of o.sections) {
+      if (o.has_sections) root.appendChild(el("h3", null, sec.name || "Untitled section"));
+      const ol = el("ol");
+      for (const id of sec.slides) {
+        const s = byId.get(id);
+        const li = el("li", (s.index === o.slide ? "current " : "") + (s.hidden ? "hidden" : ""));
+        li.appendChild(el("span", "n", String(s.index)));
+        li.appendChild(el("span", "t" + (s.title ? "" : " none"), s.title || "(no title)"));
+        for (const f of findingsFor(id).filter(f => TITLE_FLAGS[f.code])) {
+          const p = el("span", "pill", TITLE_FLAGS[f.code]); p.title = f.message; li.appendChild(p);
+        }
+        if (s.hidden) li.appendChild(el("span", "pill", "hidden"));
+        li.onclick = async () => { await act("powerpoint_show", { slide: s.index }); setMode("slide"); };
+        ol.appendChild(li);
+      }
+      root.appendChild(ol);
+    }
+    reportSize();
+  }
+
+  // ------------------------------------------------------------ history
+  let histKey = null; const histThumbs = new Map();
+  async function refreshHistory(force) {
+    const h = await call("powerpoint_history"); showError(null);
+    const key = JSON.stringify(h.versions.map(v => v.v));
+    if (!force && key === histKey) return;
+    histKey = key;
+    const root = $("hist"); root.textContent = "";
+    if (!h.versions.length) { root.appendChild(el("div", "note", "No versions yet. One is saved before every change made through PowerPoint Live.")); reportSize(); return; }
+    for (const v of h.versions) {
+      const row = el("div", "ver"); const pic = el("div", "pic"); row.appendChild(pic);
+      const what = el("div", "what");
+      what.appendChild(el("div", null, `v${v.v} · ${v.label}`));
+      what.appendChild(el("div", "muted", `${new Date(v.time * 1000).toLocaleTimeString()} · ${v.count} slides · showing slide ${v.slide}`));
+      row.appendChild(what);
+      const b = el("button", null, "Restore");
+      b.onclick = () => {
+        if (b.dataset.armed) { act("powerpoint_restore", { version: v.v }).then(() => { histKey = null; }); return; }
+        b.dataset.armed = "1"; b.textContent = "Restore this version?"; b.classList.add("primary");
+        setTimeout(() => { delete b.dataset.armed; b.textContent = "Restore"; b.classList.remove("primary"); }, 4000);
+      };
+      row.appendChild(b); root.appendChild(row);
+      (async () => {
+        if (!histThumbs.has(v.v)) { const t = await call("history_thumb", { version: v.v }); histThumbs.set(v.v, t && t.png); }
+        const p = histThumbs.get(v.v); if (p) { const i = el("img"); i.alt = `v${v.v}`; i.src = png(p); pic.appendChild(i); }
+      })().catch(() => {});
+    }
+    reportSize();
+  }
+
+  // ------------------------------------------------------------ loop
   async function refresh(force) {
-    if (mode === "sorter") return refreshSorter(force);
     if (busy) return;
     busy = true;
     try {
-      const s = await call("slide_state");
-      state = s; render(s); showError(null);
-      const key = `${s.path}|${s.slide}|${s.signature}`;
-      if (force || key !== shown) {
-        const width = Math.min(2560, Math.round($("stage").clientWidth * (window.devicePixelRatio || 1)));
-        const img = await call("slide_image", { slide: s.slide, width: Math.max(320, width) });
-        if (img && img.png) {
-          let el = $("stage").querySelector("img");
-          if (!el) { $("stage").textContent = ""; el = document.createElement("img"); $("stage").appendChild(el); }
-          el.alt = `Slide ${img.slide} of ${s.deck}`;
-          el.src = "data:image/png;base64," + img.png;
-          $("stage").classList.add("flash"); setTimeout(() => $("stage").classList.remove("flash"), 350);
-          $("when").textContent = new Date().toLocaleTimeString();
-        }
-        shown = `${s.path}|${img ? img.slide : s.slide}|${img ? img.signature : s.signature}`;
-        reportSize();
-      }
+      if (mode === "slide") await refreshSlide(force);
+      else if (mode === "sorter") await refreshOutline(force, buildSorter);
+      else if (mode === "story") await refreshOutline(force, buildStory);
+      else await refreshHistory(force);
     } catch (e) { showError(e); }
     finally { busy = false; }
   }
-
-  async function go(delta) {
-    if (!state) return;
-    try { await call("powerpoint_show", { slide: state.slide + delta }); await refresh(true); }
-    catch (e) { showError(e); }
-  }
-  $("prev").onclick = () => go(-1);
-  $("next").onclick = () => go(1);
 
   window.addEventListener("message", ev => {
     const m = ev.data;
@@ -235,23 +619,26 @@
       return;
     }
     if (m.method === "ui/notifications/tool-result") refresh(true);
-    else if (m.method === "ui/notifications/host-context-changed") applyTheme(m.params);
+    else if (m.method === "ui/notifications/host-context-changed" && m.params && m.params.theme) document.documentElement.dataset.theme = m.params.theme;
     else if (m.method === "ui/resource-teardown" && m.id !== undefined) { clearInterval(timer); send({ id: m.id, result: {} }); }
   });
 
-  let timer = null;
+  let timer = null, tick = 0;
   request("ui/initialize", {
     protocolVersion: "2026-01-26",
     capabilities: { appCapabilities: {} },
-    clientInfo: { name: "powerpoint-live-view", version: "1.0.0" },
+    clientInfo: { name: "powerpoint-live-view", version: "2.0.0" },
     appCapabilities: {},
-    appInfo: { name: "powerpoint-live-view", version: "1.0.0" }
+    appInfo: { name: "powerpoint-live-view", version: "2.0.0" }
   }).then(r => {
-    applyTheme(r && r.hostContext);
+    const ctx = r && r.hostContext; if (ctx && ctx.theme) document.documentElement.dataset.theme = ctx.theme;
     send({ method: "ui/notifications/initialized", params: {} });
     refresh(true);
-    let tick = 0;
-    timer = setInterval(() => { tick++; if (!document.hidden && (mode === "slide" || tick % 2 === 0)) refresh(false); }, 1000);
+    timer = setInterval(() => {
+      tick++;
+      if (document.hidden || asking && dragFrom) return;
+      if (mode === "slide" || tick % 2 === 0) refresh(false);
+    }, 1000);
   }).catch(showError);
   new ResizeObserver(reportSize).observe(document.body);
 })();

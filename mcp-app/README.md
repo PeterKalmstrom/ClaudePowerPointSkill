@@ -9,7 +9,7 @@ support [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps) (Claude
 As part of the plugin it is registered automatically. By hand:
 
 ```powershell
-claude mcp add --scope user powerpoint-live -- uvx --with "mcp<2" --with "pywin32; sys_platform == 'win32'" python <skill folder>\mcp-app\server.py
+claude mcp add --scope user powerpoint-live -- uvx --with "mcp<2" --with python-pptx --with pillow --with "pywin32; sys_platform == 'win32'" python <skill folder>\mcp-app\server.py
 ```
 
 Needs Windows, desktop PowerPoint and [uv](https://docs.astral.sh/uv/). In a host without MCP Apps support

@@ -71,6 +71,16 @@ def extract(path):
         },
         "layouts": [],
     }
+    for extra in list(prs.slide_masters)[1:]:  # templates can carry several masters, each with its own theme
+        th = theme_of(extra)
+        sc = th.find(".//a:clrScheme", NS)
+        fs = th.find(".//a:fontScheme", NS)
+        out.setdefault("additional_themes", []).append({
+            "theme_name": th.get("name"),
+            "colours": {s_: colour(sc.find(f"a:{s_}", NS)) for s_ in SLOTS} if sc is not None else {},
+            "fonts": {"major_latin": fs.find("a:majorFont/a:latin", NS).get("typeface") if fs is not None else None,
+                      "minor_latin": fs.find("a:minorFont/a:latin", NS).get("typeface") if fs is not None else None},
+            "layouts": [l.name for l in extra.slide_layouts]})
     for i, layout in enumerate(master.slide_layouts):
         phs = []
         for ph in layout.placeholders:
@@ -96,6 +106,11 @@ def markdown(t):
     lines += ["", "## Layouts", "", "| # | Layout | Placeholders |", "|---|---|---|"]
     for l in t["layouts"]:
         lines.append(f"| {l['index']} | {l['name']} | {', '.join(p['type'] for p in l['placeholders']) or '—'} |")
+    for extra in t.get("additional_themes", []):
+        lines += ["", f"## Additional theme — {extra['theme_name']}", "",
+                  f"Fonts: {extra['fonts']['major_latin']} / {extra['fonts']['minor_latin']}. "
+                  "Accents: " + ", ".join(f"`#{extra['colours'].get(f'accent{i}')}`" for i in range(1, 7)) + ".",
+                  f"Layouts: {', '.join(extra['layouts'])}."]
     lines += ["", "## Fill in by hand", "", "- Logo file and where it goes:", "- Imagery style:",
               "- Voice and tone:", "- Words to avoid:", ""]
     return "\n".join(lines)

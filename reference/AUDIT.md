@@ -27,16 +27,35 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `shape_overlap` | warn ≥ 4 pt², error ≥ 200 pt² | Two text/picture/chart shapes partly overlap (a box fully inside another is a card, not a defect) |
 | `unused_placeholder` | error | Empty title/body placeholder next to real content — `--fix` deletes it |
 | `palette_too_many_colours` | warn | More than 5 distinct solid fill colours on a slide |
-| `a11y_low_text_contrast` | warn / error < 3:1 | Explicit text colour on an explicit fill below 4.5:1 (3:1 for large text) |
+| `a11y_low_text_contrast` | warn / error < 3:1 | Text below 4.5:1 against its shape fill or the slide background (3:1 for large text: 18 pt, or 14 pt bold). Theme colours and their lumMod/tint adjustments are resolved; text over pictures or gradients is skipped |
 | `a11y_missing_alt_text` | warn | Picture or chart with no alt text, or just a file name, and not marked decorative |
 | `picture_stretched` | warn > 3 %, error > 15 % | Shown aspect ratio differs from the (cropped) source image |
-| `chart_default_palette` | warn | Every series in Office default colours |
-| `chart_descriptive_title` / `chart_redundant_labels` | info | "X by Y" chart title / data labels plus a gridlined axis |
+| `chart_default_palette` | warn | 2+ of the first 6 series in Office default colours |
+| `chart_descriptive_title` | info | Chart title has no finding in it (no *leads, rises, falls, vs, %*…) |
+| `chart_redundant_labels` | info | Data labels plus a visible, gridlined value axis |
+| `chart_legend_steals_plot` | warn | Legend at top or bottom, taking height from the plot |
+| `chart_ordinal_categorical_color` | info | Ordered series (months, quarters, years) in unrelated hues — use one hue, light to dark |
+| `chart_accounting_zero_dash` | warn | Accounting number format on the axis (zero shows as `$-`) |
+| `chart_label_collision` | info | Data labels on more than one series or more than 12 points — they will likely collide |
+| `emoji_as_icon` | warn | A short label (≤ 24 characters) containing an emoji |
+| `lorem_ipsum` / `truncated_text` | error / warn | Placeholder Latin left in / text ending in an ellipsis |
+| `centered_long_body` | warn | Centred paragraph of 80+ characters |
+| `measure_too_wide` | warn | Body text of 90+ characters at ≤ 28 pt with more than ~75 characters per line |
+| `tiny_click_target` | warn | A clickable shape under 32 pt in either direction (aim for 44 × 44) |
+| `shadow_overuse` | warn | More than 3 shapes with drop shadows on one slide |
+| `off_palette_fill` | warn | 3+ shapes with hard-coded colours that aren't theme colours |
+| `accent_overload` | warn | 4+ different accent colours on one slide |
+| `gradient_high_chroma` | warn | A gradient with a saturated (> 0.45) hard-coded stop |
+| `repeated_word` | warn | The same word 3+ times in large (≥ 24 pt) type |
+| `weak_focal_hierarchy` | info | The two largest text sizes are within 1.08–1.6× of each other — nothing clearly leads |
+| `grid_monotony` | info | 4+ identical boxes in a row |
+| `stock_or_cartoon_image` | info | Picture name, alt text or link points at a stock or generic-illustration site |
 | `missing_notes` | info | No speaker notes |
 | `duplicate_titles` / `mixed_font_families` | warn | Deck-wide: repeated titles / more than 3 fonts set directly on text |
+| `default_font_only` | info | Deck-wide: one default face (Calibri, Aptos, Arial, Inter…) for everything |
 
-**What it cannot see:** real line breaks, text overflowing its box, z-order, colours inherited from the
-theme, and anything about how the slide *looks*. Those need a render — `render_slides.py` (Windows,
+**What it cannot see:** real line breaks, text overflowing its box, z-order, what is behind text that sits on a
+picture or gradient, and anything about how the slide *looks*. Those need a render — `render_slides.py` (Windows,
 exact) or `render_lo.py` (any OS, approximate) — and your eyes. An `info` finding is a prompt to check,
 not a defect. Thresholds follow the skill's rules; the overlap areas and 55-character title limit
 match the ones PointClaw (the author's PowerPoint add-in) uses.

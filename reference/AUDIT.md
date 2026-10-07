@@ -65,6 +65,32 @@ exact) or `render_lo.py` (any OS, approximate) — and your eyes. An `info` find
 not a defect. Thresholds follow the skill's rules; the overlap areas and 55-character title limit
 match the ones PointClaw (the author's PowerPoint add-in) uses.
 
+## Fixing what lint finds — `scripts/fix_deck.py` (any OS)
+
+Mechanical defects have mechanical fixes. `fix_deck.py` applies only the safe ones, lists each change, writes a
+copy (never the input) and lints the result, so what's left is what needs judgement:
+
+```bash
+uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --dry-run            # what it would do
+uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --out fixed.pptx
+uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --out fixed.pptx --only floor,alt
+```
+
+| Fix | Repairs |
+|---|---|
+| `placeholder` | Deletes empty placeholders next to real content |
+| `floor` | Raises sentence text below the body floor to the floor |
+| `fit` | Shrinks overflowing text in fixed-size boxes — never below the floor |
+| `aspect` | Restores a stretched picture's proportions inside the same box (nothing cut off); `--crop-photos` crops to fill instead |
+| `alt` | Writes alt text for charts (from their data) and tables (from their header) |
+| `palette` | Recolours Office-default chart series as shades of the theme accent |
+| `legend` | Moves a top/bottom legend to the right |
+| `numfmt` | Replaces an Accounting axis format (`$-` for zero) |
+
+It never rewrites words, titles or picture descriptions and never changes a design choice — those stay in the
+"what's left" list for you (or Claude, looking at the render) to decide. Render the fixed copy and look at it:
+raising text to the floor can push a slide into overflow, which the follow-up lint will show.
+
 ## Reading a whole deck — `scripts/read_deck.py` (any OS)
 
 For analysing a deck as a whole (critiquing content, building a relationship map, counting words, finding

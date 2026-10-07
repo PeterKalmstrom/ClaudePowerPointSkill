@@ -13,9 +13,9 @@ only the reference file the task needs.
 
 | Task | Read, in order |
 |---|---|
-| **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · write a spec and build it with `scripts/build_deck.py` ([BUILDER](reference/BUILDER.md), looks in [DESIGN](reference/DESIGN.md)) · showcase-first (below) · the build loop (below) |
+| **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · write a spec (`scripts/spec.schema.json`), show `--plan`, then build with `scripts/build_deck.py` ([BUILDER](reference/BUILDER.md), looks in [DESIGN](reference/DESIGN.md)) · showcase-first (below) · the build loop (below) |
 | **Edit an existing deck** | Snapshot first · `scripts/read_deck.py` before judging ([AUDIT](reference/AUDIT.md)) · find the open deck by name ([COM](reference/COM.md)) · rebuilding a generated deck? `scripts/harvest_edits.py` first |
-| **Review / audit a deck** | `scripts/lint_deck.py` first (any OS), then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
+| **Review / audit a deck** | `scripts/lint_deck.py` first (any OS) · `scripts/fix_deck.py` for the mechanical fixes · then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
 | **Before a talk** | Audit clean first, then [PRESENTING](reference/PRESENTING.md) |
 | **Images, video, Remotion, Veo** | [MEDIA](reference/MEDIA.md), then [ANIMATION](reference/ANIMATION.md) if it moves |
 | **PowerPoint tools missing / MCP failing** | [SETUP](reference/SETUP.md) → Troubleshooting |

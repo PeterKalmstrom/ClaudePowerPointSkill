@@ -8,6 +8,7 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 | `directions.json` | — | The 20 design directions `build_deck.py` and DESIGN.md use |
 | `read_deck.py` | `python-pptx` (any OS) | Whole deck to JSON (ids, layouts, shapes with positions and sizes, charts, tables, notes) or a text outline |
 | `harvest_edits.py` | `python-pptx` (any OS) | Keeps people's hand edits (edited, added, deleted slides) when a generated deck is rebuilt |
+| `fix_deck.py` | `python-pptx`, `pillow` (any OS) | Applies the safe fixes for lint findings to a copy, lists each, re-lints |
 | `lint_deck.py` | `python-pptx`, `pillow` (any OS) | Lints a deck for the AUDIT.md defect codes from the file alone; `--json`, `--room-depth`, `--fix --out` |
 | `extract_theme.py` | `python-pptx` (any OS) | Theme colours, fonts, layouts and placeholders as JSON, or a `brand-spec.md` skeleton |
 | `render_lo.py` | LibreOffice + poppler (any OS) | Approximate slide PNGs without PowerPoint |

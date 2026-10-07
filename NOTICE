@@ -1,0 +1,11 @@
+ClaudePowerPointSkill
+Copyright (c) 2026 Peter Kalmström. Licensed under the MIT License (see LICENSE).
+
+This project includes material adapted from third-party work:
+
+Impeccable — https://impeccable.style/ — https://github.com/pbakaus/impeccable
+Licensed under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
+Adapted: several defect codes in reference/AUDIT.md ("modern-agent slop" codes such as
+italic_serif_display, nested_cards and gray_on_color), the two-cadence (per-edit vs full-pass) audit
+rule, and the audience-first persona checklist in reference/CONTENT.md. The material was rewritten and
+shortened for slide decks; it is not a verbatim copy.

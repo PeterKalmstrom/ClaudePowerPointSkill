@@ -2,9 +2,11 @@
 
 A Claude Code [skill](https://docs.claude.com/en/docs/claude-code/skills) that teaches Claude how to build production-quality PowerPoint presentations on Windows — slide layout discipline, COM-automation pitfalls, AI image / video generation, and the iteration loop that catches silent rendering failures.
 
-This is **not** an MCP server. It's a body of operational knowledge — patterns, anti-patterns, and a tested workflow — packaged as a single `SKILL.md` that Claude loads when you ask it to work on a deck.
+This is **not** an MCP server. It's a body of operational knowledge — patterns, anti-patterns, and a tested workflow — packaged as a short `SKILL.md` that Claude loads when you ask it to work on a deck, with detail in `reference/` that it opens only when the task needs it, and helper scripts in `scripts/`.
 
-> **Screenshot wanted.** A before/after PNG of a slide built with the skill would help readers decide whether to install. Open an issue if you build something worth showing off.
+![Before and after](examples/before-after/after.png)
+
+*A slide built following the skill. See [the before/after example](examples/before-after/README.md) for the same slide built without it.*
 
 ---
 
@@ -31,7 +33,7 @@ A representative session:
 
 > **You:** Add a hero-stat slide showing "3.2°C — projected warming by 2100" to the deck I have open.
 >
-> **Claude:** *(loads `configuring-powerpoint-mcp` skill)*
+> **Claude:** *(loads `building-powerpoint-decks` skill)*
 > Before I touch the file, I'm going to make a timestamped backup copy — irreversible bulk edits live outside PowerPoint's undo stack.
 > *(creates `deck.20260511-1430.pre-hero-stat.pptx`)*
 >
@@ -97,7 +99,7 @@ The core dependency. Provides the tools Claude uses to manipulate `.pptx` files:
   claude mcp add --scope user powerpoint -- "C:\Users\<USER>\.local\bin\uvx.exe" --with "mcp<2" powerpoint-mcp
   ```
 - **Verify**: restart Claude Code, then `claude mcp list` should show `powerpoint: ... - ✓ Connected`.
-- **Troubleshooting**: see `SKILL.md` → *Troubleshooting* for the full diagnostic tree (project-scope traps, missing PATH, COM modal-dialog hangs, etc.).
+- **Troubleshooting**: see `reference/SETUP.md` → *Troubleshooting* for the full diagnostic tree (project-scope traps, missing PATH, COM modal-dialog hangs, etc.).
 
 ### 2. Nanobanana — Gemini image-generation MCP *(optional, for AI imagery)*
 
@@ -107,7 +109,7 @@ The core dependency. Provides the tools Claude uses to manipulate `.pptx` files:
 claude mcp add --scope user nanobanana -- <command for your chosen server>
 ```
 
-If you don't want an MCP for it, the same Gemini image API can be called directly via the `google-genai` Python SDK — see `SKILL.md` → *Nanobanana Integration* for the subprocess + uvx pattern that calls a Python helper instead of an MCP tool.
+If you don't want an MCP for it, the same Gemini image API can be called directly via the `google-genai` Python SDK — see `reference/MEDIA.md` → *Nanobanana Integration* for the subprocess + uvx pattern that calls a Python helper instead of an MCP tool.
 
 ### Not MCPs (called directly)
 
@@ -121,63 +123,48 @@ If you don't want an MCP for it, the same Gemini image API can be called directl
 Claude Code skills live in a `skills/` directory under your Claude config. To install this one:
 
 1. Clone or download this repo.
-2. Copy `SKILL.md` and the `scripts/` folder into your skills folder. The standard location is:
+2. Copy `SKILL.md`, `reference/` and `scripts/` into a folder named after the skill:
    ```
-   <your-skills-path>/configuring-powerpoint-mcp/SKILL.md
-   <your-skills-path>/configuring-powerpoint-mcp/scripts/
+   <your-skills-path>/building-powerpoint-decks/SKILL.md
+   <your-skills-path>/building-powerpoint-decks/reference/
+   <your-skills-path>/building-powerpoint-decks/scripts/
    ```
    where `<your-skills-path>` is wherever you keep your Claude skills (e.g., `~/.claude/skills/`, a shared admin folder, or a per-project `.claude/skills/`).
-3. Make sure the `powerpoint-mcp` server is registered (see above).
+3. Make sure the `powerpoint-mcp` server is registered (see above) if you work on Windows.
 4. Restart Claude Code so the skill is picked up.
 
-The skill's frontmatter tells Claude when to load it:
+**Upgrading from `configuring-powerpoint-mcp`:** the skill was renamed in October 2026. Delete the old
+`configuring-powerpoint-mcp` folder, or both skills will compete for the same tasks.
 
-```yaml
----
-name: configuring-powerpoint-mcp
-description: Build production-quality PowerPoint decks on Windows via the powerpoint-mcp server ...
----
-```
-
-You don't invoke it explicitly — Claude reads the description and loads the skill when your task matches ("create a slide", "open this deck", "embed a video", "diagnose why PowerPoint tools are missing", etc.).
+You don't invoke the skill explicitly — Claude reads its description and loads it when your task matches ("make a deck", "audit this presentation", "embed a video", "PowerPoint tools are missing", etc.).
 
 ---
 
-## What's in `SKILL.md`
+## How the skill is organised
 
-Top-level sections (each is substantial — the file is ~1750 lines):
+`SKILL.md` is deliberately short (under 500 lines, enforced by CI): a *start here* table, the ten core rules, the
+build → render → **LOOK** → critique → fix loop, version-specific facts and the anti-patterns table. Everything
+else is in `reference/`, which Claude opens only when the task needs it — so the skill costs little context until
+it's actually used.
 
-| Section | What it covers |
-|---|---|
-| **Prerequisites** | Windows / PowerPoint / uv versions and verification commands. |
-| **Installation** | Three ways to register the MCP (CLI, direct JSON edit, pre-download), plus restart and `claude mcp list` verification. |
-| **Troubleshooting** | Tools-not-appearing diagnostic tree, COM error recovery, image-placeholder swallow fix, snapshot-before-destructive-ops rule. |
-| **COM patterns & safety** | Snapshot-before-bulk-edit, multi-presentation safety (never trust `ActivePresentation`), idempotent build scripts, the `HasTextFrame` trap, moving text and its backing together. |
-| **Slide size and pictures** | Full HD = 1440 × 810 pt (not 1920 × 1080 pt), the 720p `Presentations.Add()` trap, stretched pictures and cover-cropping, photo credits in notes. |
-| **Workflow** | The five-step iteration loop (build → render → **LOOK** → critique → fix), text-wrap defenses, font-size ceilings per container width, why `Slide.Export` lies about embedded fonts (render with Save As JPEG instead), a no-picture check for words broken across lines. |
-| **Available Tools** | Reference table of every MCP tool the PowerPoint server exposes, plus bulk-read and audit-deck strategies. |
-| **Nanobanana Integration** | When to use AI-generated images vs. native shapes, the on-slide word budget (~10 words), anchor types with their word budgets (hero stat, comparison pair, gallery, knowledge graph, etc.), label vs. body floor, hero-stat pattern, two-column comparison pattern, balanced-layout sizing math, the "no text in images" rule with overlay pattern. |
-| **Remotion Integration** | Project setup, required files, key APIs, render command with `--browser-executable`, animation design patterns (hub-and-spoke, progressive reveal), iteration workflow. |
-| **Veo Integration** | Generating video via google-genai, polling pattern, prompt tips, 1080p/muted settings, fake-lettering and content-filter fixes, character sheets, known failure modes (chain reactions, counting, text), image-to-video for direction-sensitive scenes. |
-| **Embedding Media in Slides** | H.264 compression command and size/quality table, COM snippets for `AddMediaObject2` (video) and `AddPicture` (image), plus hybrid image-background + PowerPoint-overlay pattern. |
-| **Animation** | When motion earns its place (cause and effect, or order), effect-by-purpose table, ~2 s build budget, native timing traps and preset ids. |
-| **Combined Workflow Patterns** | Four named patterns: animated visualization, dramatic reveal, data + narrative, prompt-to-video-in-a-slide. Plus a decision guide flowchart. |
-| **Audience, titles and load** | Pick the audience first, claim titles instead of topic labels, cognitive-load limits (bullets, typefaces, line length, chapter breaks). |
-| **Speaker notes** | Write notes first in a fixed order (key fact, facts, Q&A, pitfalls, sources), what goes in notes (citations, anticipated Q&A, methodology caveats, pacing notes), the slide-vs-notes contract, idempotent notes-append using DOIs as markers. |
-| **Showcase-first for multi-slide sections** | The rule that saves the most time: build slide 1 and one detail slide, get sign-off, *then* batch the rest. |
-| **Common defects to self-check** | ~40 defect codes (slop, brand, rhythm, typography, charts, accessibility) with an error / warn / taste severity model. |
-| **Auditing a deck** | Five-step procedure: structural audit, taste pass, anchor-type exceptions table, fixing in batches, contact-sheet review, how to report. |
-| **Presenter prep** | Timing markers in notes, Q&A panic sheet, notes-page / handout PDF, rehearsal checklist. |
-| **Headless PowerPoint for checks** | Opening copies windowless, `DisplayAlerts` and silent repairs, deterministic rendering, stable slide ids, sections. |
-| **Sensitivity labels** | What encryption labels break (non-COM readers, rebuilt decks lose the label), EXTRACT and Copilot, unprotected renders. |
-| **Building .pptx without PowerPoint** | The python-pptx / no-COM route for Linux, macOS and CI, and what changes without a renderer. |
-| **Anti-patterns** | Consolidated catalog of recurring COM and build traps that fail silently. Each anti-pattern points back to the rule that prevents it. |
+| File | What it covers | Runs on |
+|---|---|---|
+| `reference/SETUP.md` | Installing `powerpoint-mcp`, troubleshooting (including the `mcp<2` startup fix), MCP tool list | Windows + PowerPoint |
+| `reference/COM.md` | Snapshots, multi-deck safety, UTF-8, idempotent builds, keeping hand edits, shape filtering | Windows + PowerPoint |
+| `reference/LAYOUT.md` | Slide size, cropping pictures, text wrap, embedded-font rendering, word budgets, anchor types, layout patterns | Mostly any OS |
+| `reference/MEDIA.md` | AI images, Remotion, Veo, video compression, embedding, combined patterns | Generation any OS; embedding Windows |
+| `reference/ANIMATION.md` | When motion earns its place, effect table, native timing traps | Any OS |
+| `reference/CONTENT.md` | Audience, claim titles, cognitive load, speaker notes, showcase-first | Any OS |
+| `reference/AUDIT.md` | Bulk read, ~40 defect codes with severities, the full audit procedure | Scripts Windows; catalogue any OS |
+| `reference/PRESENTING.md` | Timing markers, Q&A sheet, notes PDF, rehearsal | Windows + PowerPoint |
+| `reference/AUTOMATION.md` | Headless PowerPoint for checks, building .pptx without COM | Mixed |
+| `reference/LABELS.md` | Sensitivity labels and what encryption breaks | Any OS |
 
 ---
 
 ## How to work with the skill
 
-The skill assumes a particular workflow: **iterate fast, render every change, look at the rendered PNG, critique against the rules, fix or save**. The single most-violated step is "look at the rendered PNG" — Claude's tool-output (`{"success": true}`) is not the same as a correctly rendered slide. If you find Claude declaring a slide done without showing you the export, push back. The skill warns about this explicitly but the temptation is constant.
+The skill assumes a particular workflow: **iterate fast, render every change, look at the rendered image, critique against the rules, fix or save**. The single most-violated step is "look at the rendered image" — Claude's tool-output (`{"success": true}`) is not the same as a correctly rendered slide. If you find Claude declaring a slide done without showing you the render, push back. The skill warns about this explicitly but the temptation is constant.
 
 Other day-to-day expectations the skill encodes:
 
@@ -188,25 +175,53 @@ Other day-to-day expectations the skill encodes:
 
 ---
 
+## Testing
+
+| What | How | Where |
+|---|---|---|
+| Docs: links, anchors, `SKILL.md` size and frontmatter | `python tools/check_docs.py` | CI (GitHub Actions) |
+| Scripts that need no PowerPoint | `python scripts/selftest.py` | CI |
+| Every script, including PowerPoint/COM ones | `python scripts/selftest.py --com` (see `scripts/README.md`) | Your Windows machine with PowerPoint |
+| Does the skill load for the right prompts? | `evals/trigger-evals.json` (see `evals/README.md`) | Claude, with the `skill-creator` skill |
+
+Run the Windows self-test after changing any COM script, and the trigger evals after changing the description.
+
+---
+
 ## Project layout
 
 ```
 ClaudePowerPointSkill/
+├── SKILL.md           # Core: start here, core rules, build loop, anti-patterns — loaded by Claude Code
+├── reference/         # Detail files SKILL.md links to, opened on demand
+├── scripts/           # Helper scripts the skill calls, plus selftest.py
+├── examples/          # Before/after example with its build script
+├── evals/             # Trigger evals for the skill description
+├── tools/             # Repo checks run by CI
+├── .github/workflows/ # CI
 ├── README.md          # This file
-├── SKILL.md           # The skill itself — loaded by Claude Code
-├── scripts/           # Helper scripts SKILL.md calls (audit, bulk read, render, contact sheet, PDF, checks)
 ├── CONTRIBUTING.md    # How to add new rules / anti-patterns
-├── LICENSE            # MIT
-└── .gitignore
+├── NOTICE             # Third-party credits (Impeccable, Apache-2.0)
+└── LICENSE            # MIT
 ```
 
-No build step. The skill is markdown plus small Python helpers in `scripts/`, run with `uvx` so their dependencies (`pywin32`, `pillow`, `python-pptx`) never touch your project. See [`scripts/README.md`](scripts/README.md).
+---
+
+## Changelog
+
+- **2026-10** — Renamed `configuring-powerpoint-mcp` → `building-powerpoint-decks`. Split into a short
+  `SKILL.md` plus `reference/`. Added helper scripts and a self-test, CI, trigger evals and a before/after
+  example. New guidance: `mcp<2` startup fix, Save As JPEG rendering for embedded fonts, word-break check,
+  keeping hand edits, slide size, cropping, deck audits with ~40 defect codes, presenter prep, animation, video
+  compression, Veo production lessons, claim titles, cognitive load, notes structure, sensitivity labels, building
+  without COM.
+- **2026-05** — First public version (`configuring-powerpoint-mcp`).
 
 ---
 
 ## License
 
-[MIT](LICENSE). Use, fork, adapt, and integrate the patterns freely; attribution appreciated but not required.
+[MIT](LICENSE). Use, fork, adapt, and integrate the patterns freely; attribution appreciated but not required. Some audit codes and the audience checklist are adapted from [Impeccable](https://impeccable.style/) (Apache-2.0) — see [NOTICE](NOTICE).
 
 ---
 

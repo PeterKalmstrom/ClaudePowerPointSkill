@@ -21,7 +21,8 @@ If you hit a defect and figured out the fix, send a PR with:
    ```
    | <One-line anti-pattern> | <What goes wrong> | [Section name](#anchor) |
    ```
-2. **A linked rule** in the relevant section explaining the fix. Each rule should have:
+2. **A linked rule** in the right file under `reference/` (see the table in `SKILL.md`), explaining the fix. Link
+   it from the anti-patterns row as `reference/FILE.md#anchor`. Each rule should have:
    - The rule itself, stated as a constraint to design around
    - **Why** — what specifically breaks if you ignore it (ideally a one-sentence incident)
    - **How to apply** — the concrete check or code pattern that prevents recurrence
@@ -34,8 +35,19 @@ If you hit a defect and figured out the fix, send a PR with:
 - **Cite the incident.** "We hit this in November 2025 when the auto-export silently used the cached image" is more useful than "the cache can be stale." Specifics earn trust.
 - **Avoid abstraction creep.** If a rule only applies to one specific anchor type or one specific MCP tool, name it. Don't generalize until you've seen the same failure mode three different ways.
 - **No nested headings deeper than three.** Skills are read top-to-bottom by an LLM; deep hierarchies hurt retrieval.
+- **Keep `SKILL.md` short.** It is loaded every time the skill triggers; CI fails it above 500 lines. New detail
+  goes in `reference/`. Only a rule that applies to *every* deck belongs in *Core rules*.
+- **Date version-specific facts** ("as of 2026-10") — model ids, package versions, upstream bugs — and list them
+  under *Version-specific facts* in `SKILL.md`.
+- **Say what it runs on.** Mark COM-only material; Linux, macOS and CI users skip it.
 
 ## Sanity check before opening a PR
+
+- `python tools/check_docs.py` passes (links, anchors, `SKILL.md` size) and `python scripts/selftest.py` passes.
+  CI runs both. If you changed a COM script, also run `python scripts/selftest.py --com` on Windows and say so in
+  the PR.
+- If you changed the skill's `description`, run the trigger evals (`evals/README.md`) and add a case for what
+  prompted the change.
 
 - Does the new rule reduce the chance of a silent failure, or just add an option? Only the former belongs.
 - Could Claude infer the rule from the surrounding code? If yes, the rule is redundant.

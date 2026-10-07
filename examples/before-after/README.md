@@ -11,9 +11,13 @@ following them.
 |---|---|---|
 | Claim titles | "Q1 revenue" names a topic | "East leads Q1, up 8 %" makes the claim |
 | ~10 visible words, body ≥ 18 pt | 9 bullets, 60+ words, 14 pt | Hero stat + one 24 pt caption |
-| Crop, never stretch | A 3:2 photo forced into a wide box — the circle is now an ellipse | Cover-cropped to the box ratio (`scripts/cover_crop.py`) |
+| Native, editable charts | A chart pasted as a picture and squashed into a wide box; Office default blue on every bar | A native chart you can edit; only the finding gets the accent colour |
 | Notes carry the depth | Sources, methodology and next steps crammed onto the slide | Key fact, facts, Q&A, pitfalls and source in the speaker notes |
 | Full HD | python-pptx default 720 × 540 pt (4:3) | 1440 × 810 pt (`scripts/check_slide_size.py` passes) |
+
+`hero.png` (the README image and GitHub social preview) is composed by [`make_hero.py`](make_hero.py).
+
+The "before" slide was built by hand to show the mistakes; it is not real output from Claude without the skill.
 
 Regenerate the decks (they are not committed):
 

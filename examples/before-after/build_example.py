@@ -4,35 +4,53 @@
     -> before.pptx, after.pptx (beside this script)
 
 Rules shown (see SKILL.md -> Core rules):
-  before                                      after
-  topic title ("Q1 revenue")                  claim title ("East leads Q1, up 8 %")
-  9 bullets, 40+ words, 14 pt body            hero stat + one 24 pt caption (~10 words)
-  photo stretched into its box (circle ->     photo cover-cropped to the box ratio
-    ellipse)
-  details on the slide                        details, Q&A and source in the speaker notes
-  default 4:3, 720 x 540 pt                   Full HD, 1440 x 810 pt
+  before                                        after
+  topic title ("Q1 revenue")                    claim title ("East leads Q1, up 8 %")
+  9 bullets, 60+ words, 14 pt body              hero stat + one 24 pt caption
+  chart pasted as a picture and stretched       native, editable chart; the finding is the
+    (labels squashed, default Office colours)     only accent colour
+  details on the slide                          details, Q&A and source in the speaker notes
+  default 4:3, 720 x 540 pt                     Full HD, 1440 x 810 pt
 """
 import os
-import sys
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from pptx import Presentation
+from pptx.chart.data import CategoryChartData
 from pptx.dml.color import RGBColor
+from pptx.enum.chart import XL_CHART_TYPE, XL_LABEL_POSITION, XL_TICK_LABEL_POSITION
 from pptx.util import Pt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "scripts"))
-from cover_crop import cover_crop  # noqa: E402
+REGIONS = ["East", "South", "West", "North"]
+GROWTH = [8.0, 3.0, 0.2, -1.5]  # % change vs Q4
+INK, ACCENT, MUTED, QUIET = (RGBColor(0x1A, 0x1A, 0x1A), RGBColor(0x0B, 0x6E, 0x4F),
+                             RGBColor(0x5F, 0x63, 0x68), RGBColor(0xC9, 0xCF, 0xCC))
 
-INK, ACCENT, MUTED = RGBColor(0x1A, 0x1A, 0x1A), RGBColor(0x0B, 0x6E, 0x4F), RGBColor(0x5F, 0x63, 0x68)
+
+def font(size):
+    for f in ("DejaVuSans.ttf", "arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
+        try:
+            return ImageFont.truetype(f, size)
+        except OSError:
+            pass
+    return ImageFont.load_default()
 
 
-def photo(path):
-    """Stand-in 'photo' with a perfect circle in it, so stretching is visible."""
-    img = Image.new("RGB", (1500, 1000), (214, 228, 222))
+def chart_png(path):
+    """A chart exported as a picture, the way it often arrives: Office-default blue, every bar labelled."""
+    w, h = 900, 600
+    img = Image.new("RGB", (w, h), "white")
     d = ImageDraw.Draw(img)
-    d.ellipse((550, 300, 950, 700), fill=(11, 110, 79))
-    d.rectangle((0, 820, 1500, 1000), fill=(180, 200, 192))
+    d.text((30, 20), "Revenue growth by region, Q1 vs Q4 (%)", fill="black", font=font(28))
+    base, scale, bw = 420, 30, 140
+    d.line((40, base, w - 40, base), fill=(160, 160, 160), width=2)
+    for i, (r, g) in enumerate(zip(REGIONS, GROWTH)):
+        x = 80 + i * 200
+        top = base - g * scale
+        d.rectangle((x, min(base, top), x + bw, max(base, top)), fill=(0x44, 0x72, 0xC4))
+        d.text((x + 30, min(base, top) - 36), f"{g:+.1f}", fill="black", font=font(26))
+        d.text((x + 30, base + 70), r, fill="black", font=font(26))
     img.save(path)
 
 
@@ -49,7 +67,7 @@ def text(slide, s, left, top, width, height, size, color=INK, bold=False, name="
     return tb
 
 
-def before(img):
+def before(png):
     prs = Presentation()  # python-pptx default: 720 x 540 pt, 4:3
     s = prs.slides.add_slide(prs.slide_layouts[5])
     s.shapes.title.text = "Q1 revenue"
@@ -64,27 +82,47 @@ def before(img):
         "Methodology: constant currency, excluding one-offs",
         "Next steps: review East playbook for other regions",
     ])
-    text(s, bullets, 30, 130, 360, 380, 14, name="Bullets")
-    # the classic mistake: a 3:2 photo forced into a 290 x 120 pt box - both sizes given, aspect ratio lost
-    s.shapes.add_picture(img, Pt(410), Pt(150), Pt(290), Pt(120)).name = "Photo"
+    text(s, bullets, 30, 130, 330, 380, 14, name="Bullets")
+    # the classic mistake: a 3:2 chart picture forced into a wide, short box - labels squashed
+    s.shapes.add_picture(png, Pt(380), Pt(170), Pt(320), Pt(130)).name = "ChartPicture"
     prs.save(os.path.join(HERE, "before.pptx"))
 
 
-def after(img):
+def after():
     prs = Presentation()
     prs.slide_width, prs.slide_height = Pt(1440), Pt(810)
     s = prs.slides.add_slide(prs.slide_layouts[6])  # Blank
     text(s, "East leads Q1, up 8 %", 80, 60, 1280, 110, 54, bold=True, name="Title")
-    text(s, "+8 %", 80, 260, 620, 260, 160, color=ACCENT, bold=True, name="HeroStat")
-    text(s, "East revenue vs Q4 — the other regions were flat", 80, 540, 620, 120, 24, color=MUTED, name="Caption")
-    box_w, box_h = 600, 480
-    cropped = os.path.join(HERE, "_photo.crop.png")
-    cover_crop(Image.open(img), box_w, box_h).save(cropped)
-    s.shapes.add_picture(cropped, Pt(760), Pt(220), Pt(box_w), Pt(box_h)).name = "Photo"
-    os.remove(cropped)
+    text(s, "+8 %", 80, 250, 560, 260, 160, color=ACCENT, bold=True, name="HeroStat")
+    text(s, "East revenue vs Q4. Every other region within ±3 %.", 80, 540, 560, 120, 24,
+         color=MUTED, name="Caption")
+
+    data = CategoryChartData()
+    data.categories = REGIONS
+    data.add_series("Growth vs Q4 (%)", GROWTH)
+    gf = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Pt(720), Pt(220), Pt(640), Pt(480), data)
+    gf.name = "GrowthChart"
+    ch = gf.chart
+    ch.has_legend = False
+    ch.has_title = False
+    ch.value_axis.visible = False
+    ch.value_axis.has_major_gridlines = False
+    ch.category_axis.tick_label_position = XL_TICK_LABEL_POSITION.LOW  # below negative bars
+    ch.category_axis.tick_labels.font.size = Pt(20)
+    ch.category_axis.tick_labels.font.color.rgb = MUTED
+    plot = ch.plots[0]
+    plot.gap_width = 60
+    plot.has_data_labels = True
+    labels = plot.data_labels
+    labels.number_format, labels.number_format_is_linked = '+0.0;-0.0', False
+    labels.position = XL_LABEL_POSITION.OUTSIDE_END
+    labels.font.size, labels.font.bold = Pt(20), True
+    for i, point in enumerate(plot.series[0].points):  # only the finding gets the accent colour
+        point.format.fill.solid()
+        point.format.fill.fore_color.rgb = ACCENT if i == 0 else QUIET
     s.notes_slide.notes_text_frame.text = (
         "Key fact: East grew 8 % quarter on quarter; every other region was within ±3 %.\n"
-        "Facts: South +3 % after the partner programme; West flat; North down slightly (seasonal). "
+        "Facts: South +3 % after the partner programme; West flat; North down 1.5 % (seasonal). "
         "Total 41.2 M; margin +1.5 pt.\n"
         "Q&A: Is it currency? No — constant currency, one-offs excluded.\n"
         "Pitfalls: don't present North as a trend; it is seasonal.\n"
@@ -93,9 +131,9 @@ def after(img):
 
 
 if __name__ == "__main__":
-    img = os.path.join(HERE, "_photo.png")
-    photo(img)
-    before(img)
-    after(img)
-    os.remove(img)
+    png = os.path.join(HERE, "_chart.png")
+    chart_png(png)
+    before(png)
+    after()
+    os.remove(png)
     print("before.pptx, after.pptx written to", HERE)

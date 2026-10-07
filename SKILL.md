@@ -15,11 +15,12 @@ only the reference file the task needs.
 |---|---|
 | **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · showcase-first (below) · the build loop (below) |
 | **Edit an existing deck** | Snapshot first · find the deck by name ([COM](reference/COM.md)) · bulk-read before judging ([AUDIT](reference/AUDIT.md)) |
-| **Review / audit a deck** | [AUDIT](reference/AUDIT.md): structural audit → taste pass → anchor exceptions → contact sheet |
+| **Review / audit a deck** | `scripts/lint_deck.py` first (any OS), then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
 | **Before a talk** | Audit clean first, then [PRESENTING](reference/PRESENTING.md) |
 | **Images, video, Remotion, Veo** | [MEDIA](reference/MEDIA.md), then [ANIMATION](reference/ANIMATION.md) if it moves |
 | **PowerPoint tools missing / MCP failing** | [SETUP](reference/SETUP.md) → Troubleshooting |
 | **No Windows (Linux, macOS, CI)** | [AUTOMATION](reference/AUTOMATION.md) → *Building .pptx without PowerPoint* |
+| **Company template / brand** | `scripts/extract_theme.py` → [LAYOUT](reference/LAYOUT.md) → *Building from a template* |
 | **Corporate / labelled deck** | [LABELS](reference/LABELS.md) before choosing a toolchain |
 
 ## Reference files
@@ -50,7 +51,7 @@ These apply to every deck. Each links to its full explanation.
 7. **No text baked into images or video** — overlay it in PowerPoint. ([MEDIA](reference/MEDIA.md#generate-images-without-text--overlay-text-in-powerpoint))
 8. **Crop pictures, never stretch them.** ([LAYOUT](reference/LAYOUT.md#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly))
 9. **The slide carries the punch, the notes carry the depth** — notes first, fixed order. ([CONTENT](reference/CONTENT.md#write-the-notes-first-in-a-fixed-order))
-10. **Render and LOOK** before calling anything done — via Save As JPEG, not `Slide.Export`. (Loop below; [LAYOUT](reference/LAYOUT.md#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg))
+10. **Lint, then render and LOOK** before calling anything done — `scripts/lint_deck.py` catches what the file shows (overlaps, stretched pictures, small text, missing alt text) on any OS; the render catches the rest. Render via Save As JPEG on Windows, not `Slide.Export`; `scripts/render_lo.py` elsewhere (approximate). (Loop below; [LAYOUT](reference/LAYOUT.md#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg))
 
 ## Showcase-first for multi-slide sections
 
@@ -71,7 +72,7 @@ The five-step iteration loop that catches silent rendering failures. Use it for 
 2. Render via presentation.SaveCopyAs(folder, 17)  (Save As JPEG — scripts/render_slides.py)
    slide.Export is fine ONLY when every font in the deck is installed; never for embedded fonts
 3. LOOK at the actual rendered image  ←  DO NOT SKIP
-4. Self-critique against the defect catalogue (reference/AUDIT.md → Common defects to self-check)
+4. Lint (scripts/lint_deck.py), then self-critique against the defect catalogue (reference/AUDIT.md)
 5. Fix → loop back to step 2,  OR  save → done
 ```
 

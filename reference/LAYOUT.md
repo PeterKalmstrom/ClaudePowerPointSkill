@@ -54,6 +54,23 @@ Keep the licence terms with the image file so the next build can rewrite the cre
 
 ---
 
+## Building from a template
+
+When the user has a company template or brand deck, build **on it**, not next to it:
+
+1. **Read it:** `uvx --with python-pptx python scripts/extract_theme.py template.potx` lists the theme
+   colours (dk1/lt1, accent1–6), the heading and body fonts, and every layout with its placeholders.
+   `--markdown` writes a `brand-spec.md` skeleton for the user to complete (logo, imagery, voice).
+2. **Pick layouts by their placeholders** (Title Only for a hero stat or chart, Two Content for a
+   comparison) and fill the placeholders. Don't put text boxes on Blank slides: you lose the outline,
+   screen-reader titles and the template's typography.
+3. **Use theme colours, not hex values** — `MSO_THEME_COLOR.ACCENT_1` in python-pptx, `ObjectThemeColor`
+   in COM — so a re-theme re-skins the deck. Highlight the finding with accent1; everything else neutral.
+4. **Fonts:** leave font names unset so text inherits the theme's major (headings) and minor (body)
+   fonts. Precedence, highest first: text run → shape → layout placeholder → master text styles → theme.
+   A font set on a run beats the template everywhere, which is how off-brand decks happen.
+5. **Lint** — `mixed_font_families` and `chart_default_palette` catch the usual drift.
+
 ## Text fitting and rendering
 
 ### Text wrap — anticipate it, don't trust visual review

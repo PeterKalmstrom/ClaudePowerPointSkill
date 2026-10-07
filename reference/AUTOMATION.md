@@ -33,8 +33,13 @@ On Linux, macOS or CI there is no COM. Write the OOXML directly with **python-pp
 PptxGenJS (Node). Everything about content — anchor types, word budgets, the 18pt floor, notes, no text in images —
 still applies. What changes:
 
-- **No renderer.** You can't LOOK without PowerPoint (or LibreOffice, whose layout differs — fine for catching gross
-  errors, not for line breaks). Plan a Windows render pass before shipping, or keep text conservative.
+- **Render approximately with LibreOffice:** `python scripts/render_lo.py deck.pptx --out renders/` (needs `soffice`
+  and `pdftoppm`). Fonts and line breaks differ from PowerPoint, so use it for gross errors — overflow, overlaps,
+  empty or broken slides — not to sign off line breaks. Plan a Windows render pass before shipping if those matter.
+- **Lint without rendering:** `scripts/lint_deck.py` works from the file alone (see AUDIT.md).
+- **Prove what an edit changed:** render before and after, then `scripts/diff_renders.py before/ after/`.
+  Renders are deterministic, so unchanged slides show 0.000 %; it reports the worst grid cell too, because small
+  text moves vanish in the mean.
 - **Set the slide size explicitly:** python-pptx's default template is **720 × 540 pt (4:3)**.
   `prs.slide_width, prs.slide_height = Pt(1440), Pt(810)`.
 - **`add_picture` stretches** when given both width and height — crop first (`scripts/cover_crop.py`).

@@ -2,6 +2,45 @@
 
 *Runs on: Windows + PowerPoint for the scripts; the catalogue is any OS.* Part of the `building-powerpoint-decks` skill — start at [`SKILL.md`](../SKILL.md). Paths like `scripts/…` are relative to the skill folder.
 
+## Lint first — `scripts/lint_deck.py` (any OS)
+
+Run it before anything else: it reads the .pptx itself, so it needs no PowerPoint and works on Linux,
+macOS and CI.
+
+```bash
+uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx            # table
+uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --json     # for scripts
+uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --room-depth 45
+uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix --out fixed.pptx
+```
+
+| Code | Severity | Fires when |
+|---|---|---|
+| `slide_size` | warn (info if 16:9) | Deck isn't 1440 × 810 pt |
+| `missing_title` / `empty_title` | warn | No title placeholder / it's empty (screen readers and the outline need one, even hidden) |
+| `headline_too_long` / `headline_two_line` | warn | Title > 55 characters / has a hard line break |
+| `title_is_label` | info | 1–2 words, no verb, not a question — a topic, not a claim |
+| `body_below_floor` | warn | A paragraph of 4+ words between 12 pt and the floor (18 pt; `--room-depth` raises it) |
+| `too_many_bullets` | warn | More than 7 paragraphs in one shape |
+| `word_budget` | info | More than 12 visible words — accept for gallery, matrix, chart, quote, reference slides |
+| `offslide_shape` | warn | A shape sticks out past the slide edge (2 pt tolerance) |
+| `shape_overlap` | warn ≥ 4 pt², error ≥ 200 pt² | Two text/picture/chart shapes partly overlap (a box fully inside another is a card, not a defect) |
+| `unused_placeholder` | error | Empty title/body placeholder next to real content — `--fix` deletes it |
+| `palette_too_many_colours` | warn | More than 5 distinct solid fill colours on a slide |
+| `a11y_low_text_contrast` | warn / error < 3:1 | Explicit text colour on an explicit fill below 4.5:1 (3:1 for large text) |
+| `a11y_missing_alt_text` | warn | Picture or chart with no alt text, or just a file name, and not marked decorative |
+| `picture_stretched` | warn > 3 %, error > 15 % | Shown aspect ratio differs from the (cropped) source image |
+| `chart_default_palette` | warn | Every series in Office default colours |
+| `chart_descriptive_title` / `chart_redundant_labels` | info | "X by Y" chart title / data labels plus a gridlined axis |
+| `missing_notes` | info | No speaker notes |
+| `duplicate_titles` / `mixed_font_families` | warn | Deck-wide: repeated titles / more than 3 fonts set directly on text |
+
+**What it cannot see:** real line breaks, text overflowing its box, z-order, colours inherited from the
+theme, and anything about how the slide *looks*. Those need a render — `render_slides.py` (Windows,
+exact) or `render_lo.py` (any OS, approximate) — and your eyes. An `info` finding is a prompt to check,
+not a defect. Thresholds follow the skill's rules; the overlap areas and 55-character title limit
+match the ones PointClaw (the author's PowerPoint add-in) uses.
+
 ## Bulk reading and the quick audit
 
 ### Bulk reading the deck

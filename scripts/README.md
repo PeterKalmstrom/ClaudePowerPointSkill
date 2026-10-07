@@ -4,6 +4,10 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 
 | Script | Needs | What it does |
 |---|---|---|
+| `lint_deck.py` | `python-pptx`, `pillow` (any OS) | Lints a deck for the AUDIT.md defect codes from the file alone; `--json`, `--room-depth`, `--fix --out` |
+| `extract_theme.py` | `python-pptx` (any OS) | Theme colours, fonts, layouts and placeholders as JSON, or a `brand-spec.md` skeleton |
+| `render_lo.py` | LibreOffice + poppler (any OS) | Approximate slide PNGs without PowerPoint |
+| `diff_renders.py` | `pillow`, `numpy` (any OS) | Which slides changed between two render folders, with heat maps |
 | `backup_snapshot.py` | Python only | Timestamped side copy of a deck before a risky edit |
 | `bulk_read.py` | Windows + PowerPoint, `pywin32` | All slide text + notes to JSON in one COM session |
 | `audit_deck.py` | Windows + PowerPoint, `pywin32` | Words per slide, smallest body font, status per slide, topic-label titles |
@@ -15,7 +19,7 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 | `cover_crop.py` | `pillow` (any OS) | Reports stretch distortion and crops an image to a box ratio |
 | `selftest.py` | `python-pptx`, `pillow` (+ `pywin32` with `--com`) | Builds a test deck with known defects and checks every script against it |
 
-`_ppt.py` is the shared COM helper: it reuses a deck already open in PowerPoint (matched by
+`_rules.py` holds the rule helpers shared by the audit and lint scripts (label titles, contrast, overlap, room-depth floors). `_ppt.py` is the shared COM helper: it reuses a deck already open in PowerPoint (matched by
 path, never `ActivePresentation`), otherwise opens it read-only and windowless, and quits
 PowerPoint only if it started it.
 

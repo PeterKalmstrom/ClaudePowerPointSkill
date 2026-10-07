@@ -5,114 +5,299 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PowerPoint Live</title>
 <style>
-  :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --soft: #f6f8fa; --accent: #c43e1c;
-          --add: #1a7f37; --chg: #0969da; --del: #cf222e; --warn: #bf8700; --err: #cf222e; --info: #8250df; }
-  :root[data-theme="dark"] { --bg: #0d1117; --fg: #e6edf3; --muted: #8d96a0; --line: #30363d; --soft: #161b22;
-          --accent: #f0883e; --add: #3fb950; --chg: #58a6ff; --del: #f85149; --warn: #d29922; --err: #f85149; --info: #a371f7; }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
-  .wrap { padding: 8px; }
-  button, input, textarea { font: inherit; color: var(--fg); }
-  button { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
-  button:disabled { opacity: .4; cursor: default; }
-  button.on, button[aria-selected="true"] { background: var(--line); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .muted { color: var(--muted); }
-  [hidden] { display: none !important; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
-  .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  /* ---------------------------------------------------------------- design tokens */
+  :root {
+    color-scheme: light;
+    --bg: #ffffff; --surface: #f6f7f9; --surface-2: #eceef2; --backdrop: #e6e8ec;
+    --fg: #1d2127; --muted: #5c6470; --line: #d9dde3; --line-strong: #b9c0ca;
+    --accent: #b9381a; --accent-hover: #9f2f14; --on-accent: #ffffff;
+    --accent-soft: color-mix(in srgb, var(--accent) 11%, transparent);
+    --sel: #1f6feb; --sel-soft: color-mix(in srgb, var(--sel) 14%, transparent);
+    --add: #1a7f37; --chg: #0969da; --del: #cf222e;
+    --err: #c62a2a; --warn: #9a6700; --info: #7046c2; --ok: #1a7f37;
+    --err-bg: color-mix(in srgb, var(--err) 11%, var(--bg));
+    --warn-bg: color-mix(in srgb, var(--warn) 13%, var(--bg));
+    --info-bg: color-mix(in srgb, var(--info) 11%, var(--bg));
+    --scrim: rgba(17, 20, 26, .78);
+    --shadow: 0 1px 2px rgba(16, 20, 28, .08), 0 4px 14px rgba(16, 20, 28, .10);
+    --ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--sel);
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px;
+    --r-sm: 4px; --r-md: 8px; --r-pill: 999px;
+    --t-xs: 12px; --t-sm: 13px; --t-md: 15px;
+    --fast: 120ms; --slow: 1200ms; --ease: cubic-bezier(.2, .7, .3, 1);
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #15181d; --surface: #1d2127; --surface-2: #262b33; --backdrop: #0e1014;
+      --fg: #e7eaee; --muted: #9aa3ae; --line: #303640; --line-strong: #444c58;
+      --accent: #ff8a5c; --accent-hover: #ffa27f; --on-accent: #1a0d07;
+      --sel: #6ea8ff; --add: #3fb950; --chg: #58a6ff; --del: #ff6b6b;
+      --err: #ff7b72; --warn: #e3b341; --info: #b392f0; --ok: #3fb950;
+      --scrim: rgba(0, 0, 0, .72);
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .35);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #15181d; --surface: #1d2127; --surface-2: #262b33; --backdrop: #0e1014;
+    --fg: #e7eaee; --muted: #9aa3ae; --line: #303640; --line-strong: #444c58;
+    --accent: #ff8a5c; --accent-hover: #ffa27f; --on-accent: #1a0d07;
+    --sel: #6ea8ff; --add: #3fb950; --chg: #58a6ff; --del: #ff6b6b;
+    --err: #ff7b72; --warn: #e3b341; --info: #b392f0; --ok: #3fb950;
+    --scrim: rgba(0, 0, 0, .72);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .35);
+  }
+  @media (prefers-reduced-motion: reduce) { :root { --fast: 0ms; --slow: 0ms; } }
 
-  /* slide */
-  .stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--line); border-radius: 6px;
+  /* ---------------------------------------------------------------- base */
+  * { box-sizing: border-box; }
+  html, body { overflow-x: hidden; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: var(--t-sm)/1.45 var(--font);
+         -webkit-font-smoothing: antialiased; }
+  .wrap { padding: var(--s3); max-width: 1400px; margin: 0 auto; }
+  button, input, textarea { font: inherit; color: inherit; }
+  :focus { outline: none; }
+  :focus-visible { box-shadow: var(--ring); border-radius: var(--r-sm); }
+  [hidden] { display: none !important; }
+  .muted { color: var(--muted); }
+  .num, #pos, #when, .lintn, .count, .n { font-variant-numeric: tabular-nums; }
+  .row { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+  .spacer { flex: 1; }
+  svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75;
+          stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------------------------------------------------------------- buttons */
+  button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px;
+           padding: 0 var(--s3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg);
+           color: var(--fg); font-weight: 500; line-height: 1; cursor: pointer; white-space: nowrap;
+           transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease), color var(--fast) var(--ease); }
+  button:hover:not(:disabled) { background: var(--surface); border-color: var(--line-strong); }
+  button:active:not(:disabled) { background: var(--surface-2); }
+  button:disabled { color: var(--muted); opacity: .55; cursor: not-allowed; }
+  button:focus-visible { border-radius: var(--r-md); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.ghost { border-color: transparent; background: transparent; }
+  button.ghost:hover:not(:disabled) { background: var(--surface-2); border-color: transparent; }
+  button.icon { width: 30px; padding: 0; }
+  button.sm { min-height: 26px; padding: 0 var(--s2); font-size: var(--t-xs); }
+  button.sm.icon { width: 26px; }
+  button.toggle.on, button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
+  button.toggle.on svg, button[aria-pressed="true"] svg { color: var(--accent); }
+  @media (max-width: 420px) { button .lbl-long { display: none; } }
+
+  /* switch (Accurate) */
+  .switch { display: inline-flex; align-items: center; gap: var(--s2); color: var(--muted); cursor: pointer; min-height: 30px; }
+  .switch input { appearance: none; width: 30px; height: 18px; margin: 0; border-radius: var(--r-pill); background: var(--line-strong);
+                  position: relative; cursor: pointer; transition: background var(--fast) var(--ease); flex: none; }
+  .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+                         background: var(--bg); transition: transform var(--fast) var(--ease); }
+  .switch input:checked { background: var(--accent); }
+  .switch input:checked::after { transform: translateX(12px); }
+  .switch input:focus-visible { box-shadow: var(--ring); }
+  .switch:hover { color: var(--fg); }
+
+  /* ---------------------------------------------------------------- segmented tabs */
+  .tabs { display: flex; gap: 2px; padding: 3px; margin-bottom: var(--s3); background: var(--surface-2);
+          border-radius: var(--r-md); overflow-x: auto; scrollbar-width: none; }
+  .tabs button { flex: 1 1 0; min-width: max-content; min-height: 28px; border: 0; border-radius: 6px; background: transparent;
+                 color: var(--muted); padding: 0 var(--s3); }
+  .tabs button:hover:not(:disabled) { background: transparent; border: 0; color: var(--fg); }
+  .tabs button[aria-selected="true"] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); font-weight: 600; }
+  .tabs button:focus-visible { box-shadow: var(--ring); }
+
+  /* ---------------------------------------------------------------- chips */
+  .chip, .pill { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 var(--s2); border-radius: var(--r-pill);
+                 font-size: var(--t-xs); font-weight: 500; line-height: 1; white-space: nowrap; border: 1px solid var(--line);
+                 color: var(--muted); background: var(--bg); flex: none; }
+  .chip.error, .pill.error { color: var(--err); background: var(--err-bg); border-color: transparent; }
+  .chip.warn, .pill.warn { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+  .chip.info, .pill.info { color: var(--info); background: var(--info-bg); border-color: transparent; }
+
+  /* ---------------------------------------------------------------- slide stage */
+  .stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--backdrop); border-radius: var(--r-md);
            overflow: hidden; color: var(--muted); user-select: none; }
-  .stage > .placeholder { position: absolute; inset: 0; display: grid; place-items: center; }
+  .stage-frame { padding: var(--s3); background: var(--backdrop); border-radius: var(--r-md); }
+  .stage-frame .stage { border-radius: var(--r-sm); box-shadow: var(--shadow); }
+  @media (max-width: 420px) { .stage-frame { padding: var(--s2); } }
+  .stage > .placeholder { position: absolute; inset: 0; display: grid; place-items: center; font-size: var(--t-sm); }
+  .stage > .placeholder::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
+           position: absolute; top: calc(50% - 22px); left: calc(50% - 4px); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .stage > .placeholder::before { animation: none; } }
   .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
   .stage img.after { clip-path: inset(0 0 0 var(--cut, 50%)); }
-  .divider { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); left: var(--cut, 50%);
-             pointer-events: none; }
-  .tag { position: absolute; top: 6px; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,.6); color: #fff;
-         font-size: 11px; }
+  .divider { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; left: var(--cut, 50%);
+             pointer-events: none; box-shadow: 0 0 0 1px rgba(0,0,0,.25), 0 0 8px rgba(0,0,0,.3); }
+  .divider::after { content: ""; position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+             border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35);
+             background-image: linear-gradient(90deg, transparent 8px, #6b7280 8px, #6b7280 9.5px, transparent 9.5px, transparent 12.5px, #6b7280 12.5px, #6b7280 14px, transparent 14px); }
+  .tag { position: absolute; top: var(--s2); padding: 3px var(--s2); border-radius: var(--r-pill); background: var(--scrim); color: #fff;
+         font-size: var(--t-xs); font-weight: 600; letter-spacing: .02em; pointer-events: none; }
   .overlay { position: absolute; inset: 0; }
-  .ov { position: absolute; border: 2px solid; border-radius: 3px; pointer-events: none; }
-  .ov.added { border-color: var(--add); background: color-mix(in srgb, var(--add) 12%, transparent); }
-  .ov.changed { border-color: var(--chg); background: color-mix(in srgb, var(--chg) 12%, transparent); }
-  .ov.removed { border-color: var(--del); border-style: dashed; }
-  .ov.fade { transition: opacity 1.2s ease; opacity: 0; }
-  .ov.lint { border-width: 2px; pointer-events: auto; cursor: pointer; }
-  .ov.lint.error { border-color: var(--err); } .ov.lint.warn { border-color: var(--warn); } .ov.lint.info { border-color: var(--info); border-style: dotted; }
-  .ov.lint.hot { background: color-mix(in srgb, var(--accent) 18%, transparent); }
-  .ov.lint .badge { position: absolute; right: -2px; top: -18px; font-size: 10px; padding: 0 4px; border-radius: 3px; color: #fff; }
-  .ov.lint.error .badge { background: var(--err); } .ov.lint.warn .badge { background: var(--warn); } .ov.lint.info .badge { background: var(--info); }
-  .ov.pick { border-color: var(--accent); border-style: solid; background: color-mix(in srgb, var(--accent) 15%, transparent); }
+  .ov { position: absolute; border: 2px solid; border-radius: 3px; pointer-events: none;
+        box-shadow: 0 0 0 1px rgba(255,255,255,.7); }
+  .ov.added { border-color: #1a7f37; background: rgba(26,127,55,.14); }
+  .ov.changed { border-color: #0969da; background: rgba(9,105,218,.14); }
+  .ov.removed { border-color: #cf222e; border-style: dashed; background: rgba(207,34,46,.06); }
+  .ov.fade { transition: opacity var(--slow) ease; opacity: 0; }
+  .ov.lint { pointer-events: auto; cursor: pointer; transition: background var(--fast) var(--ease); }
+  .ov.lint.error { border-color: #d1242f; } .ov.lint.warn { border-color: #bf8700; } .ov.lint.info { border-color: #8250df; border-style: dashed; }
+  .ov.lint.hot, .ov.lint:hover { background: rgba(31,111,235,.16); }
+  .ov.lint .badge { position: absolute; left: -2px; top: -20px; max-width: calc(100% + 4px); overflow: hidden; text-overflow: ellipsis;
+                    white-space: nowrap; font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 6px; border-radius: 4px; color: #fff; }
+  .ov.lint.error .badge { background: #b42318; } .ov.lint.warn .badge { background: #8a5a00; } .ov.lint.info .badge { background: #6639ba; }
+  .ov.pick { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
   .ov.hover { border-color: var(--accent); border-style: dashed; }
-  .stage.asking { cursor: crosshair; }
-  .bar { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
-  .bar .info { flex: 1; min-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
-  .dot.live { background: var(--add); }
-  input[type=range] { width: 100%; margin: 6px 0 0; accent-color: var(--accent); }
-  .ask { margin-top: 6px; border: 1px solid var(--line); border-radius: 6px; padding: 6px; background: var(--soft); }
-  .ask textarea { width: 100%; min-height: 54px; resize: vertical; border: 1px solid var(--line); border-radius: 4px;
-                  background: var(--bg); padding: 4px 6px; }
-  .findings { margin-top: 6px; display: grid; gap: 4px; }
-  .finding { display: flex; gap: 6px; align-items: baseline; padding: 4px 6px; border-radius: 4px; background: var(--soft); }
-  .finding .sev { width: 8px; height: 8px; border-radius: 50%; flex: none; transform: translateY(1px); }
-  .sev.error { background: var(--err); } .sev.warn { background: var(--warn); } .sev.info { background: var(--info); }
-  .finding .msg { flex: 1; min-width: 0; }
-  .finding code { font-size: 11px; color: var(--muted); }
+  .stage.asking { cursor: crosshair; outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type=range] { width: 100%; margin: var(--s2) 0 0; accent-color: var(--accent); }
 
-  /* sorter */
-  .sec { margin: 10px 0 4px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
-  .sec .name { cursor: text; }
-  .sec input { font-weight: 600; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; background: var(--bg); }
-  .sec .x { border: 0; padding: 0 4px; color: var(--muted); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; min-height: 40px;
-          padding: 4px; border-radius: 6px; }
-  .grid.over-end { outline: 2px dashed var(--accent); outline-offset: -2px; }
-  .thumb { position: relative; cursor: grab; user-select: none; }
-  .thumb .pic { position: relative; aspect-ratio: 16 / 9; background: var(--line); border-radius: 4px; overflow: hidden;
-                border: 2px solid transparent; }
+  /* ---------------------------------------------------------------- status bar + toolbars */
+  .status { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); min-height: 32px; flex-wrap: wrap; }
+  .status .info { display: flex; align-items: baseline; gap: var(--s2); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .status #pos { font-weight: 600; }
+  .status #deck { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .status #when { font-size: var(--t-xs); }
+  .status .nav { display: flex; gap: var(--s1); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; align-self: center; }
+  .dot.live { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .tools { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s2);
+           padding-top: var(--s2); border-top: 1px solid var(--line); }
+
+  /* ---------------------------------------------------------------- cards: ask, findings */
+  .card { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: var(--s3); }
+  .ask { margin-top: var(--s3); display: grid; gap: var(--s2); }
+  .ask .target { display: flex; gap: var(--s2); align-items: flex-start; color: var(--muted); }
+  .ask .target svg { color: var(--accent); margin-top: 1px; }
+  textarea, .sec input { border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--bg); color: var(--fg);
+           transition: border-color var(--fast) var(--ease); }
+  textarea:hover, .sec input:hover { border-color: var(--muted); }
+  textarea:focus-visible, .sec input:focus-visible { border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel-soft); }
+  .ask textarea { width: 100%; min-height: 64px; resize: vertical; padding: var(--s2); line-height: 1.45; }
+  textarea::placeholder { color: var(--muted); }
+  #ask-note { color: var(--ok); font-weight: 500; }
+
+  .findings { margin-top: var(--s3); display: grid; gap: var(--s1); }
+  .finding { display: flex; gap: var(--s2); align-items: flex-start; padding: var(--s2) var(--s3); border-radius: var(--r-md);
+             background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--muted); flex-wrap: wrap;
+             transition: border-color var(--fast) var(--ease); }
+  .finding:has(.sev.error) { border-left-color: var(--err); }
+  .finding:has(.sev.warn) { border-left-color: var(--warn); }
+  .finding:has(.sev.info) { border-left-color: var(--info); }
+  .finding:hover { border-color: var(--line-strong); }
+  .finding .msg { flex: 1 1 200px; min-width: 0; }
+  .finding .msg .head { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin-bottom: 2px; }
+  .finding code { font: var(--t-xs)/1.3 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+  .finding .acts { display: flex; gap: var(--s1); align-self: center; }
+
+  /* ---------------------------------------------------------------- empty / notes / errors */
+  .note, .empty { color: var(--muted); padding: var(--s4); text-align: center; border: 1px dashed var(--line-strong);
+                  border-radius: var(--r-md); }
+  .err { margin-top: var(--s3); padding: var(--s2) var(--s3); color: var(--err); background: var(--err-bg);
+         border: 1px solid color-mix(in srgb, var(--err) 35%, transparent); border-radius: var(--r-md); white-space: pre-wrap; }
+  #resume { margin-top: var(--s2); }
+  .lede { margin: 0 0 var(--s3); color: var(--muted); max-width: 70ch; }
+
+  /* ---------------------------------------------------------------- sorter */
+  .toolbar { position: sticky; top: 0; z-index: 3; background: var(--bg); padding: var(--s2) 0; margin-bottom: var(--s1);
+             border-bottom: 1px solid var(--line); }
+  .toolbar #sel-info { flex: 1 1 180px; min-width: 0; font-size: var(--t-xs); }
+  .sec { margin: var(--s4) 0 var(--s1); font-weight: 600; font-size: var(--t-sm); display: flex; gap: var(--s2); align-items: center;
+         min-height: 28px; }
+  .sec:first-child { margin-top: var(--s2); }
+  .sec .name { cursor: text; padding: 2px var(--s1); margin-left: calc(-1 * var(--s1)); border-radius: var(--r-sm); overflow: hidden;
+               text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .sec .name:hover { background: var(--surface-2); }
+  .sec .count { font-weight: 500; }
+  .sec input { font-weight: 600; padding: 3px var(--s2); min-width: 0; flex: 0 1 260px; }
+  .sec::after { content: ""; flex: 1; height: 1px; background: var(--line); order: 5; }
+  .sec .x { order: 6; color: var(--muted); opacity: 0; transition: opacity var(--fast) var(--ease); }
+  .sec:hover .x, .sec:focus-within .x, .sec .x:focus-visible { opacity: 1; }
+  .sec .x:hover:not(:disabled) { color: var(--err); }
+  @media (hover: none) { .sec .x { opacity: 1; } }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(132px, 42%), 1fr)); gap: var(--s3); min-height: 48px;
+          padding: var(--s1); border-radius: var(--r-md); transition: background var(--fast) var(--ease); }
+  .grid:empty::after { content: "Empty section — drag slides here"; grid-column: 1 / -1; display: grid; place-items: center;
+                       min-height: 40px; color: var(--muted); font-size: var(--t-xs); border: 1px dashed var(--line-strong); border-radius: var(--r-md); }
+  .grid.over-end { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+  .thumb { position: relative; cursor: grab; user-select: none; border-radius: var(--r-md); padding: var(--s1);
+           transition: background var(--fast) var(--ease); }
+  .thumb:hover { background: var(--surface); }
+  .thumb:focus-visible { box-shadow: var(--ring); }
+  .thumb .pic { position: relative; aspect-ratio: 16 / 9; background: var(--surface-2); border-radius: var(--r-sm); overflow: hidden;
+                outline: 1px solid var(--line); transition: outline-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
   .thumb .pic img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
-  .thumb.current .pic { border-color: var(--accent); }
-  .thumb.selected .pic { border-color: var(--chg); box-shadow: 0 0 0 2px color-mix(in srgb, var(--chg) 35%, transparent); }
-  .thumb.hidden .pic img { opacity: .4; }
+  .thumb.current .pic { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .thumb.selected { background: var(--sel-soft); }
+  .thumb.selected .pic { outline: 2px solid var(--sel); outline-offset: 1px; }
+  .thumb.current.selected .pic { box-shadow: 0 0 0 5px var(--sel-soft); outline-color: var(--accent); }
+  .thumb.hidden .pic img { opacity: .35; filter: grayscale(.6); }
   .thumb.dragging { opacity: .35; }
-  .thumb.over-before::before { content: ""; position: absolute; left: -6px; top: 0; bottom: 18px; width: 3px;
-                               border-radius: 2px; background: var(--accent); }
-  .thumb .lintn { position: absolute; right: 4px; top: 4px; font-size: 10px; padding: 0 5px; border-radius: 8px;
-                  background: var(--warn); color: #fff; }
-  .thumb .hid { position: absolute; left: 4px; top: 4px; font-size: 10px; padding: 0 5px; border-radius: 3px;
-                background: rgba(0,0,0,.6); color: #fff; }
-  .thumb .cap { display: flex; gap: 4px; font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .thumb .cap b { color: var(--fg); }
+  .thumb.over-before::before { content: ""; position: absolute; left: calc(-1 * var(--s2) + 1px); top: 0; bottom: 0; width: 3px;
+                               border-radius: 2px; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
+  .thumb .lintn, .thumb .hid { position: absolute; top: var(--s1); height: 18px; display: inline-flex; align-items: center; gap: 3px;
+                  font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: var(--r-pill); color: #fff; }
+  .thumb .lintn { right: var(--s1); background: #8a5a00; }
+  .thumb .hid { left: var(--s1); background: rgba(17,20,26,.8); }
+  .thumb .cap { display: flex; gap: 6px; font-size: var(--t-xs); color: var(--muted); margin-top: 6px; align-items: baseline; padding: 0 2px; }
+  .thumb .cap b { color: var(--fg); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .thumb.current .cap b { color: var(--accent); }
   .thumb .cap span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .toolbar { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 4px 0; }
 
-  /* storyline */
-  .story h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
-  .story ol { margin: 0; padding-left: 0; list-style: none; }
-  .story li { display: flex; gap: 8px; padding: 3px 6px; border-radius: 4px; cursor: pointer; align-items: baseline; }
-  .story li:hover { background: var(--soft); }
-  .story li.current { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-  .story li .n { width: 2.2em; text-align: right; color: var(--muted); flex: none; }
-  .story li .t { flex: 1; }
+  /* ---------------------------------------------------------------- storyline */
+  .story .summary { color: var(--muted); margin-bottom: var(--s2); }
+  .story h3 { font-size: var(--t-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+              margin: var(--s4) 0 var(--s1); padding-bottom: var(--s1); border-bottom: 1px solid var(--line); }
+  .story ol { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 1px; }
+  .story li { display: flex; gap: var(--s2); padding: 6px var(--s2); border-radius: var(--r-sm); cursor: pointer; align-items: baseline;
+              flex-wrap: wrap; transition: background var(--fast) var(--ease); }
+  .story li:hover { background: var(--surface); }
+  .story li:focus-visible { box-shadow: var(--ring); }
+  .story li.current { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .story li .n { width: 2em; text-align: right; color: var(--muted); flex: none; font-size: var(--t-xs); }
+  .story li .t { flex: 1 1 160px; min-width: 0; font-size: var(--t-md); line-height: 1.35; }
   .story li.hidden .t { color: var(--muted); text-decoration: line-through; }
   .story li .t.none { color: var(--err); font-style: italic; }
-  .pill { font-size: 10px; padding: 0 5px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); }
 
-  /* history */
-  .hist { display: grid; gap: 6px; }
-  .ver { display: flex; gap: 8px; align-items: center; padding: 4px; border-radius: 6px; background: var(--soft); }
-  .ver .pic { width: 120px; aspect-ratio: 16 / 9; background: var(--line); border-radius: 3px; overflow: hidden; flex: none; }
+  /* ---------------------------------------------------------------- history */
+  .hist { display: grid; gap: 0; position: relative; }
+  .ver { display: flex; gap: var(--s3); align-items: center; padding: var(--s2); border-radius: var(--r-md); position: relative;
+         flex-wrap: wrap; transition: background var(--fast) var(--ease); }
+  .ver:hover { background: var(--surface); }
+  .ver + .ver::before { content: ""; position: absolute; left: calc(var(--s2) + 60px); top: -1px; width: 1px; height: 0; }
+  .ver:not(:last-child) { border-bottom: 1px solid var(--line); border-radius: 0; }
+  .ver .pic { width: 120px; aspect-ratio: 16 / 9; background: var(--surface-2); border-radius: var(--r-sm); overflow: hidden; flex: none;
+              outline: 1px solid var(--line); }
   .ver .pic img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
-  .ver .what { flex: 1; min-width: 0; }
-  .err { color: var(--err); margin-top: 6px; white-space: pre-wrap; }
-  .note { color: var(--muted); margin-top: 6px; }
+  .ver .what { flex: 1 1 140px; min-width: 0; }
+  .ver .what .lbl { font-weight: 600; overflow-wrap: anywhere; }
+  .ver .what .vn { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .ver .what .muted { font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+  @media (max-width: 420px) { .ver .pic { width: 96px; } }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-prev" viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5"/></symbol>
+  <symbol id="i-next" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></symbol>
+  <symbol id="i-checks" viewBox="0 0 16 16"><path d="M2.5 4.5 4 6l2.5-2.5M2.5 10.5 4 12l2.5-2.5M9 5h4.5M9 11h4.5"/></symbol>
+  <symbol id="i-compare" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M8 1.5v13"/></symbol>
+  <symbol id="i-ask" viewBox="0 0 16 16"><path d="M3 3h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3 2.5V11H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/></symbol>
+  <symbol id="i-target" viewBox="0 0 16 16"><path d="M3 3l4 10 1.5-4L12.5 7.5z"/></symbol>
+  <symbol id="i-hide" viewBox="0 0 16 16"><path d="M2 2l12 12M6.6 6.7a2 2 0 0 0 2.7 2.7M4.4 4.6C3 5.5 2 7 1.5 8c1 2 3.4 4.5 6.5 4.5 1.2 0 2.3-.4 3.2-.9M7 3.6c.3 0 .7-.1 1-.1 3.1 0 5.5 2.5 6.5 4.5-.3.6-.8 1.3-1.3 1.9"/></symbol>
+  <symbol id="i-unhide" viewBox="0 0 16 16"><path d="M1.5 8C2.5 6 4.9 3.5 8 3.5s5.5 2.5 6.5 4.5c-1 2-3.4 4.5-6.5 4.5S2.5 10 1.5 8z"/><circle cx="8" cy="8" r="2"/></symbol>
+  <symbol id="i-section" viewBox="0 0 16 16"><path d="M2 4h7M2 8h12M2 12h12M12 1.5v5M9.5 4h5"/></symbol>
+  <symbol id="i-clear" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 16 16"><path d="M2.5 3v3.5H6"/><path d="M2.8 6.5A5.5 5.5 0 1 1 3 10"/><path d="M8 5v3l2 1.5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 9h6.6l.7-9"/></symbol>
+  <symbol id="i-resume" viewBox="0 0 16 16"><path d="M5 3l8 5-8 5z"/></symbol>
+  <symbol id="i-fix" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></symbol>
+</defs></svg>
 <div class="wrap">
-  <div class="tabs" role="tablist">
+  <div class="tabs" role="tablist" aria-label="View">
     <button role="tab" data-tab="slide" aria-selected="true">Slide</button>
     <button role="tab" data-tab="sorter" aria-selected="false">Slide sorter</button>
     <button role="tab" data-tab="story" aria-selected="false">Storyline</button>
@@ -120,32 +305,37 @@
   </div>
 
   <section id="v-slide">
+    <div class="stage-frame">
     <div class="stage" id="stage"><div class="placeholder">Waiting for PowerPoint…</div>
       <img id="img-before" alt="" hidden><img id="img" alt="" hidden>
       <div class="divider" id="divider" hidden></div>
-      <span class="tag" id="tag-before" style="left:6px" hidden>Before</span>
-      <span class="tag" id="tag-after" style="right:6px" hidden>Now</span>
+      <span class="tag" id="tag-before" style="left:8px" hidden>Before</span>
+      <span class="tag" id="tag-after" style="right:8px" hidden>Now</span>
       <div class="overlay" id="overlay"></div>
     </div>
+    </div>
     <input type="range" id="cut" min="0" max="100" value="50" aria-label="Before and after" hidden>
-    <div class="bar">
+    <div class="bar status">
       <span class="dot" id="dot" title="live"></span>
       <span class="info"><b id="pos">–</b> <span class="muted" id="deck"></span></span>
       <span class="muted" id="when"></span>
-      <button id="prev" aria-label="Previous slide">‹</button>
-      <button id="next" aria-label="Next slide">›</button>
+      <span class="nav">
+        <button class="icon" id="prev" aria-label="Previous slide" title="Previous slide"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-prev"/></svg></button>
+        <button class="icon" id="next" aria-label="Next slide" title="Next slide"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-next"/></svg></button>
+      </span>
     </div>
-    <div class="bar">
-      <button id="b-checks" title="Show lint findings on the slide">Checks</button>
-      <button id="b-compare" title="Compare with the slide before the last change" disabled>Before / after</button>
-      <button id="b-ask" title="Point at a shape or drag an area, then ask Claude">Ask Claude</button>
-      <label class="row muted" title="Render through Save As (true embedded fonts). Slower."><input type="checkbox" id="accurate"> Accurate</label>
+    <div class="bar tools">
+      <button class="toggle" id="b-checks" aria-pressed="false" title="Show lint findings on the slide"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-checks"/></svg>Checks</button>
+      <button class="toggle" id="b-compare" aria-pressed="false" title="Compare with the slide before the last change" disabled><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-compare"/></svg><span>Before<span class="lbl-long"> / after</span></span></button>
+      <button class="toggle" id="b-ask" aria-pressed="false" title="Point at a shape or drag an area, then ask Claude"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-ask"/></svg>Ask Claude</button>
+      <span class="spacer"></span>
+      <label class="switch" title="Render through Save As (true embedded fonts). Slower."><input type="checkbox" id="accurate" role="switch"> Accurate</label>
     </div>
-    <div class="ask" id="askbox" hidden>
-      <div class="muted" id="ask-target">Click a shape or drag an area on the slide.</div>
-      <textarea id="ask-text" placeholder="What should Claude do here?"></textarea>
-      <div class="row"><button class="primary" id="ask-send" disabled>Send to Claude</button><button id="ask-cancel">Cancel</button>
-        <span class="muted" id="ask-note"></span></div>
+    <div class="ask card" id="askbox" hidden>
+      <div class="target"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-target"/></svg><span id="ask-target">Click a shape or drag an area on the slide.</span></div>
+      <textarea id="ask-text" aria-label="Request for Claude" placeholder="What should Claude do here?"></textarea>
+      <div class="row"><button class="primary" id="ask-send" disabled><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-ask"/></svg>Send to Claude</button><button class="ghost" id="ask-cancel">Cancel</button>
+        <span id="ask-note" role="status"></span></div>
     </div>
     <div class="findings" id="findings" hidden></div>
   </section>
@@ -153,10 +343,10 @@
   <section id="v-sorter" hidden>
     <div class="toolbar row" id="sort-tools">
       <span class="muted" id="sel-info">Click to select · Ctrl/Shift for more · double-click to open · drag to move</span>
-      <button id="s-hide" disabled>Hide</button>
-      <button id="s-unhide" disabled>Unhide</button>
-      <button id="s-section" disabled>New section here</button>
-      <button id="s-clear" disabled>Clear</button>
+      <button class="sm" id="s-hide" disabled title="Hide the selected slides in the show"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-hide"/></svg>Hide</button>
+      <button class="sm" id="s-unhide" disabled title="Show the selected slides again"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-unhide"/></svg>Unhide</button>
+      <button class="sm" id="s-section" disabled title="Start a new section at the first selected slide"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-section"/></svg><span>New section<span class="lbl-long"> here</span></span></button>
+      <button class="sm ghost" id="s-clear" disabled title="Clear the selection"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-clear"/></svg>Clear</button>
     </div>
     <div id="sorter"></div>
   </section>
@@ -164,17 +354,21 @@
   <section id="v-story" class="story" hidden></section>
 
   <section id="v-history" hidden>
-    <p class="muted" style="margin:4px 0 8px">A version is saved before every change made through PowerPoint Live. Restoring replaces the deck file with that version and reopens it; the state you leave is saved as a version too.</p>
+    <p class="lede">A version is saved before every change made through PowerPoint Live. Restoring replaces the deck file with that version and reopens it; the state you leave is saved as a version too.</p>
     <div class="hist" id="hist"></div>
   </section>
 
-  <div class="err" id="err" hidden></div>
-  <button id="resume" hidden>Resume</button>
+  <div class="err" id="err" role="alert" hidden></div>
+  <button class="primary" id="resume" hidden><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-resume"/></svg>Resume</button>
 </div>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const ic = name => { const t = document.createElement("template");
+    t.innerHTML = `<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-${name}"/></svg>`; return t.content.firstChild; };
+  const btn = (cls, icon, label) => { const b = el("button", cls); if (icon) b.appendChild(ic(icon)); if (label != null) b.appendChild(el("span", "lbl", label)); return b; };
+  const press = (b, on) => { b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); };
   let nextId = 1; const pending = new Map();
 
   // ------------------------------------------------------------ host bridge
@@ -281,22 +475,25 @@
     box.hidden = !checks;
     if (!checks || !state) return;
     const list = findingsFor(state.slide_id);
-    if (!lint) { box.appendChild(el("div", "note", "Checking…")); return; }
-    if (!list.length) { box.appendChild(el("div", "note", "No findings on this slide.")); return; }
+    if (!lint) { box.appendChild(el("div", "empty", "Checking this slide…")); return; }
+    if (!list.length) { box.appendChild(el("div", "empty", "No findings on this slide — it passes every check.")); return; }
     const order = { error: 0, warn: 1, info: 2 };
     for (const f of list.sort((a, b) => order[a.severity] - order[b.severity])) {
       const row = el("div", "finding"); row.dataset.key = f.code + "|" + f.shape_id;
       row.appendChild(el("span", "sev " + f.severity));
-      const msg = el("div", "msg"); msg.appendChild(el("code", null, f.code + (f.shape ? ` · ${f.shape}` : "")));
+      const msg = el("div", "msg"); const head = el("div", "head");
+      head.appendChild(el("span", "chip " + f.severity, { error: "Error", warn: "Warning", info: "Info" }[f.severity] || f.severity));
+      head.appendChild(el("code", null, f.code + (f.shape ? ` · ${f.shape}` : ""))); msg.appendChild(head);
       msg.appendChild(el("div", null, f.message)); row.appendChild(msg);
+      const acts = el("div", "acts"); row.appendChild(acts);
       if (f.fixable) {
-        const b = el("button", null, "Fix"); b.onclick = () => act("powerpoint_fix", { slide_id: f.slide_id, shape_id: f.shape_id, code: f.code });
-        row.appendChild(b);
+        const b = btn("sm primary", "fix", "Fix"); b.title = "Apply the automatic fix"; b.onclick = () => act("powerpoint_fix", { slide_id: f.slide_id, shape_id: f.shape_id, code: f.code });
+        acts.appendChild(b);
       }
-      const a = el("button", null, "Ask Claude");
+      const a = btn("sm", "ask", "Ask Claude"); a.title = "Ask Claude to fix this finding";
       a.onclick = () => askClaude(`On slide ${state.slide} of ${state.deck}` + (f.shape ? `, shape "${f.shape}" (id ${f.shape_id})` : "") +
                                   `: fix the lint finding ${f.code} - ${f.message}`);
-      row.appendChild(a);
+      acts.appendChild(a);
       row.onmouseenter = () => hot(row.dataset.key, true); row.onmouseleave = () => hot(row.dataset.key, false);
       box.appendChild(row);
     }
@@ -320,7 +517,7 @@
   }
 
   function toggleCompare(on) {
-    comparing = on; $("b-compare").classList.toggle("on", on);
+    comparing = on; press($("b-compare"), on);
     $("img-before").hidden = $("divider").hidden = $("tag-before").hidden = $("tag-after").hidden = $("cut").hidden = !on;
     $("img").classList.toggle("after", on);
     if (on) { $("img-before").src = before.src; $("img-before").alt = "The slide before the last change"; }
@@ -328,7 +525,7 @@
   }
   $("cut").oninput = () => $("stage").style.setProperty("--cut", $("cut").value + "%");
   $("b-compare").onclick = () => toggleCompare(!comparing);
-  $("b-checks").onclick = async () => { checks = !checks; $("b-checks").classList.toggle("on", checks); renderFindings(); drawOverlay();
+  $("b-checks").onclick = async () => { checks = !checks; press($("b-checks"), checks); renderFindings(); drawOverlay();
                                         if (checks) { await ensureLint(true); renderFindings(); drawOverlay(); } reportSize(); };
   $("accurate").onchange = () => refresh(true);
 
@@ -363,7 +560,7 @@
   }
   function setAsking(on) {
     asking = on; pick = null; hoverBox = null;
-    $("b-ask").classList.toggle("on", on); $("askbox").hidden = !on; $("stage").classList.toggle("asking", on);
+    press($("b-ask"), on); $("askbox").hidden = !on; $("stage").classList.toggle("asking", on);
     $("ask-target").textContent = "Click a shape or drag an area on the slide."; $("ask-send").disabled = true; $("ask-note").textContent = "";
     if (on) $("ask-text").focus();
     drawOverlay(); reportSize();
@@ -464,9 +661,9 @@
           inp.onblur = () => finish(true);
         };
         h.appendChild(name);
-        h.appendChild(el("span", "muted", `${sec.slides.length} slide${sec.slides.length === 1 ? "" : "s"}`));
+        h.appendChild(el("span", "chip count", `${sec.slides.length} slide${sec.slides.length === 1 ? "" : "s"}`));
         if (sec.index > 1 || o.sections.length > 1) {
-          const x = el("button", "x", "×"); x.title = "Delete section (keeps its slides)"; x.setAttribute("aria-label", `Delete section ${sec.name}`);
+          const x = btn("x ghost sm icon", "trash"); x.title = "Delete section (keeps its slides)"; x.setAttribute("aria-label", `Delete section ${sec.name}`);
           x.onclick = () => act("powerpoint_sections", { action: "delete", section: sec.index });
           h.appendChild(x);
         }
@@ -479,9 +676,9 @@
         t.draggable = true; t.dataset.id = id; t.tabIndex = 0; t.title = s.title || `Slide ${s.index}`;
         const pic = el("div", "pic"); const cached = thumbs.get(id);
         if (cached && cached.signature === s.signature) { const i = el("img"); i.alt = t.title; i.src = png(cached.png); pic.appendChild(i); }
-        if (s.hidden) pic.appendChild(el("span", "hid", "hidden"));
+        if (s.hidden) { const hb = el("span", "hid"); hb.appendChild(ic("hide")); hb.appendChild(document.createTextNode("Hidden")); pic.appendChild(hb); }
         const n = lint && lint.counts ? lint.counts[id] : 0;
-        if (n) { const b = el("span", "lintn", String(n)); b.title = `${n} lint finding(s)`; pic.appendChild(b); }
+        if (n) { const b = el("span", "lintn", String(n)); b.setAttribute("aria-label", `${n} lint finding(s)`); b.title = `${n} lint finding(s)`; pic.appendChild(b); }
         t.appendChild(pic);
         const cap = el("div", "cap"); cap.appendChild(el("b", null, String(s.index))); cap.appendChild(el("span", null, s.title));
         t.appendChild(cap);
@@ -544,7 +741,7 @@
   function buildStory(o) {
     const root = $("v-story"); root.textContent = "";
     const byId = new Map(o.slides.map(s => [s.id, s]));
-    const head = el("div", "row muted");
+    const head = el("div", "summary");
     const words = o.slides.reduce((n, s) => n + s.notes_words, 0);
     head.textContent = `${o.count} slides · ${o.slides.filter(s => s.hidden).length} hidden · read the titles alone: do they tell the story?` +
                        (words ? ` · ~${Math.round(words / 130)} min of notes` : "");
@@ -558,10 +755,11 @@
         li.appendChild(el("span", "n", String(s.index)));
         li.appendChild(el("span", "t" + (s.title ? "" : " none"), s.title || "(no title)"));
         for (const f of findingsFor(id).filter(f => TITLE_FLAGS[f.code])) {
-          const p = el("span", "pill", TITLE_FLAGS[f.code]); p.title = f.message; li.appendChild(p);
+          const p = el("span", "pill " + f.severity, TITLE_FLAGS[f.code]); p.title = f.message; li.appendChild(p);
         }
         if (s.hidden) li.appendChild(el("span", "pill", "hidden"));
         li.onclick = async () => { await act("powerpoint_show", { slide: s.index }); setMode("slide"); };
+        li.tabIndex = 0; li.onkeydown = ev => { if (ev.key === "Enter") li.onclick(); };
         ol.appendChild(li);
       }
       root.appendChild(ol);
@@ -577,18 +775,18 @@
     if (!force && key === histKey) return;
     histKey = key;
     const root = $("hist"); root.textContent = "";
-    if (!h.versions.length) { root.appendChild(el("div", "note", "No versions yet. One is saved before every change made through PowerPoint Live.")); reportSize(); return; }
+    if (!h.versions.length) { root.appendChild(el("div", "empty", "No versions yet. One is saved before every change made through PowerPoint Live.")); reportSize(); return; }
     for (const v of h.versions) {
       const row = el("div", "ver"); const pic = el("div", "pic"); row.appendChild(pic);
       const what = el("div", "what");
-      what.appendChild(el("div", null, `v${v.v} · ${v.label}`));
+      const lbl = el("div", "lbl"); lbl.appendChild(el("span", "vn", `v${v.v}`)); lbl.appendChild(document.createTextNode(v.label)); what.appendChild(lbl);
       what.appendChild(el("div", "muted", `${new Date(v.time * 1000).toLocaleTimeString()} · ${v.count} slides · showing slide ${v.slide}`));
       row.appendChild(what);
-      const b = el("button", null, "Restore");
+      const b = btn("sm", "restore", "Restore"); b.title = "Restore this version (asks to confirm)";
       b.onclick = () => {
         if (b.dataset.armed) { act("powerpoint_restore", { version: v.v }).then(() => { histKey = null; }); return; }
-        b.dataset.armed = "1"; b.textContent = "Restore this version?"; b.classList.add("primary");
-        setTimeout(() => { delete b.dataset.armed; b.textContent = "Restore"; b.classList.remove("primary"); }, 4000);
+        b.dataset.armed = "1"; b.querySelector(".lbl").textContent = "Restore this version?"; b.classList.add("primary");
+        setTimeout(() => { delete b.dataset.armed; b.querySelector(".lbl").textContent = "Restore"; b.classList.remove("primary"); }, 4000);
       };
       row.appendChild(b); root.appendChild(row);
       (async () => {

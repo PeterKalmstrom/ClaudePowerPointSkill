@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **One error-handling and code style for all Python** (`scripts/kShared.py`): every method guards on
+  `kS.ErrorMode`, wraps its body, reports to `kS.GlobalErrorHandler` and returns a safe default; the first error
+  halts the run (PowerPoint Live: Resume). Expected states raise `ToolInputException` / `ToolReportableException`.
+  k-prefixed classes, PascalCase, no lambdas or nested functions. `tools/check_kpattern.py` enforces it in the
+  self-test and CI. Reported errors can be offered to the support flow (`KPS_ERROR_WEBHOOK`).
+- **PowerPoint Live face-lift:** one design system across all four views (tokens, light/dark, icons, chips,
+  segmented tabs, switch, empty states), narrow-panel layout, keyboard and screen-reader labels.
+
 - **PowerPoint Live, round 2:** change highlights; lint findings drawn on the slide with live one-click fixes
   (`powerpoint_fix`); before/after slider; point at a shape or area and ask Claude (`ui/message`); a version saved
   before every change with a History view and `powerpoint_restore`; slide sorter multi-select, hide/unhide and

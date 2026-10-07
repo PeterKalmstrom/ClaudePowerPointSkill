@@ -107,6 +107,14 @@ Never run more than 4 iterations on the same defect without escalating.
 - *Caching trust* — replacing an image at the same path doesn't always update the embedded version; re-add the picture explicitly
 - *Active context drift* — see [Multi-presentation safety](reference/COM.md#multi-presentation-safety--never-trust-activepresentation); pin to a specific presentation by name, never trust `ActivePresentation`
 
+## Error reports - always ask first
+
+A script that exits with code **4** (stderr: `ERROR-REPORT-PENDING: <file>`) hit an unexpected error whose report
+is waiting. Ask the user exactly "Do you want to send this error message?" (AskUserQuestion, Yes / No) and show
+what would be sent. Only on **Yes** run the `send_error_report.py <file> --yes` command it printed; on **No** run
+it with `--no`. PowerPoint Live says `ERROR-REPORT-PENDING` in its error message: ask the same question, then call
+`powerpoint_send_error_report` with `send=true` only on Yes (`false` on No). Never send without the user's yes.
+
 ## Version-specific facts (as of 2026-10)
 
 These depend on upstream releases. Re-check them when something that used to work breaks:

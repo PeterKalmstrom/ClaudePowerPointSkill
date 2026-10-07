@@ -8,19 +8,71 @@ import argparse
 import datetime
 import pathlib
 import shutil
-import sys
 
-ap = argparse.ArgumentParser()
-ap.add_argument("--file", required=True)
-ap.add_argument("--label", default="backup")
-a = ap.parse_args()
+from kShared import ToolInputException, kRun, kS, kToolException
 
-src = pathlib.Path(a.file).resolve()
-if not src.is_file():
-    sys.exit(f"not found: {src}")
-ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-dst = src.with_name(f"{src.stem}.{ts}.{a.label}{src.suffix}")
-if dst.exists():  # never overwrite an earlier snapshot
-    sys.exit(f"refusing to overwrite {dst}")
-shutil.copy2(src, dst)
-print(dst)
+
+class kBackupSnapshot:
+    """One snapshot of one deck file."""
+
+    def __init__(self, Source, Label):
+        try:
+            self.Source = pathlib.Path(Source).resolve()
+            self.Label = Label
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBackupSnapshot.__init__")
+
+    def Target(self):
+        """The snapshot path beside the deck."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            return self.Source.with_name(f"{self.Source.stem}.{Stamp}.{self.Label}{self.Source.suffix}")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBackupSnapshot.Target")
+            return None
+
+    def Save(self):
+        """Copy the deck; never overwrite an earlier snapshot. Returns the new path."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if not self.Source.is_file():
+                raise ToolInputException(f"not found: {self.Source}")
+            Destination = self.Target()
+            if Destination.exists():
+                raise ToolInputException(f"refusing to overwrite {Destination}")
+            shutil.copy2(self.Source, Destination)
+            return Destination
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kBackupSnapshot.Save(file={self.Source})")
+            return None
+
+
+class kBackupSnapshotApp:
+    """Command line."""
+
+    def Run(self):
+        if kS.ErrorMode:
+            return 1
+        try:
+            Parser = argparse.ArgumentParser()
+            Parser.add_argument("--file", required=True)
+            Parser.add_argument("--label", default="backup")
+            Args = Parser.parse_args()
+            Saved = kBackupSnapshot(Args.file, Args.label).Save()
+            if Saved:
+                print(Saved)
+            return 0
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBackupSnapshotApp.Run")
+            return 1
+
+
+if __name__ == "__main__":
+    kRun.Main(kBackupSnapshotApp)

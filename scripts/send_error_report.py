@@ -1,0 +1,125 @@
+"""Send a saved error report to the support flow - only after the user has said yes.
+
+When a script hits an unexpected error and nobody is at a terminal to ask (Claude ran it), the report is saved and
+the script prints the file's path. Claude then asks the user "Do you want to send this error message?" (yes/no).
+
+    python scripts/send_error_report.py <report.json> --yes     # the user answered yes: send it
+    python scripts/send_error_report.py <report.json> --no      # the user answered no: delete it, send nothing
+    python scripts/send_error_report.py <report.json>           # at a terminal: show it and ask
+
+Never pass --yes unless the user said yes to that question.
+"""
+import argparse
+import json
+import os
+import sys
+
+from kShared import ToolInputException, kErrorReport, kRun, kS, kToolException
+
+
+class kSavedReport:
+    """One saved report file."""
+
+    def __init__(self, Path):
+        try:
+            self.Path = os.path.abspath(Path)
+            self.Data = None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSavedReport.__init__")
+
+    def Load(self):
+        """Read the file. Returns the report dict."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if not os.path.isfile(self.Path):
+                raise ToolInputException(f"not found: {self.Path}")
+            with open(self.Path, encoding="utf-8") as File:
+                self.Data = json.load(File)
+            if not isinstance(self.Data, dict) or not self.Data.get("payloads"):
+                raise ToolInputException(f"not an error report: {self.Path}")
+            return self.Data
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kSavedReport.Load(file={self.Path})")
+            return None
+
+    def Show(self):
+        """Print what would be sent."""
+        if kS.ErrorMode:
+            return False
+        try:
+            sys.stderr.write("This would be sent:\n")
+            for Summary in self.Data.get("summary", []):
+                sys.stderr.write("".join(f"    {Line}\n" for Line in Summary) + "\n")
+            return True
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSavedReport.Show")
+            return False
+
+    def Send(self):
+        """Send every payload, then delete the file. Returns the number sent."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            Sent = kErrorReport.SendAll(self.Data["payloads"])
+            if Sent:
+                os.remove(self.Path)
+                print(f"Error report sent ({kErrorReport.LastStatus}).")
+            else:
+                print(f"Not sent: {kErrorReport.LastStatus}.")
+            return Sent
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSavedReport.Send")
+            return 0
+
+    def Discard(self):
+        """The user said no: delete the file, send nothing."""
+        if kS.ErrorMode:
+            return False
+        try:
+            os.remove(self.Path)
+            print("Not sent. The saved report was deleted.")
+            return True
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSavedReport.Discard")
+            return False
+
+
+class kSendErrorReportApp:
+    """Command line."""
+
+    def Run(self):
+        if kS.ErrorMode:
+            return 1
+        try:
+            Parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+            Parser.add_argument("file")
+            Answer = Parser.add_mutually_exclusive_group()
+            Answer.add_argument("--yes", action="store_true", help="the user answered yes: send it")
+            Answer.add_argument("--no", action="store_true", help="the user answered no: delete it")
+            Args = Parser.parse_args()
+            Report = kSavedReport(Args.file)
+            if Report.Load() is None:
+                return 1
+            if Args.no:
+                Report.Discard()
+                return 0
+            if not Args.yes:
+                if not kErrorReport.CanAsk():
+                    raise ToolInputException(f'ask the user "{kErrorReport.Question}" first, then pass --yes or --no')
+                Report.Show()
+                if not kErrorReport.AskConsent():
+                    Report.Discard()
+                    return 0
+            return 0 if Report.Send() else 1
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSendErrorReportApp.Run")
+            return 1
+
+
+if __name__ == "__main__":
+    kRun.Main(kSendErrorReportApp)

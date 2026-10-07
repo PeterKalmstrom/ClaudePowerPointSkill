@@ -60,7 +60,15 @@ Needs Windows, desktop PowerPoint and [uv](https://docs.astral.sh/uv/). In a hos
 | `powerpoint_hide` | Claude, view | Hide or unhide slides |
 | `powerpoint_fix` | Claude, view | Apply a lint fix to one shape, live |
 | `powerpoint_history` / `powerpoint_restore` | Claude, view | List saved versions / put one back |
+| `powerpoint_resume` | Claude, view | Re-arm the server after an unexpected error halted it |
+| `powerpoint_send_error_report` | Claude, view | Answer a waiting error report - `send=true` only after the user said yes to "Do you want to send this error message?" |
+| `error_reports`, `error_report_answer` | view only | Error reports waiting for the person's Yes/No ("Do you want to send this error message?"); nothing is sent without Yes |
 | `slide_state`, `slide_image`, `deck_outline`, `slide_thumbs`, `deck_lint`, `history_thumb` | view only | What the views draw |
+
+Expected states (no deck open, file not found, not on Windows, a shape that is gone) come back as tool errors with
+a plain message. The first *unexpected* error is reported to the global error handler (`scripts/kShared.py`) and
+halts the server: every tool then answers "PowerPoint Live halted after an error in ..." until a person presses
+**Resume** in the view (or Claude calls `powerpoint_resume`).
 
 Live fixes: `unused_placeholder`, `body_below_floor`, `text_overflow` (shrinks using PowerPoint's own text layout,
 never below the floor), `picture_stretched`, `a11y_missing_alt_text` (charts and tables; pictures need Claude),

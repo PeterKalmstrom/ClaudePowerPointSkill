@@ -10,6 +10,8 @@ import colorsys
 from lxml import etree
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 
+from kShared import kS
+
 A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 P = "http://schemas.openxmlformats.org/presentationml/2006/main"
 NS = {"a": A, "p": P}
@@ -21,120 +23,241 @@ PRESET = {"black": "000000", "white": "FFFFFF", "red": "FF0000", "green": "00800
           "yellow": "FFFF00", "gray": "808080", "grey": "808080"}
 
 
-def _q(tag):
-    return f"{{{A}}}{tag}"
+class kTheme:
+    """One slide master's theme: colour scheme, colour map and fonts."""
 
+    def __init__(self, Master):
+        try:
+            ThemeEl = etree.fromstring(Master.part.part_related_by(RT.THEME).blob)
+            Scheme = ThemeEl.find(".//a:clrScheme", NS)
+            self._colours = {}
+            for Slot in SLOTS:
+                Node = Scheme.find(f"a:{Slot}", NS) if Scheme is not None else None
+                if Node is not None and len(Node):
+                    C = Node[0]
+                    self._colours[Slot] = (C.get("val") if C.tag == kTheme.Q("srgbClr") else C.get("lastClr")
+                                           or ("FFFFFF" if C.get("val") == "window" else "000000")).upper()
+            Fonts = ThemeEl.find(".//a:fontScheme", NS)
+            self._major = Fonts.find("a:majorFont/a:latin", NS).get("typeface") if Fonts is not None else None
+            self._minor = Fonts.find("a:minorFont/a:latin", NS).get("typeface") if Fonts is not None else None
+            CMap = Master._element.find("p:clrMap", NS)
+            self._map = dict(DEFAULT_MAP)
+            if CMap is not None:
+                self._map.update({K: V for K, V in CMap.attrib.items() if K in DEFAULT_MAP})
+            self._master = Master
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.__init__")
 
-class Theme:
-    def __init__(self, master):
-        theme_el = etree.fromstring(master.part.part_related_by(RT.THEME).blob)
-        scheme = theme_el.find(".//a:clrScheme", NS)
-        self.colours = {}
-        for slot in SLOTS:
-            node = scheme.find(f"a:{slot}", NS) if scheme is not None else None
-            if node is not None and len(node):
-                c = node[0]
-                self.colours[slot] = (c.get("val") if c.tag == _q("srgbClr") else c.get("lastClr")
-                                      or ("FFFFFF" if c.get("val") == "window" else "000000")).upper()
-        fonts = theme_el.find(".//a:fontScheme", NS)
-        self.major = fonts.find("a:majorFont/a:latin", NS).get("typeface") if fonts is not None else None
-        self.minor = fonts.find("a:minorFont/a:latin", NS).get("typeface") if fonts is not None else None
-        cmap = master._element.find("p:clrMap", NS)
-        self.map = dict(DEFAULT_MAP)
-        if cmap is not None:
-            self.map.update({k: v for k, v in cmap.attrib.items() if k in DEFAULT_MAP})
-        self.master = master
+    @staticmethod
+    def Q(Tag):
+        """Clark-notation name of a DrawingML tag."""
+        if kS.ErrorMode:
+            return None
+        try:
+            return f"{{{A}}}{Tag}"
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Q")
+            return None
 
-    def font(self, typeface):
+    @property
+    def Colours(self):
+        """Theme slot (dk1, accent1, ...) -> RRGGBB."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            return self._colours
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Colours")
+            return {}
+
+    @property
+    def Major(self):
+        """Heading typeface."""
+        if kS.ErrorMode:
+            return None
+        try:
+            return self._major
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Major")
+            return None
+
+    @property
+    def Minor(self):
+        """Body typeface."""
+        if kS.ErrorMode:
+            return None
+        try:
+            return self._minor
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Minor")
+            return None
+
+    @property
+    def Map(self):
+        """Colour map (bg1/tx1/bg2/tx2 -> slot)."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            return self._map
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Map")
+            return {}
+
+    def Font(self, Typeface):
         """Map +mj-lt / +mn-lt (theme font references) to the real typeface."""
-        if typeface in ("+mj-lt", "+mj-ea", "+mj-cs"):
-            return self.major
-        if typeface in ("+mn-lt", "+mn-ea", "+mn-cs"):
-            return self.minor
-        return typeface
+        if kS.ErrorMode:
+            return None
+        try:
+            if Typeface in ("+mj-lt", "+mj-ea", "+mj-cs"):
+                return self._major
+            if Typeface in ("+mn-lt", "+mn-ea", "+mn-cs"):
+                return self._minor
+            return Typeface
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Font")
+            return None
 
-    def is_theme_hex(self, hexval):
-        return hexval.upper() in self.colours.values()
+    def IsThemeHex(self, HexVal):
+        """True when HexVal is one of the theme's colours."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return HexVal.upper() in self._colours.values()
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.IsThemeHex")
+            return False
 
-    def resolve(self, el):
+    def Resolve(self, El):
         """RRGGBB for a colour element (srgbClr, schemeClr, ...) with its child adjustments applied."""
-        if el is None:
+        if kS.ErrorMode:
             return None
-        tag = etree.QName(el).localname
-        if tag == "srgbClr":
-            base = el.get("val")
-        elif tag == "schemeClr":
-            name = el.get("val")
-            name = self.map.get(name, name)
-            base = self.colours.get(name)
-        elif tag == "sysClr":
-            base = el.get("lastClr") or ("FFFFFF" if el.get("val") == "window" else "000000")
-        elif tag == "prstClr":
-            base = PRESET.get(el.get("val"))
-        else:
+        try:
+            if El is None:
+                return None
+            Tag = etree.QName(El).localname
+            if Tag == "srgbClr":
+                Base = El.get("val")
+            elif Tag == "schemeClr":
+                Name = El.get("val")
+                Name = self._map.get(Name, Name)
+                Base = self._colours.get(Name)
+            elif Tag == "sysClr":
+                Base = El.get("lastClr") or ("FFFFFF" if El.get("val") == "window" else "000000")
+            elif Tag == "prstClr":
+                Base = PRESET.get(El.get("val"))
+            else:
+                return None
+            if not Base:
+                return None
+            return kTheme.Adjust(Base.upper(), El)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Resolve")
             return None
-        if not base:
-            return None
-        return adjust(base.upper(), el)
 
-    def colour_in(self, parent):
-        """Resolve the first colour element directly under `parent` (e.g. an <a:solidFill>)."""
-        if parent is None:
+    def ColourIn(self, Parent):
+        """Resolve the first colour element directly under `Parent` (e.g. an <a:solidFill>)."""
+        if kS.ErrorMode:
             return None
-        for child in parent:
-            if etree.QName(child).localname in COLOUR_TAGS:
-                return self.resolve(child)
-        return None
+        try:
+            if Parent is None:
+                return None
+            for Child in Parent:
+                if etree.QName(Child).localname in COLOUR_TAGS:
+                    return self.Resolve(Child)
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.ColourIn")
+            return None
 
-    def background(self, slide):
+    def Background(self, Slide):
         """Solid background colour behind a slide (slide -> layout -> master), or None if it is a
         picture/gradient/unknown. White when nothing sets one."""
-        for owner in (slide, slide.slide_layout, slide.slide_layout.slide_master):
-            bg = owner._element.find("p:cSld/p:bg", NS)
-            if bg is None:
-                continue
-            pr = bg.find("p:bgPr", NS)
-            if pr is not None:
-                solid = pr.find("a:solidFill", NS)
-                return self.colour_in(solid) if solid is not None else None
-            ref = bg.find("p:bgRef", NS)
-            if ref is not None:
-                idx = int(ref.get("idx", "0"))
-                # 1001-1003 are theme background fills; a solid one takes the bgRef's colour
-                return self.colour_in(ref) if idx in (0, 1001) or idx < 1000 else None
-        return self.colours.get(self.map.get("bg1", "lt1"), "FFFFFF")
+        if kS.ErrorMode:
+            return None
+        try:
+            for Owner in (Slide, Slide.slide_layout, Slide.slide_layout.slide_master):
+                Bg = Owner._element.find("p:cSld/p:bg", NS)
+                if Bg is None:
+                    continue
+                Pr = Bg.find("p:bgPr", NS)
+                if Pr is not None:
+                    Solid = Pr.find("a:solidFill", NS)
+                    return self.ColourIn(Solid) if Solid is not None else None
+                Ref = Bg.find("p:bgRef", NS)
+                if Ref is not None:
+                    Idx = int(Ref.get("idx", "0"))
+                    # 1001-1003 are theme background fills; a solid one takes the bgRef's colour
+                    return self.ColourIn(Ref) if Idx in (0, 1001) or Idx < 1000 else None
+            return self._colours.get(self._map.get("bg1", "lt1"), "FFFFFF")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Background")
+            return None
 
+    @staticmethod
+    def HexToRgb(Hex):
+        """RRGGBB -> (r, g, b) in 0..1."""
+        if kS.ErrorMode:
+            return None
+        try:
+            return tuple(int(Hex[I:I + 2], 16) / 255 for I in (0, 2, 4))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.HexToRgb")
+            return None
 
-def _hex_to_rgb(h):
-    return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    @staticmethod
+    def RgbToHex(R, G, B):
+        """(r, g, b) in 0..1 -> RRGGBB."""
+        if kS.ErrorMode:
+            return None
+        try:
+            return "".join(f"{round(max(0, min(1, V)) * 255):02X}" for V in (R, G, B))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.RgbToHex")
+            return None
 
+    @staticmethod
+    def Adjust(HexVal, El):
+        """Apply lumMod/lumOff/tint/shade children (values in 1/1000 of a percent)."""
+        if kS.ErrorMode:
+            return None
+        try:
+            R, G, B = kTheme.HexToRgb(HexVal)
+            for Mod in El:
+                Name = etree.QName(Mod).localname
+                Val = int(Mod.get("val", "100000")) / 100000
+                if Name in ("lumMod", "lumOff"):
+                    H, L, S = colorsys.rgb_to_hls(R, G, B)
+                    L = L * Val if Name == "lumMod" else L + Val
+                    R, G, B = colorsys.hls_to_rgb(H, max(0, min(1, L)), S)
+                elif Name == "tint":  # towards white
+                    R, G, B = (C + (1 - C) * (1 - Val) for C in (R, G, B))
+                elif Name == "shade":  # towards black
+                    R, G, B = (C * Val for C in (R, G, B))
+            return kTheme.RgbToHex(R, G, B)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Adjust")
+            return None
 
-def _rgb_to_hex(r, g, b):
-    return "".join(f"{round(max(0, min(1, v)) * 255):02X}" for v in (r, g, b))
+    @staticmethod
+    def Saturation(HexVal):
+        """HSV saturation 0..1."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            R, G, B = kTheme.HexToRgb(HexVal)
+            return colorsys.rgb_to_hsv(R, G, B)[1]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Saturation")
+            return 0.0
 
-
-def adjust(hexval, el):
-    """Apply lumMod/lumOff/tint/shade children (values in 1/1000 of a percent)."""
-    r, g, b = _hex_to_rgb(hexval)
-    for mod in el:
-        name = etree.QName(mod).localname
-        val = int(mod.get("val", "100000")) / 100000
-        if name in ("lumMod", "lumOff"):
-            h, l, s = colorsys.rgb_to_hls(r, g, b)
-            l = l * val if name == "lumMod" else l + val
-            r, g, b = colorsys.hls_to_rgb(h, max(0, min(1, l)), s)
-        elif name == "tint":  # towards white
-            r, g, b = (c + (1 - c) * (1 - val) for c in (r, g, b))
-        elif name == "shade":  # towards black
-            r, g, b = (c * val for c in (r, g, b))
-    return _rgb_to_hex(r, g, b)
-
-
-def saturation(hexval):
-    r, g, b = _hex_to_rgb(hexval)
-    return colorsys.rgb_to_hsv(r, g, b)[1]
-
-
-def hue(hexval):
-    r, g, b = _hex_to_rgb(hexval)
-    return colorsys.rgb_to_hsv(r, g, b)[0]
+    @staticmethod
+    def Hue(HexVal):
+        """HSV hue 0..1."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            R, G, B = kTheme.HexToRgb(HexVal)
+            return colorsys.rgb_to_hsv(R, G, B)[0]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTheme.Hue")
+            return 0.0

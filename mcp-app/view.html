@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PowerPoint Live</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --line: #d0d7de; --accent: #c43e1c; }
+  :root[data-theme="dark"] { --bg: #0d1117; --fg: #e6edf3; --muted: #8d96a0; --line: #30363d; --accent: #f0883e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
+  .wrap { padding: 8px; }
+  .stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--line); border-radius: 6px;
+           overflow: hidden; display: grid; place-items: center; color: var(--muted); }
+  .stage img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
+  .stage.flash { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .bar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .bar .info { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar .muted { color: var(--muted); }
+  button { font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--line);
+           border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.live { background: #2da44e; }
+  .err { color: var(--accent); margin-top: 6px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage" id="stage"><span id="placeholder">Waiting for PowerPoint…</span></div>
+  <div class="bar">
+    <span class="dot" id="dot" title="live"></span>
+    <span class="info"><b id="pos">–</b> <span class="muted" id="deck"></span></span>
+    <span class="muted" id="when"></span>
+    <button id="prev" aria-label="Previous slide">‹</button>
+    <button id="next" aria-label="Next slide">›</button>
+  </div>
+  <div class="err" id="err" hidden></div>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let nextId = 1, pending = new Map(), state = null, shown = null, busy = false;
+
+  function send(msg) { window.parent.postMessage({ jsonrpc: "2.0", ...msg }, "*"); }
+  function request(method, params) {
+    const id = nextId++;
+    send({ id, method, params });
+    return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+  }
+  function structured(result) {
+    if (result && result.structuredContent) {
+      const s = result.structuredContent;
+      return s.result && typeof s.result === "object" ? s.result : s;
+    }
+    const t = result && result.content && result.content.find(c => c.type === "text");
+    try { return t ? JSON.parse(t.text) : null; } catch { return null; }
+  }
+  const call = async (name, args = {}) => {
+    const r = await request("tools/call", { name, arguments: args });
+    if (r && r.isError) throw new Error((r.content || []).map(c => c.text).join(" ") || "tool error");
+    return structured(r);
+  };
+
+  function applyTheme(ctx) {
+    if (ctx && ctx.theme) document.documentElement.dataset.theme = ctx.theme;
+  }
+  function reportSize() {
+    send({ method: "ui/notifications/size-changed",
+           params: { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight } });
+  }
+  function showError(e) {
+    $("err").hidden = !e; $("err").textContent = e ? String(e.message || e) : "";
+    $("dot").classList.toggle("live", !e); reportSize();
+  }
+  function render(s) {
+    $("pos").textContent = s.count ? `Slide ${s.slide} / ${s.count}` : "No slides";
+    $("deck").textContent = s.deck || "";
+    $("prev").disabled = !s.count || s.slide <= 1;
+    $("next").disabled = !s.count || s.slide >= s.count;
+  }
+
+  async function refresh(force) {
+    if (busy) return;
+    busy = true;
+    try {
+      const s = await call("slide_state");
+      state = s; render(s); showError(null);
+      const key = `${s.path}|${s.slide}|${s.signature}`;
+      if (force || key !== shown) {
+        const width = Math.min(2560, Math.round($("stage").clientWidth * (window.devicePixelRatio || 1)));
+        const img = await call("slide_image", { slide: s.slide, width: Math.max(320, width) });
+        if (img && img.png) {
+          let el = $("stage").querySelector("img");
+          if (!el) { $("stage").textContent = ""; el = document.createElement("img"); $("stage").appendChild(el); }
+          el.alt = `Slide ${img.slide} of ${s.deck}`;
+          el.src = "data:image/png;base64," + img.png;
+          $("stage").classList.add("flash"); setTimeout(() => $("stage").classList.remove("flash"), 350);
+          $("when").textContent = new Date().toLocaleTimeString();
+        }
+        shown = `${s.path}|${img ? img.slide : s.slide}|${img ? img.signature : s.signature}`;
+        reportSize();
+      }
+    } catch (e) { showError(e); }
+    finally { busy = false; }
+  }
+
+  async function go(delta) {
+    if (!state) return;
+    try { await call("powerpoint_show", { slide: state.slide + delta }); await refresh(true); }
+    catch (e) { showError(e); }
+  }
+  $("prev").onclick = () => go(-1);
+  $("next").onclick = () => go(1);
+
+  window.addEventListener("message", ev => {
+    const m = ev.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.id !== undefined && pending.has(m.id) && !m.method) {
+      const p = pending.get(m.id); pending.delete(m.id);
+      m.error ? p.reject(new Error(m.error.message)) : p.resolve(m.result);
+      return;
+    }
+    if (m.method === "ui/notifications/tool-result") refresh(true);
+    else if (m.method === "ui/notifications/host-context-changed") applyTheme(m.params);
+    else if (m.method === "ui/resource-teardown" && m.id !== undefined) { clearInterval(timer); send({ id: m.id, result: {} }); }
+  });
+
+  let timer = null;
+  request("ui/initialize", {
+    protocolVersion: "2026-01-26",
+    capabilities: { appCapabilities: {} },
+    clientInfo: { name: "powerpoint-live-view", version: "1.0.0" },
+    appCapabilities: {},
+    appInfo: { name: "powerpoint-live-view", version: "1.0.0" }
+  }).then(r => {
+    applyTheme(r && r.hostContext);
+    send({ method: "ui/notifications/initialized", params: {} });
+    refresh(true);
+    timer = setInterval(() => { if (!document.hidden) refresh(false); }, 1000);
+  }).catch(showError);
+  new ResizeObserver(reportSize).observe(document.body);
+})();
+</script>
+</body>
+</html>

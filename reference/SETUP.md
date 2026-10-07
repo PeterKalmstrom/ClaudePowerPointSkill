@@ -46,6 +46,16 @@ Run snippets as `uvx --with pywin32 python snippet.py`. To work on a deck the us
 [COM](COM.md#multi-presentation-safety--never-trust-activepresentation). To *see* a slide, render it with
 `scripts/render_slides.py` (not `Slide.Export`).
 
+## Live slide view (optional MCP App)
+
+[`mcp-app/`](../mcp-app/README.md) is this skill's own MCP server: `powerpoint_open`, `powerpoint_run` (Python
+against the deck) and `powerpoint_show`. In hosts that support MCP Apps it shows the current slide live while it
+changes. The plugin registers it; by hand:
+
+```powershell
+claude mcp add --scope user powerpoint-live -- uvx --with "mcp<2" --with "pywin32; sys_platform == 'win32'" python <skill folder>\mcp-app\server.py
+```
+
 ---
 
 ## Troubleshooting

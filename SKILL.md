@@ -28,6 +28,7 @@ only the reference file the task needs.
 | File | Covers | Runs on |
 |---|---|---|
 | [SETUP.md](reference/SETUP.md) | Windows setup, driving PowerPoint from Python, troubleshooting | Windows + PowerPoint |
+| [mcp-app/](mcp-app/README.md) | PowerPoint Live: own MCP server with a live view of the current slide | Windows + PowerPoint |
 | [COM.md](reference/COM.md) | Snapshots, multi-deck safety, UTF-8, idempotent builds, keeping hand edits, shape filtering | Windows + PowerPoint |
 | [LAYOUT.md](reference/LAYOUT.md) | Slide size, pictures, text wrap, embedded fonts, word budgets, anchor types, layout patterns | Mostly any OS; rendering needs Windows |
 | [MEDIA.md](reference/MEDIA.md) | AI images, Remotion, Veo, compression, embedding, combined patterns | Generation any OS; embedding Windows |

@@ -64,9 +64,11 @@ PowerShell code. `tools/check_kpattern.py` enforces it (CI and the self-test run
   named method. A script starts with `kRun.Main(kXxxApp)`.
 
 **Error reports.** A reported error can be sent to the support flow. The address is `KPS_ERROR_WEBHOOK` (or
-`scripts/kErrorWebhook.url`, kept out of the repository); without one nothing is sent. With a terminal, the
-person sees what would be sent and is asked first (y/N). `KPS_ERROR_AUTOSEND=1` sends without asking (agreed in
-advance); `KPS_ERROR_REPORT=0` switches reporting off (the self-test sets it).
+`scripts/kErrorWebhook.url`, kept out of the repository); without one nothing is sent. **Nothing is ever sent without a
+person's yes:** the report is shown and the person is asked "Do you want to send this error message? (yes/no)";
+no means nothing is sent. Without a terminal the report is saved and Claude asks the user, sending it with
+`scripts/send_error_report.py <file> --yes` only on yes. PowerPoint Live asks with Yes/No buttons in its view.
+`KPS_ERROR_REPORT=0` switches reporting off (the self-test sets it).
 
 ## Sanity check before opening a PR
 

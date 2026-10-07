@@ -199,6 +199,11 @@
   .err { margin-top: var(--s3); padding: var(--s2) var(--s3); color: var(--err); background: var(--err-bg);
          border: 1px solid color-mix(in srgb, var(--err) 35%, transparent); border-radius: var(--r-md); white-space: pre-wrap; }
   #resume { margin-top: var(--s2); }
+  .consent { margin-top: var(--s2); padding: var(--s3); border: 1px solid var(--line); border-radius: 8px;
+             background: var(--soft); }
+  .consent-q { margin: 0 0 var(--s2); font-weight: 600; }
+  .consent-body { margin: 0 0 var(--s2); max-height: 160px; overflow: auto; white-space: pre-wrap; font-size: 12px;
+                  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); }
   .lede { margin: 0 0 var(--s3); color: var(--muted); max-width: 70ch; }
 
   /* ---------------------------------------------------------------- sorter */
@@ -359,6 +364,12 @@
   </section>
 
   <div class="err" id="err" role="alert" hidden></div>
+  <div class="consent" id="consent" role="alertdialog" aria-labelledby="consent-q" hidden>
+    <p class="consent-q" id="consent-q">Do you want to send this error message?</p>
+    <pre class="consent-body" id="consent-body"></pre>
+    <div class="row"><button class="primary" id="consent-yes">Yes, send it</button><button id="consent-no">No</button>
+      <span class="muted" id="consent-note"></span></div>
+  </div>
   <button class="primary" id="resume" hidden><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-resume"/></svg>Resume</button>
 </div>
 <script>
@@ -798,6 +809,32 @@
   }
 
   // ------------------------------------------------------------ loop
+  // ------------------------------------------------------------ error report consent (nothing is sent without Yes)
+  let consentShown = "";
+  async function checkConsent() {
+    try {
+      const r = await call("error_reports");
+      const reports = (r && r.configured && r.reports) || [];
+      const key = reports.map(x => x.ref).join(",");
+      $("consent").hidden = !reports.length;
+      if (reports.length && key !== consentShown) {
+        consentShown = key; $("consent-note").textContent = "";
+        $("consent-q").textContent = r.question;
+        $("consent-body").textContent = reports.map(x => x.summary.join("\n")).join("\n\n");
+        reportSize();
+      }
+    } catch { /* ERROR-SUPPRESSED-JUSTIFIED: the question is re-checked on the next poll */ }
+  }
+  async function answerConsent(send) {
+    try {
+      const r = await call("error_report_answer", { send });
+      $("consent-note").textContent = send ? (r.sent ? "Sent. Thank you." : `Not sent: ${r.status}`) : "Not sent.";
+      setTimeout(() => { $("consent").hidden = true; consentShown = ""; reportSize(); }, 1500);
+    } catch (e) { showError(e); }
+  }
+  $("consent-yes").onclick = () => answerConsent(true);
+  $("consent-no").onclick = () => answerConsent(false);
+
   $("resume").addEventListener("click", async () => {
     try { await call("powerpoint_resume"); showError(null); } catch (e) { showError(e); return; }
     refresh(true);
@@ -843,6 +880,7 @@
       tick++;
       if (document.hidden || asking && dragFrom) return;
       if (mode === "slide" || tick % 2 === 0) refresh(false);
+      if (tick % 3 === 0 || !$("err").hidden) checkConsent();
     }, 1000);
   }).catch(showError);
   new ResizeObserver(reportSize).observe(document.body);

@@ -43,7 +43,7 @@ if SCRIPTS not in sys.path:
 
 from kShared import ToolInputException, ToolReportableException, kErrorReport, kS, kToolException  # noqa: E402
 
-kErrorReport.SendImmediately = True  # a server never exits: offer each error to the support flow as it happens
+kErrorReport.HoldForView = True  # a server never exits: each error report waits for the person's Yes/No in the view
 
 URI = "ui://powerpoint-live/slide-view"
 MIME = "text/html;profile=mcp-app"
@@ -1392,6 +1392,32 @@ async def PowerpointResume() -> dict:
         return Live.Resume()
     except Exception as e:
         kS.GlobalErrorHandler(e, "server.PowerpointResume")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="error_reports", meta=APP_ONLY)
+async def ErrorReports() -> dict:
+    """(View only) Error reports waiting for the person's answer to "Do you want to send this error message?".
+    Works while halted: the question must be answerable."""
+    if kS.ErrorMode:
+        return kErrorReport.PendingForView()
+    try:
+        return kErrorReport.PendingForView()
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.ErrorReports")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="error_report_answer", meta=APP_ONLY)
+async def ErrorReportAnswer(send: bool) -> dict:
+    """(View only - never the model) The person's answer: send=True sends every waiting report, False discards
+    them. Only the view's Yes/No buttons call this."""
+    if kS.ErrorMode:
+        return kErrorReport.Decide(send)
+    try:
+        return kErrorReport.Decide(send)
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.ErrorReportAnswer")
         raise Live.HaltedError() from e
 
 

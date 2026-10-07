@@ -25,8 +25,11 @@ The rules, the same as the C#, TypeScript and PowerShell code this skill's autho
 * A deliberate non-reporting catch carries an inline "ERROR-SUPPRESSED-JUSTIFIED: <why>" comment.
 * Reported errors can be sent to the support flow (Power Automate), the same payload the PowerShell kPSErrorReport
   sends. The address is KPS_ERROR_WEBHOOK, else the first line of scripts/kErrorWebhook.url (kept out of the
-  public repository); without one nothing is sent. A person is asked first (y/N) when there is a terminal;
-  KPS_ERROR_AUTOSEND=1 sends without asking (agreed in advance), KPS_ERROR_REPORT=0 switches it off.
+  public repository); without one nothing is sent. NOTHING is ever sent without a person's yes: the report is
+  shown and the person is asked "Do you want to send this error message? (yes/no)"; no means nothing is sent.
+  Without a terminal (Claude ran the script) the report is saved and Claude must ask the user the same question;
+  only on yes is it sent with scripts/send_error_report.py --yes. PowerPoint Live asks in its view.
+  KPS_ERROR_REPORT=0 switches reporting off.
 
 tools/check_kpattern.py audits every method for the four parts; the self-test and CI run it.
 """
@@ -35,6 +38,7 @@ import json
 import os
 import platform
 import sys
+import tempfile
 import traceback
 import urllib.error
 import urllib.request
@@ -114,7 +118,8 @@ class kErrorReport:
     ProductVersion = ""
     Component = os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else "python"
     TimeoutSeconds = 20
-    SendImmediately = False     # long-running servers: offer each error as it happens, not at exit
+    HoldForView = False         # PowerPoint Live: reports wait for the person's Yes/No in the view
+    Question = "Do you want to send this error message?"
     Pending = []
     Offered = False
     LastStatus = ""
@@ -153,22 +158,63 @@ class kErrorReport:
             return ""
 
     @staticmethod
+    def CanAsk():
+        return bool(sys.stdin and sys.stdin.isatty() and sys.stderr.isatty())
+
+    @staticmethod
     def AskConsent():
-        if os.environ.get("KPS_ERROR_AUTOSEND") == "1":
-            return True
-        if not (sys.stdin and sys.stdin.isatty() and sys.stderr.isatty()):
-            kErrorReport.LastStatus = "no one to ask (not run from a terminal); set KPS_ERROR_AUTOSEND=1 to send anyway"
-            return False
-        sys.stderr.write("Send this error report to the support team? [y/N] ")
+        """Ask the person at the terminal. True only for yes/y; anything else is no."""
+        sys.stderr.write(f"{kErrorReport.Question} (yes/no) ")
         sys.stderr.flush()
         return (sys.stdin.readline() or "").strip().lower() in ("y", "yes")
+
+    @staticmethod
+    def SaveForLater():
+        """Write the pending reports to a file, so Claude can ask the user and send them only on yes."""
+        Path = os.path.join(tempfile.gettempdir(), f"pptskill-error-{kErrorReport.Pending[0].CorrelationId}.json")
+        with open(Path, "w", encoding="utf-8") as File:
+            json.dump({"question": kErrorReport.Question,
+                       "summary": [Detail.Summary() for Detail in kErrorReport.Pending],
+                       "payloads": [Detail.ToPayload() for Detail in kErrorReport.Pending]}, File, indent=2)
+        return Path
+
+    @staticmethod
+    def SendAll(Payloads):
+        """Send payloads (the person said yes). Returns the number sent."""
+        Url = kErrorReport.EffectiveUrl()
+        if not Url:
+            kErrorReport.LastStatus = "no reporting address is configured (set KPS_ERROR_WEBHOOK)"
+            return 0
+        Sent = 0
+        for Payload in Payloads:
+            if kErrorReport.Send(Url, Payload):
+                Sent += 1
+        return Sent
+
+    @staticmethod
+    def PendingForView():
+        """What the view shows with its Yes/No question."""
+        return {"question": kErrorReport.Question, "configured": bool(kErrorReport.EffectiveUrl()),
+                "reports": [{"ref": Detail.CorrelationId, "summary": Detail.Summary()}
+                            for Detail in kErrorReport.Pending]}
+
+    @staticmethod
+    def Decide(SendIt):
+        """The person answered the view's question: yes sends every pending report, no discards them."""
+        Payloads = [Detail.ToPayload() for Detail in kErrorReport.Pending]
+        Refs = [Detail.CorrelationId for Detail in kErrorReport.Pending]
+        kErrorReport.Pending = []
+        if not SendIt or os.environ.get("KPS_ERROR_REPORT") == "0":
+            return {"sent": 0, "refs": Refs, "status": "not sent"}
+        Sent = kErrorReport.SendAll(Payloads)
+        return {"sent": Sent, "refs": Refs, "status": kErrorReport.LastStatus}
 
     @staticmethod
     def OfferOnce():
         """Show what would be sent, ask, send. Returns the number sent. Never raises."""
         Sent = 0
         try:
-            if kErrorReport.Offered or not kErrorReport.Pending:
+            if kErrorReport.Offered or not kErrorReport.Pending or kErrorReport.HoldForView:
                 return 0
             kErrorReport.Offered = True
             if os.environ.get("KPS_ERROR_REPORT") == "0":
@@ -181,12 +227,19 @@ class kErrorReport:
             sys.stderr.write("The error above can be sent to the support team. This would be sent:\n")
             for Detail in kErrorReport.Pending:
                 sys.stderr.write("".join(f"    {Line}\n" for Line in Detail.Summary()) + "\n")
-            if not kErrorReport.AskConsent():
-                sys.stderr.write(f"Not sent: {kErrorReport.LastStatus or 'declined'}.\n")
+            if not kErrorReport.CanAsk():
+                Saved = kErrorReport.SaveForLater()
+                Here = os.path.dirname(os.path.abspath(__file__))
+                sys.stderr.write(
+                    "Not sent: there is no one at a terminal to ask.\n"
+                    f"CLAUDE: ask the user \"{kErrorReport.Question}\" (yes/no). Only if they answer yes, run:\n"
+                    f"    python \"{os.path.join(Here, 'send_error_report.py')}\" \"{Saved}\" --yes\n"
+                    "If they answer no, do not send it.\n")
                 return 0
-            for Detail in kErrorReport.Pending:
-                if kErrorReport.Send(Url, Detail):
-                    Sent += 1
+            if not kErrorReport.AskConsent():
+                sys.stderr.write("Not sent.\n")
+                return 0
+            Sent = kErrorReport.SendAll([Detail.ToPayload() for Detail in kErrorReport.Pending])
             if Sent:
                 sys.stderr.write(f"Error report sent. Quote reference {kErrorReport.Pending[0].CorrelationId} "
                                  "to support.\n")
@@ -196,9 +249,9 @@ class kErrorReport:
             return Sent
 
     @staticmethod
-    def Send(Url, Detail):
+    def Send(Url, Payload):
         try:
-            Body = json.dumps(Detail.ToPayload()).encode("utf-8")
+            Body = json.dumps(Payload).encode("utf-8")
             Request = urllib.request.Request(Url, data=Body, method="POST",
                                              headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(Request, timeout=kErrorReport.TimeoutSeconds) as Response:
@@ -246,9 +299,6 @@ class kS:
             if kS.LogPath:
                 with open(kS.LogPath, "a", encoding="utf-8") as Log:
                     Log.write(repr(Record) + "\n")
-            if kErrorReport.SendImmediately:
-                kErrorReport.OfferOnce()
-                kErrorReport.Reset()
         except Exception as Inner:  # ERROR-SUPPRESSED-JUSTIFIED: the handler must never raise or recurse
             sys.stderr.write(f"error handler failed: {Inner!r} while reporting {Location}\n")
 
@@ -257,7 +307,8 @@ class kS:
         """Re-arm the handler. Only for a fresh run, a person's Resume, or test setup - never in a catch."""
         kS.ErrorMode = False
         kS.Errors = []
-        kErrorReport.Reset()
+        if not kErrorReport.HoldForView:  # undecided reports wait for the person's Yes/No even after Resume
+            kErrorReport.Reset()
 
     @staticmethod
     def FirstError():

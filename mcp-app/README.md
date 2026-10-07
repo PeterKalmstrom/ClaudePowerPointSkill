@@ -61,6 +61,7 @@ Needs Windows, desktop PowerPoint and [uv](https://docs.astral.sh/uv/). In a hos
 | `powerpoint_fix` | Claude, view | Apply a lint fix to one shape, live |
 | `powerpoint_history` / `powerpoint_restore` | Claude, view | List saved versions / put one back |
 | `powerpoint_resume` | Claude, view | Re-arm the server after an unexpected error halted it |
+| `error_reports`, `error_report_answer` | view only | Error reports waiting for the person's Yes/No ("Do you want to send this error message?"); nothing is sent without Yes |
 | `slide_state`, `slide_image`, `deck_outline`, `slide_thumbs`, `deck_lint`, `history_thumb` | view only | What the views draw |
 
 Expected states (no deck open, file not found, not on Windows, a shape that is gone) come back as tool errors with

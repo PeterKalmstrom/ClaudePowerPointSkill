@@ -1,0 +1,18 @@
+[
+  {"query": "Add a slide to the quarterly-review.pptx I have open showing revenue grew 12% this quarter", "should_trigger": true},
+  {"query": "Make me a 10-slide PowerPoint deck about our cloud migration plan for the board meeting on Friday", "should_trigger": true},
+  {"query": "Can you check my deck C:\\talks\\keynote.pptx for slides with too much text or fonts that are too small?", "should_trigger": true},
+  {"query": "I present this deck in two days - help me add timing to the speaker notes and make a Q&A cheat sheet", "should_trigger": true},
+  {"query": "Embed this mp4 on slide 7 so it plays automatically, and it's 90 MB so make it smaller first", "should_trigger": true},
+  {"query": "The PowerPoint MCP tools stopped showing up in Claude Code after I updated, it says connection closed", "should_trigger": true},
+  {"query": "Generate a background image for my title slide with an AI image model, no text in it", "should_trigger": true},
+  {"query": "Write a python-pptx script on our Linux build server that turns this JSON into a slide deck", "should_trigger": true},
+  {"query": "The bullets on slide 4 should fly in one at a time - add animations to my presentation", "should_trigger": true},
+  {"query": "Rebuild the training deck from the source files but my colleague edited a few slides by hand yesterday", "should_trigger": true},
+  {"query": "Write a Word document summarising the meeting notes I pasted", "should_trigger": false},
+  {"query": "Make a bar chart of these sales figures in Excel with a trend line", "should_trigger": false},
+  {"query": "Build an HTML landing page for our product launch with a hero section", "should_trigger": false},
+  {"query": "Convert this PDF invoice into a CSV of line items", "should_trigger": false},
+  {"query": "Give me five talking points for my team standup tomorrow, just as a bulleted list here in chat", "should_trigger": false},
+  {"query": "Fix the failing unit test in src/parser.ts", "should_trigger": false}
+]

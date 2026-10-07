@@ -20,7 +20,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INFRA = {"kS", "kRun", "kToolException", "ToolInputException", "ToolReportableException"}
+INFRA = {"kS", "kRun", "kErrorDetail", "kErrorReport", "kToolException", "ToolInputException", "ToolReportableException"}
 
 
 class kPatternAudit:

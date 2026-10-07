@@ -8,37 +8,84 @@ look at the render (faces and subjects get cut).
     uvx --with pillow python cover_crop.py photo.jpg --box 1440x610 [--focus-y 0.4] --out photo.crop.jpg
 """
 import argparse
+import os
+import re
 
 from PIL import Image
 
+from kShared import ToolReportableException, kRun, kS, kToolException
 
-def distortion(img_w, img_h, box_w, box_h):
-    """Horizontal stretch in % if the image were forced into the box."""
-    return ((box_w / box_h) / (img_w / img_h) - 1) * 100
+BOX_PATTERN = re.compile(r"^\s*([0-9]*\.?[0-9]+)\s*x\s*([0-9]*\.?[0-9]+)\s*$")
 
 
-def cover_crop(img, box_w, box_h, focus_x=0.5, focus_y=0.5):
-    target = box_w / box_h
-    w, h = img.size
-    if w / h > target:  # too wide -> crop sides
-        nw = round(h * target)
-        x = round((w - nw) * focus_x)
-        return img.crop((x, 0, x + nw, h))
-    nh = round(w / target)  # too tall -> crop top/bottom
-    y = round((h - nh) * focus_y)
-    return img.crop((0, y, w, y + nh))
+class kCoverCrop:
+    """Cover-crop geometry."""
+
+    @staticmethod
+    def Distortion(ImageWidth, ImageHeight, BoxWidth, BoxHeight):
+        """Horizontal stretch in % if the image were forced into the box."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            return ((BoxWidth / BoxHeight) / (ImageWidth / ImageHeight) - 1) * 100
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCoverCrop.Distortion")
+            return 0.0
+
+    @staticmethod
+    def Crop(Img, BoxWidth, BoxHeight, FocusX=0.5, FocusY=0.5):
+        """The largest crop of Img with the box's ratio, positioned by the focus point."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Target = BoxWidth / BoxHeight
+            Width, Height = Img.size
+            if Width / Height > Target:  # too wide -> crop sides
+                NewWidth = round(Height * Target)
+                X = round((Width - NewWidth) * FocusX)
+                return Img.crop((X, 0, X + NewWidth, Height))
+            NewHeight = round(Width / Target)  # too tall -> crop top/bottom
+            Y = round((Height - NewHeight) * FocusY)
+            return Img.crop((0, Y, Width, Y + NewHeight))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCoverCrop.Crop")
+            return None
+
+
+class kCoverCropApp:
+    """Command line."""
+
+    def Run(self):
+        if kS.ErrorMode:
+            return 1
+        try:
+            Parser = argparse.ArgumentParser()
+            Parser.add_argument("image")
+            Parser.add_argument("--box", required=True, help="width x height (any unit, only the ratio counts)")
+            Parser.add_argument("--focus-x", type=float, default=0.5)
+            Parser.add_argument("--focus-y", type=float, default=0.5)
+            Parser.add_argument("--out", required=True)
+            Args = Parser.parse_args()
+            Box = BOX_PATTERN.match(Args.box.lower())
+            if not Box or float(Box.group(1)) <= 0 or float(Box.group(2)) <= 0:
+                raise ToolReportableException(f"--box must be WIDTHxHEIGHT with positive numbers, got {Args.box!r}")
+            if not os.path.isfile(Args.image):
+                raise ToolReportableException(f"not found: {Args.image}")
+            BoxWidth, BoxHeight = float(Box.group(1)), float(Box.group(2))
+            Img = Image.open(Args.image)
+            print(f"stretch if inserted as-is: {kCoverCrop.Distortion(*Img.size, BoxWidth, BoxHeight):+.0f}% horizontal")
+            Cropped = kCoverCrop.Crop(Img, BoxWidth, BoxHeight, Args.focus_x, Args.focus_y)
+            if Cropped is None:
+                return 1
+            Cropped.save(Args.out)
+            print(Args.out)
+            return 0
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCoverCropApp.Run")
+            return 1
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("image")
-    ap.add_argument("--box", required=True, help="width x height (any unit, only the ratio counts)")
-    ap.add_argument("--focus-x", type=float, default=0.5)
-    ap.add_argument("--focus-y", type=float, default=0.5)
-    ap.add_argument("--out", required=True)
-    a = ap.parse_args()
-    bw, bh = (float(x) for x in a.box.lower().split("x"))
-    img = Image.open(a.image)
-    print(f"stretch if inserted as-is: {distortion(*img.size, bw, bh):+.0f}% horizontal")
-    cover_crop(img, bw, bh, a.focus_x, a.focus_y).save(a.out)
-    print(a.out)
+    kRun.Main(kCoverCropApp)

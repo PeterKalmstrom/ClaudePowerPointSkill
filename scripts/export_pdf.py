@@ -14,39 +14,75 @@ import argparse
 import os
 import sys
 
-from _ppt import norm, open_deck
+from _ppt import kPpt, kPptSession
+from kShared import ToolReportableException, kRun, kS, kToolException
 
 HANDOUT = {1: 10, 2: 2, 3: 3, 4: 8, 6: 4, 9: 9}  # slides/page -> ppPrintOutputType
 PP_FIXED_FORMAT_PDF, PP_INTENT_PRINT, PP_PRINT_ALL, PP_SAVE_AS_PDF = 2, 2, 1, 32
 
 
-def export(pres, out, output_type):
-    ranges = pres.PrintOptions.Ranges
-    ranges.ClearAll()
-    print_range = ranges.Add(1, pres.Slides.Count)
-    pres.ExportAsFixedFormat(
-        Path=out, FixedFormatType=PP_FIXED_FORMAT_PDF, Intent=PP_INTENT_PRINT,
-        FrameSlides=0, HandoutOrder=1, OutputType=output_type, PrintHiddenSlides=0,
-        PrintRange=print_range, RangeType=PP_PRINT_ALL)
+class kPdfExporter:
+    """One PDF export of one deck."""
+
+    @staticmethod
+    def Export(Path, Out, Mode, OutputType):
+        """Write the PDF; returns how it was written ("ExportAsFixedFormat" or the fallback note)."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Method = ""
+            with kPptSession(Path) as Pres:
+                if Pres is None:
+                    return ""
+                try:
+                    Ranges = Pres.PrintOptions.Ranges
+                    Ranges.ClearAll()
+                    PrintRange = Ranges.Add(1, Pres.Slides.Count)
+                    Pres.ExportAsFixedFormat(
+                        Path=Out, FixedFormatType=PP_FIXED_FORMAT_PDF, Intent=PP_INTENT_PRINT,
+                        FrameSlides=0, HandoutOrder=1, OutputType=OutputType, PrintHiddenSlides=0,
+                        PrintRange=PrintRange, RangeType=PP_PRINT_ALL)
+                    Method = "ExportAsFixedFormat"
+                except Exception as Failure:  # ERROR-SUPPRESSED-JUSTIFIED: the pywin32 PrintRange trap - slides mode is corrected by SaveCopyAs, other modes are reported
+                    if Mode != "slides":
+                        raise ToolReportableException(f"ExportAsFixedFormat failed for {Mode} mode: {Failure}")
+                    Pres.SaveCopyAs(Out, PP_SAVE_AS_PDF)
+                    Method = f"SaveCopyAs fallback (ExportAsFixedFormat failed: {Failure})"
+            return Method
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kPdfExporter.Export(file={Path}, mode={Mode})")
+            return ""
 
 
-ap = argparse.ArgumentParser()
-ap.add_argument("--file", required=True)
-ap.add_argument("--mode", choices=["slides", "notes", "handout"], default="notes")
-ap.add_argument("--slides-per-page", type=int, default=6, choices=sorted(HANDOUT))
-ap.add_argument("--out")
-a = ap.parse_args()
+class kExportPdfApp:
+    """Command line."""
 
-output_type = {"slides": 1, "notes": 5}.get(a.mode) or HANDOUT[a.slides_per_page]
-out = norm(a.out or f"{os.path.splitext(a.file)[0]}.{a.mode}.pdf")
-with open_deck(a.file) as pres:
-    try:
-        export(pres, out, output_type)
-        method = "ExportAsFixedFormat"
-    except Exception as e:
-        if a.mode != "slides":
-            sys.exit(f"ExportAsFixedFormat failed for {a.mode} mode: {e}")
-        pres.SaveCopyAs(out, PP_SAVE_AS_PDF)
-        method = f"SaveCopyAs fallback (ExportAsFixedFormat failed: {e})"
-print(out)
-print(f"method: {method}", file=sys.stderr)
+    def Run(self):
+        if kS.ErrorMode:
+            return 1
+        try:
+            Parser = argparse.ArgumentParser()
+            Parser.add_argument("--file", required=True)
+            Parser.add_argument("--mode", choices=["slides", "notes", "handout"], default="notes")
+            Parser.add_argument("--slides-per-page", type=int, default=6, choices=sorted(HANDOUT))
+            Parser.add_argument("--out")
+            Args = Parser.parse_args()
+            OutputType = {"slides": 1, "notes": 5}.get(Args.mode) or HANDOUT[Args.slides_per_page]
+            Out = kPpt.Norm(Args.out or f"{os.path.splitext(Args.file)[0]}.{Args.mode}.pdf")
+            Method = kPdfExporter.Export(Args.file, Out, Args.mode, OutputType)
+            if kS.ErrorMode:
+                return 1
+            print(Out)
+            print(f"method: {Method}", file=sys.stderr)
+            return 0
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kExportPdfApp.Run")
+            return 1
+
+
+if __name__ == "__main__":
+    kRun.Main(kExportPdfApp)

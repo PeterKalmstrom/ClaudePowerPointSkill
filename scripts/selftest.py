@@ -209,7 +209,8 @@ def main():
     check("backup_snapshot: copy written", code == 0 and os.path.exists(out.strip()), out)
 
     sys.path.insert(0, HERE)
-    from _rules import looks_like_label as label
+    from _rules import kRules
+    label = kRules.LooksLikeLabel
     check("rules: 'Decisions' is a label", label("Decisions"))
     check("rules: 'The check comes first' is a claim", not label("The check comes first"))
     check("rules: a question is not flagged", not label("Why Claude?"))
@@ -286,15 +287,15 @@ def main():
     check("build_deck: rejects a spec that breaks pattern limits", code == 2 and "needs 3-6" in out
           and "needs a 'title'" in out, out)
     sys.path.insert(0, HERE)
-    from _rules import contrast_ratio
+    from _rules import kRules
     dirs = json.load(open(os.path.join(HERE, "directions.json"), encoding="utf-8"))["directions"]
-    from build_deck import quiet_and_muted
+    from build_deck import kDeckDesign
     weak = []
     for d in dirs:
-        quiet, muted = quiet_and_muted(d)
-        if (contrast_ratio(d["text"], d["background"]) < 7 or contrast_ratio(muted, d["background"]) < 4.5
-                or contrast_ratio(muted, quiet) < 4.5 or contrast_ratio(d["text"], quiet) < 7
-                or contrast_ratio(d["accent"], d["background"]) < 3 or contrast_ratio(d["background"], d["accent"]) < 4.5):
+        quiet, muted = kDeckDesign.QuietAndMuted(d)
+        if (kRules.ContrastRatio(d["text"], d["background"]) < 7 or kRules.ContrastRatio(muted, d["background"]) < 4.5
+                or kRules.ContrastRatio(muted, quiet) < 4.5 or kRules.ContrastRatio(d["text"], quiet) < 7
+                or kRules.ContrastRatio(d["accent"], d["background"]) < 3 or kRules.ContrastRatio(d["background"], d["accent"]) < 4.5):
             weak.append(d["id"])
     check(f"directions: all {len(dirs)} pass contrast (text 7:1; muted 4.5:1 on background and cards; "
           "background-on-accent 4.5:1)", not weak, ", ".join(weak))

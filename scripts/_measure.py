@@ -13,6 +13,8 @@ from functools import lru_cache
 
 from PIL import ImageFont
 
+from kShared import kS
+
 LINE_HEIGHT = 1.2      # PowerPoint single spacing is ~1.2 x the font size
 METRIC_TWINS = {       # same advance widths as the original
     "calibri": "carlito", "calibri light": "carlito", "cambria": "caladea",
@@ -33,79 +35,113 @@ FONT_DIRS = [os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),
              os.path.expanduser("~/Library/Fonts")]
 
 
-@lru_cache(maxsize=1)
-def _index():
-    """family (lower case) -> {"regular": path, "bold": path}"""
-    idx = {}
-    for d in FONT_DIRS:
-        for path in glob.glob(os.path.join(d, "**", "*.[tT][tT][fFcC]"), recursive=True) + \
-                glob.glob(os.path.join(d, "**", "*.[oO][tT][fF]"), recursive=True):
-            try:
-                family, style = ImageFont.truetype(path, 10).getname()
-            except (OSError, ValueError):
-                continue
-            slot = "bold" if "bold" in style.lower() and "italic" not in style.lower() else \
-                ("regular" if style.lower() in ("regular", "book", "normal", "roman") else None)
-            if slot:
-                idx.setdefault(family.lower(), {}).setdefault(slot, path)
-    return idx
+class kMeasure:
+    """Stateless text measurement from real font metrics."""
 
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def Index():
+        """family (lower case) -> {"regular": path, "bold": path}"""
+        if kS.ErrorMode:
+            return {}
+        try:
+            Idx = {}
+            for D in FONT_DIRS:
+                for Path in glob.glob(os.path.join(D, "**", "*.[tT][tT][fFcC]"), recursive=True) + \
+                        glob.glob(os.path.join(D, "**", "*.[oO][tT][fF]"), recursive=True):
+                    try:
+                        Family, Style = ImageFont.truetype(Path, 10).getname()
+                    except (OSError, ValueError):  # ERROR-SUPPRESSED-JUSTIFIED: an unreadable font file is skipped, the others still index
+                        continue
+                    Slot = "bold" if "bold" in Style.lower() and "italic" not in Style.lower() else \
+                        ("regular" if Style.lower() in ("regular", "book", "normal", "roman") else None)
+                    if Slot:
+                        Idx.setdefault(Family.lower(), {}).setdefault(Slot, Path)
+            return Idx
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.Index")
+            return {}
 
-@lru_cache(maxsize=256)
-def _font(family, bold, size_px):
-    """(ImageFont, width factor) for a family; factor scales a stand-in font's widths."""
-    idx = _index()
-    fam = (family or "").lower().strip()
-    for name, factor in ((fam, 1.0), (METRIC_TWINS.get(fam, ""), 1.0),
-                         ("liberation sans", WIDTH_FACTOR.get(fam, 1.0)),
-                         ("dejavu sans", WIDTH_FACTOR.get(fam, 1.0) * 0.9)):
-        files = idx.get(name)
-        if files:
-            path = files.get("bold" if bold else "regular") or files.get("regular") or next(iter(files.values()))
-            return ImageFont.truetype(path, size_px), factor
-    return None, WIDTH_FACTOR.get(fam, 1.0)
+    @staticmethod
+    @lru_cache(maxsize=256)
+    def Font(Family, Bold, SizePx):
+        """(ImageFont, width factor) for a family; factor scales a stand-in font's widths."""
+        if kS.ErrorMode:
+            return None, 1.0
+        try:
+            Idx = kMeasure.Index()
+            Fam = (Family or "").lower().strip()
+            for Name, Factor in ((Fam, 1.0), (METRIC_TWINS.get(Fam, ""), 1.0),
+                                 ("liberation sans", WIDTH_FACTOR.get(Fam, 1.0)),
+                                 ("dejavu sans", WIDTH_FACTOR.get(Fam, 1.0) * 0.9)):
+                Files = Idx.get(Name)
+                if Files:
+                    Path = Files.get("bold" if Bold else "regular") or Files.get("regular") or next(iter(Files.values()))
+                    return ImageFont.truetype(Path, SizePx), Factor
+            return None, WIDTH_FACTOR.get(Fam, 1.0)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.Font")
+            return None, 1.0
 
+    @staticmethod
+    def TextWidth(Text, Family, SizePt, Bold=False):
+        """Advance width of `Text` in points."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            Scale = 4  # measure at 4 px per pt for precision
+            Font, Factor = kMeasure.Font(Family, bool(Bold), max(1, round(SizePt * Scale)))
+            if Font is None:
+                return len(Text) * 0.5 * SizePt * Factor
+            return Font.getlength(Text) / Scale * Factor
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.TextWidth")
+            return 0.0
 
-def text_width(text, family, size_pt, bold=False):
-    """Advance width of `text` in points."""
-    scale = 4  # measure at 4 px per pt for precision
-    font, factor = _font(family, bool(bold), max(1, round(size_pt * scale)))
-    if font is None:
-        return len(text) * 0.5 * size_pt * factor
-    return font.getlength(text) / scale * factor
+    @staticmethod
+    def Wrap(Text, Family, SizePt, WidthPt, Bold=False):
+        """Greedy word wrap. Returns (lines, widest_word_pt)."""
+        if kS.ErrorMode:
+            return 0, 0.0
+        try:
+            Lines, Widest = 0, 0.0
+            Space = kMeasure.TextWidth(" ", Family, SizePt, Bold)
+            for Para in re.split(r"[\r\n\v]+", Text) or [""]:
+                Words = Para.split()
+                if not Words:
+                    Lines += 1
+                    continue
+                Cur = 0.0
+                Lines += 1
+                for W in Words:
+                    Ww = kMeasure.TextWidth(W, Family, SizePt, Bold)
+                    Widest = max(Widest, Ww)
+                    if Cur and Cur + Space + Ww > WidthPt:
+                        Lines += 1
+                        Cur = Ww
+                    else:
+                        Cur = Cur + (Space if Cur else 0) + Ww
+                    while Cur > WidthPt and WidthPt > 0:  # a word wider than the line breaks inside itself
+                        Lines += 1
+                        Cur -= WidthPt
+            return Lines, Widest
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.Wrap")
+            return 0, 0.0
 
-
-def wrap(text, family, size_pt, width_pt, bold=False):
-    """Greedy word wrap. Returns (lines, widest_word_pt)."""
-    lines, widest = 0, 0.0
-    space = text_width(" ", family, size_pt, bold)
-    for para in re.split(r"[\r\n\v]+", text) or [""]:
-        words = para.split()
-        if not words:
-            lines += 1
-            continue
-        cur = 0.0
-        lines += 1
-        for w in words:
-            ww = text_width(w, family, size_pt, bold)
-            widest = max(widest, ww)
-            if cur and cur + space + ww > width_pt:
-                lines += 1
-                cur = ww
-            else:
-                cur = cur + (space if cur else 0) + ww
-            while cur > width_pt and width_pt > 0:  # a word wider than the line breaks inside itself
-                lines += 1
-                cur -= width_pt
-    return lines, widest
-
-
-def text_height(paragraphs, width_pt):
-    """paragraphs: [(text, family, size_pt, bold, space_before_pt)] -> (height_pt, widest_word_pt, lines)."""
-    height, widest, total = 0.0, 0.0, 0
-    for i, (text, family, size, bold, before) in enumerate(paragraphs):
-        n, w = wrap(text, family, size, width_pt, bold)
-        height += n * size * LINE_HEIGHT + (before if i else 0)
-        widest = max(widest, w)
-        total += n
-    return height, widest, total
+    @staticmethod
+    def TextHeight(Paras, Width):
+        """Paras: [(text, family, size_pt, bold, space_before_pt)] -> (height_pt, widest_word_pt, lines)."""
+        if kS.ErrorMode:
+            return 0.0, 0.0, 0
+        try:
+            Height, Widest, Total = 0.0, 0.0, 0
+            for I, (Text, Family, Size, Bold, Before) in enumerate(Paras):
+                N, W = kMeasure.Wrap(Text, Family, Size, Width, Bold)
+                Height += N * Size * LINE_HEIGHT + (Before if I else 0)
+                Widest = max(Widest, W)
+                Total += N
+            return Height, Widest, Total
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.TextHeight")
+            return 0.0, 0.0, 0

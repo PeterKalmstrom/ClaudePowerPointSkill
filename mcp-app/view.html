@@ -169,6 +169,7 @@
   </section>
 
   <div class="err" id="err" hidden></div>
+  <button id="resume" hidden>Resume</button>
 </div>
 <script>
 (() => {
@@ -202,6 +203,7 @@
   }
   function showError(e) {
     $("err").hidden = !e; $("err").textContent = e ? String(e.message || e) : "";
+    $("resume").hidden = !(e && String(e.message || e).includes("halted"));
     $("dot").classList.toggle("live", !e); reportSize();
   }
   const png = b64 => "data:image/png;base64," + b64;
@@ -598,6 +600,11 @@
   }
 
   // ------------------------------------------------------------ loop
+  $("resume").addEventListener("click", async () => {
+    try { await call("powerpoint_resume"); showError(null); } catch (e) { showError(e); return; }
+    refresh(true);
+  });
+
   async function refresh(force) {
     if (busy) return;
     busy = true;

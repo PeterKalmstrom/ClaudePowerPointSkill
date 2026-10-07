@@ -10,28 +10,70 @@ import tempfile
 
 from PIL import Image, ImageDraw
 
-from render_slides import render
+from kShared import ToolReportableException, kRun, kS, kToolException
+from render_slides import kSlideRenderer
 
-ap = argparse.ArgumentParser()
-ap.add_argument("--file", required=True)
-ap.add_argument("--cols", type=int, default=6)
-ap.add_argument("--slide-width", type=int, default=240)
-ap.add_argument("--out")
-a = ap.parse_args()
+CAPTION, PAD = 18, 8
 
-files = render(a.file, tempfile.mkdtemp(prefix="contact-"))
-first = Image.open(files[0])
-w = a.slide_width
-h = round(w * first.height / first.width)  # aspect ratio from the deck itself
-cap, pad = 18, 8
-rows = -(-len(files) // a.cols)
-sheet = Image.new("RGB", (a.cols * (w + pad) + pad, rows * (h + cap + pad) + pad), "white")
-draw = ImageDraw.Draw(sheet)
-for i, f in enumerate(files):
-    x = pad + (i % a.cols) * (w + pad)
-    y = pad + (i // a.cols) * (h + cap + pad)
-    sheet.paste(Image.open(f).resize((w, h)), (x, y))
-    draw.text((x, y + h + 2), str(i + 1), fill="black")
-out = a.out or os.path.splitext(a.file)[0] + "_contact.png"
-sheet.save(out)
-print(out)
+
+class kContactSheet:
+    """Lays rendered slides out as a grid."""
+
+    @staticmethod
+    def Build(Files, Cols, SlideWidth, Out):
+        """Paste the renders into one sheet and save it to Out."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if not Files:
+                raise ToolReportableException("no slides rendered")
+            First = Image.open(Files[0])
+            Width = SlideWidth
+            Height = round(Width * First.height / First.width)  # aspect ratio from the deck itself
+            Rows = -(-len(Files) // Cols)
+            Sheet = Image.new("RGB", (Cols * (Width + PAD) + PAD, Rows * (Height + CAPTION + PAD) + PAD), "white")
+            Draw = ImageDraw.Draw(Sheet)
+            for Index, File in enumerate(Files):
+                X = PAD + (Index % Cols) * (Width + PAD)
+                Y = PAD + (Index // Cols) * (Height + CAPTION + PAD)
+                Sheet.paste(Image.open(File).resize((Width, Height)), (X, Y))
+                Draw.text((X, Y + Height + 2), str(Index + 1), fill="black")
+            Sheet.save(Out)
+            return Out
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kContactSheet.Build")
+            return None
+
+
+class kContactSheetApp:
+    """Command line."""
+
+    def Run(self):
+        if kS.ErrorMode:
+            return 1
+        try:
+            Parser = argparse.ArgumentParser()
+            Parser.add_argument("--file", required=True)
+            Parser.add_argument("--cols", type=int, default=6)
+            Parser.add_argument("--slide-width", type=int, default=240)
+            Parser.add_argument("--out")
+            Args = Parser.parse_args()
+            Files = kSlideRenderer.Render(Args.file, tempfile.mkdtemp(prefix="contact-"))
+            if kS.ErrorMode:
+                return 1
+            Out = kContactSheet.Build(Files, Args.cols, Args.slide_width,
+                                      Args.out or os.path.splitext(Args.file)[0] + "_contact.png")
+            if Out:
+                print(Out)
+            return 0
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kContactSheetApp.Run")
+            return 1
+
+
+if __name__ == "__main__":
+    kRun.Main(kContactSheetApp)

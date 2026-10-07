@@ -10,66 +10,128 @@ others did not. Exit code 1 if any slide changed beyond --threshold (default: an
 """
 import argparse
 import os
-import sys
 
 import numpy as np
 from PIL import Image
 
+from kShared import ToolReportableException, kRun, kS, kToolException
+
 GRID = 8
 
 
-def dhash(img, size=16):
-    g = np.asarray(img.convert("L").resize((size + 1, size)), dtype=np.int16)
-    return (g[:, 1:] > g[:, :-1]).flatten()
+class kRenderDiff:
+    """Pixel comparison of two renders."""
+
+    @staticmethod
+    def DHash(Img, Size=16):
+        """Difference hash: one bit per horizontal neighbour pair."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Grey = np.asarray(Img.convert("L").resize((Size + 1, Size)), dtype=np.int16)
+            return (Grey[:, 1:] > Grey[:, :-1]).flatten()
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kRenderDiff.DHash")
+            return None
+
+    @staticmethod
+    def Compare(PathA, PathB):
+        """(report dict, per-pixel difference array) for two images."""
+        if kS.ErrorMode:
+            return None, None
+        try:
+            ImgA = Image.open(PathA).convert("RGB")
+            ImgB = Image.open(PathB).convert("RGB")
+            Resized = ImgA.size != ImgB.size
+            if Resized:
+                ImgB = ImgB.resize(ImgA.size)
+            Diff = np.abs(np.asarray(ImgA, dtype=np.int16) - np.asarray(ImgB, dtype=np.int16)).mean(axis=2) / 255.0
+            Height, Width = Diff.shape
+            Cells = [Diff[Row * Height // GRID:(Row + 1) * Height // GRID,
+                          Col * Width // GRID:(Col + 1) * Width // GRID].mean()
+                     for Row in range(GRID) for Col in range(GRID)]
+            Worst = int(np.argmax(Cells))
+            return {"mean_pct": round(float(Diff.mean()) * 100, 3),
+                    "worst_cell_pct": round(float(Cells[Worst]) * 100, 2),
+                    "worst_cell": f"r{Worst // GRID + 1}c{Worst % GRID + 1}",
+                    "hash_distance": int((kRenderDiff.DHash(ImgA) != kRenderDiff.DHash(ImgB)).sum()),
+                    "size_changed": Resized}, Diff
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kRenderDiff.Compare({PathA}, {PathB})")
+            return None, None
+
+    @staticmethod
+    def Heatmap(Diff, Path):
+        """Save the difference, amplified 4x, as a grey image."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Img = Image.fromarray(np.uint8(np.clip(Diff * 4, 0, 1) * 255))
+            Img.convert("RGB").save(Path)
+            return Path
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kRenderDiff.Heatmap")
+            return None
+
+    @staticmethod
+    def Index(Folder):
+        """Image files by lower-case name, so s002.png pairs with S002.PNG."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            if not os.path.isdir(Folder):
+                raise ToolReportableException(f"not a folder: {Folder}")
+            return {Name.lower(): os.path.join(Folder, Name) for Name in os.listdir(Folder)
+                    if Name.lower().endswith((".png", ".jpg"))}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kRenderDiff.Index({Folder})")
+            return {}
 
 
-def compare(a_path, b_path):
-    a = Image.open(a_path).convert("RGB")
-    b = Image.open(b_path).convert("RGB")
-    resized = a.size != b.size
-    if resized:
-        b = b.resize(a.size)
-    da = np.abs(np.asarray(a, dtype=np.int16) - np.asarray(b, dtype=np.int16)).mean(axis=2) / 255.0
-    h, w = da.shape
-    cells = [da[r * h // GRID:(r + 1) * h // GRID, c * w // GRID:(c + 1) * w // GRID].mean()
-             for r in range(GRID) for c in range(GRID)]
-    worst = int(np.argmax(cells))
-    return {"mean_pct": round(float(da.mean()) * 100, 3), "worst_cell_pct": round(float(cells[worst]) * 100, 2),
-            "worst_cell": f"r{worst // GRID + 1}c{worst % GRID + 1}",
-            "hash_distance": int((dhash(a) != dhash(b)).sum()), "size_changed": resized}, da
+class kDiffRendersApp:
+    """Command line."""
 
-
-def heatmap(diff, path):
-    img = Image.fromarray(np.uint8(np.clip(diff * 4, 0, 1) * 255))
-    img.convert("RGB").save(path)
+    def Run(self):
+        if kS.ErrorMode:
+            return 1
+        try:
+            Parser = argparse.ArgumentParser()
+            Parser.add_argument("before")
+            Parser.add_argument("after")
+            Parser.add_argument("--threshold", type=float, default=0.0, help="mean %% difference that counts as changed")
+            Parser.add_argument("--heatmaps", help="folder for per-slide difference images of changed slides")
+            Args = Parser.parse_args()
+            Before, After = kRenderDiff.Index(Args.before), kRenderDiff.Index(Args.after)
+            Names = sorted(set(Before) | set(After))
+            Changed = 0
+            for Name in Names:
+                PathA, PathB = Before.get(Name), After.get(Name)
+                if not PathA or not PathB:
+                    print(f"{Name:<10} {'ADDED' if PathB else 'REMOVED'}")
+                    Changed += 1
+                    continue
+                Report, Diff = kRenderDiff.Compare(PathA, PathB)
+                if Report is None:
+                    return 1
+                Moved = Report["size_changed"] or Report["mean_pct"] > Args.threshold or \
+                    (Args.threshold == 0 and Report["worst_cell_pct"] > 0)
+                Changed += Moved
+                Size = "  (image size changed)" if Report["size_changed"] else ""
+                print(f"{Name:<10} {'CHANGED' if Moved else 'same':<8}{Size} mean {Report['mean_pct']:.3f}%  worst cell "
+                      f"{Report['worst_cell']} {Report['worst_cell_pct']:.2f}%  hash dist {Report['hash_distance']}")
+                if Moved and Args.heatmaps:
+                    os.makedirs(Args.heatmaps, exist_ok=True)
+                    kRenderDiff.Heatmap(Diff, os.path.join(Args.heatmaps, Name.rsplit(".", 1)[0] + ".diff.png"))
+            print(f"\n{Changed} of {len(Names)} slide(s) changed")
+            return 1 if Changed else 0
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDiffRendersApp.Run")
+            return 1
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("before")
-    ap.add_argument("after")
-    ap.add_argument("--threshold", type=float, default=0.0, help="mean %% difference that counts as changed")
-    ap.add_argument("--heatmaps", help="folder for per-slide difference images of changed slides")
-    a = ap.parse_args()
-    def index(folder):  # pair names case-insensitively (s002.png == S002.PNG)
-        return {n.lower(): os.path.join(folder, n) for n in os.listdir(folder) if n.lower().endswith((".png", ".jpg"))}
-    before, after = index(a.before), index(a.after)
-    names = sorted(set(before) | set(after))
-    changed = 0
-    for n in names:
-        pa, pb = before.get(n), after.get(n)
-        if not pa or not pb:
-            print(f"{n:<10} {'ADDED' if pb else 'REMOVED'}")
-            changed += 1
-            continue
-        r, diff = compare(pa, pb)
-        moved = r["size_changed"] or r["mean_pct"] > a.threshold or (a.threshold == 0 and r["worst_cell_pct"] > 0)
-        changed += moved
-        size = "  (image size changed)" if r["size_changed"] else ""
-        print(f"{n:<10} {'CHANGED' if moved else 'same':<8}{size} mean {r['mean_pct']:.3f}%  worst cell "
-              f"{r['worst_cell']} {r['worst_cell_pct']:.2f}%  hash dist {r['hash_distance']}")
-        if moved and a.heatmaps:
-            os.makedirs(a.heatmaps, exist_ok=True)
-            heatmap(diff, os.path.join(a.heatmaps, n.rsplit(".", 1)[0] + ".diff.png"))
-    print(f"\n{changed} of {len(names)} slide(s) changed")
-    sys.exit(1 if changed else 0)
+    kRun.Main(kDiffRendersApp)

@@ -20,7 +20,7 @@
     "should_trigger": true
   },
   {
-    "query": "The PowerPoint MCP tools stopped showing up in Claude Code after I updated, it says connection closed",
+    "query": "My Python script that drives PowerPoint through COM hangs when it opens the deck",
     "should_trigger": true
   },
   {

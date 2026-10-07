@@ -104,13 +104,13 @@ txt.TextFrame.TextRange.Font.Color.RGB = 0xFFFFFF  # white in BGR
 1. **Search first** — check if Nanobanana can find relevant reference imagery
 2. **Generate** with a detailed prompt describing the visual — explicitly request NO TEXT
 3. **Upload** the generated image to the project folder
-4. **Embed** in PowerPoint via `evaluate` → `AddPicture`
+4. **Embed** in PowerPoint via COM → `AddPicture`
 5. **Overlay text** using TextBox + transparent backing rectangle
 
 ### Image embedding in PowerPoint
 
 ```python
-# In evaluate tool:
+# COM (pywin32):
 pic = slide.Shapes.AddPicture(
     r"C:\path\to\image.png",
     False,   # LinkToFile
@@ -177,8 +177,8 @@ Remotion is a React-based framework for creating programmatic video. Output is M
 
 | Use case | Tool |
 |---|---|
-| Simple entrance effects (fade, fly, zoom) | PowerPoint `add_animation` |
-| Sequential bullet reveals | PowerPoint `add_animation` with `by_paragraph` |
+| Simple entrance effects (fade, fly, zoom) | PowerPoint native animation ([ANIMATION](ANIMATION.md)) |
+| Sequential bullet reveals | PowerPoint native animation, by paragraph ([ANIMATION](ANIMATION.md)) |
 | Complex diagrams with glowing effects, particles, curves | **Remotion** |
 | Network graphs, cascade visualizations, feedback loops | **Remotion** |
 | Cinematic transitions, atmospheric builds | **Remotion** |
@@ -287,7 +287,7 @@ Remotion renders are fast enough to iterate:
 
 1. Write/modify the `.tsx` animation code
 2. Render to MP4 (~90s)
-3. Replace the video on the slide via `evaluate`
+3. Replace the video on the slide via COM
 4. Save the presentation
 5. Preview in PowerPoint presentation mode (F5)
 6. Repeat
@@ -386,7 +386,7 @@ When the result depends on a specific starting state (orientation, subject posit
 
 1. Write a Python script with the prompt (or inline it)
 2. Run via uvx → polls until video is ready (~60s)
-3. Embed the MP4 in PowerPoint via `evaluate` → `AddMediaObject2`
+3. Embed the MP4 in PowerPoint via COM → `AddMediaObject2`
 4. Done — from text prompt to video playing in a slide
 
 ---
@@ -419,7 +419,7 @@ x265, AV1 and VP9 are smaller but not safe in every PowerPoint install; stay on 
 clip needs its sound.
 
 ```python
-# In evaluate tool:
+# COM (pywin32):
 s = presentation.Slides(slide_number)
 
 # Remove old video if replacing
@@ -443,7 +443,7 @@ video.AnimationSettings.PlaySettings.HideWhileNotPlaying = False
 ### Embedding images (Nanobanana output)
 
 ```python
-# In evaluate tool:
+# COM (pywin32):
 pic = slide.Shapes.AddPicture(
     r"C:\path\to\image.png",
     False, True,
@@ -477,33 +477,33 @@ title.TextFrame.TextRange.Font.Color.RGB = 16777215  # White - check contrast on
 
 Best for: systemic risks, network effects, process cascades, escalating trends
 
-1. **PowerPoint MCP** → open deck, snapshot existing slides for context
+1. **PowerPoint (COM)** → open deck, render existing slides for context
 2. **Remotion** → build animated diagram (glowing nodes, flowing arrows, growing elements)
-3. **PowerPoint MCP** → embed MP4, add speaker notes, save
+3. **PowerPoint (COM)** → embed MP4, add speaker notes, save
 
 ### Pattern 2: "Dramatic reveal"
 
 Best for: before/after, impact stories, emotional content
 
 1. **Nanobanana** → generate atmospheric background image
-2. **PowerPoint MCP** → embed image as background, add text overlays and animations
-3. **PowerPoint MCP** → `add_animation` for progressive text reveals on top
+2. **PowerPoint (COM)** → embed image as background, add text overlays and animations
+3. **PowerPoint (COM)** → entrance animations for progressive text reveals on top
 
 ### Pattern 3: "Data + narrative"
 
 Best for: presentations mixing charts with storytelling
 
-1. **PowerPoint MCP** → create slides with native charts/shapes for data
+1. **PowerPoint (COM)** → create slides with native charts/shapes for data
 2. **Nanobanana** → generate editorial/emotional images for transition slides
 3. **Remotion** → animate the key "aha moment" visualization
-4. **PowerPoint MCP** → assemble everything, add speaker notes throughout
+4. **PowerPoint (COM)** → assemble everything, add speaker notes throughout
 
 ### Pattern 4: "Prompt to video in a slide"
 
 Best for: illustrative scenes, metaphors, product demos, any "show don't tell" moment
 
 1. **Veo 3.1** → generate video from a text description (~60 seconds)
-2. **PowerPoint MCP** → add slide, embed the MP4, save
+2. **PowerPoint (COM)** → add slide, embed the MP4, save
 
 This is the simplest and most powerful pattern. One prompt, one API call, one slide.
 

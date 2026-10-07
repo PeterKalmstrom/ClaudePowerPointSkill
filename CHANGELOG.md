@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **No third-party PowerPoint server any more:** Windows mode drives PowerPoint directly through COM
+  (`pywin32`) with the skill's own scripts. `powerpoint-mcp` and every reference to its tools are removed;
+  `reference/SETUP.md` is rewritten (install uv, verify with `selftest.py --com`).
+
 ## 2.0.0
 
 - **`scripts/fix_deck.py`:** repairs what `lint_deck.py` finds mechanically — empty placeholders, text below the

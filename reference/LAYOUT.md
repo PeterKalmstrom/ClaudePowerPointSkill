@@ -123,7 +123,7 @@ Pillow `ImageFont.getlength`) and pick the size from that, not from the characte
 **Symptom:** a deck whose display font is embedded but not installed renders fine in PowerPoint, but PNGs from
 `slide.Export(...)` show the display type in an Arial-like fallback. The fallback is narrower, so a real mid-word
 break that the audience will see renders clean in the PNG and passes review. `prs.Fonts(name).Embedded == -1` only
-proves the font is in the file, not that the renderer used it. The MCP's `slide_snapshot` uses `Slide.Export` too, so
+proves the font is in the file, not that the renderer used it. Any tool that renders through `Slide.Export` does too, so
 **don't trust its screenshots for embedded fonts.**
 
 **Fix:** render through PowerPoint's own File → Save As → JPEG, which does use the embedded font:

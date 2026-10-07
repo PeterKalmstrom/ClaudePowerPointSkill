@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **PowerPoint Live, round 2:** change highlights; lint findings drawn on the slide with live one-click fixes
+  (`powerpoint_fix`); before/after slider; point at a shape or area and ask Claude (`ui/message`); a version saved
+  before every change with a History view and `powerpoint_restore`; slide sorter multi-select, hide/unhide and
+  section add/rename/delete (`powerpoint_sections`, `powerpoint_hide`); a Storyline view of the titles; an
+  accurate (Save As) preview toggle.
+
 - **No third-party PowerPoint server any more:** Windows mode drives PowerPoint directly through COM
   (`pywin32`) with the skill's own scripts. `powerpoint-mcp` and every reference to its tools are removed;
   `reference/SETUP.md` is rewritten (install uv, verify with `selftest.py --com`).

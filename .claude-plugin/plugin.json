@@ -25,6 +25,10 @@
         "--with",
         "mcp<2",
         "--with",
+        "python-pptx",
+        "--with",
+        "pillow",
+        "--with",
         "pywin32; sys_platform == 'win32'",
         "python",
         "${CLAUDE_PLUGIN_ROOT}/mcp-app/server.py"

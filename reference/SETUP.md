@@ -53,7 +53,7 @@ against the deck) and `powerpoint_show`. In hosts that support MCP Apps it shows
 changes. The plugin registers it; by hand:
 
 ```powershell
-claude mcp add --scope user powerpoint-live -- uvx --with "mcp<2" --with "pywin32; sys_platform == 'win32'" python <skill folder>\mcp-app\server.py
+claude mcp add --scope user powerpoint-live -- uvx --with "mcp<2" --with python-pptx --with pillow --with "pywin32; sys_platform == 'win32'" python <skill folder>\mcp-app\server.py
 ```
 
 ---

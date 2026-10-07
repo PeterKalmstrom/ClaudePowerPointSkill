@@ -11,7 +11,9 @@ Tools for the model:
   powerpoint_open   open a deck (or attach to an open one by name) and show a slide
   powerpoint_run    run Python against the deck: `app`, `prs`, `slide` (current), `goto(n)`, `win32com` in scope
   powerpoint_show   make slide n the current slide
-Tools only the view calls: slide_state (cheap change signature) and slide_image (PNG of a slide).
+  powerpoint_move   move a slide (before another slide, or to the end of a section)
+Tools only the view calls: slide_state (cheap change signature), slide_image (PNG of a slide), deck_outline
+(sections and slides for the slide sorter) and slide_thumbs (small PNGs, cached by content).
 The view polls slide_state about once a second and re-renders when the slide changes - whether Claude, a
 script or a person changed it.
 """
@@ -193,6 +195,101 @@ def _image(slide, width):
             "signature": _signature(prs, n)}
 
 
+def _title(sl):
+    for sh in sl.Shapes:
+        try:
+            if sh.Type == 14 and sh.PlaceholderFormat.Type in (1, 3) and sh.TextFrame.HasText:  # title, ctrTitle
+                return sh.TextFrame.TextRange.Text.strip()
+        except Exception:  # a placeholder without a usable PlaceholderFormat: skip it, look at the next shape
+            continue
+    return ""
+
+
+def _sections(prs):
+    sp = prs.SectionProperties
+    out = []
+    for i in range(1, sp.Count + 1):
+        out.append({"index": i, "name": sp.Name(i), "first": sp.FirstSlide(i), "count": sp.SlidesCount(i)})
+    return out
+
+
+def _outline():
+    prs = _prs()
+    sections = _sections(prs) or [{"index": 0, "name": "", "first": 1, "count": prs.Slides.Count}]
+    slides = []
+    for n in range(1, prs.Slides.Count + 1):
+        sl = prs.Slides(n)
+        slides.append({"index": n, "id": sl.SlideID, "section": sl.sectionIndex if prs.SectionProperties.Count else 0,
+                       "title": _title(sl), "hidden": bool(sl.SlideShowTransition.Hidden),
+                       "signature": _signature(prs, n)})
+    for sec in sections:
+        sec["slides"] = [x["id"] for x in slides if x["section"] == sec["index"]]
+    return {**_summary(prs), "sections": sections, "slides": slides}
+
+
+_thumbs = {}
+
+
+def _thumbs_for(ids, width):
+    prs = _prs()
+    out = []
+    for sid in ids:
+        try:
+            sl = prs.Slides.FindBySlideID(int(sid))
+        except Exception:  # the slide was deleted since the outline was read: nothing to draw
+            continue
+        sig = _signature(prs, sl.SlideIndex)
+        key = (prs.FullName, sid, sig, width)
+        if key not in _thumbs:
+            h = round(width * prs.PageSetup.SlideHeight / prs.PageSetup.SlideWidth)
+            fd, path = tempfile.mkstemp(suffix=".png")
+            os.close(fd)
+            try:
+                sl.Export(path, "PNG", width, h)
+                with open(path, "rb") as f:
+                    _thumbs[key] = base64.b64encode(f.read()).decode()
+            finally:
+                os.remove(path)
+            if len(_thumbs) > 400:
+                _thumbs.pop(next(iter(_thumbs)))
+        out.append({"id": sid, "signature": sig, "png": _thumbs[key]})
+    return {"thumbs": out}
+
+
+def _move(slide_id, before_id, section):
+    prs = _prs()
+    sl = prs.Slides.FindBySlideID(int(slide_id))
+    cur_id = prs.Slides(S.current).SlideID if S.current else None
+    has_sections = prs.SectionProperties.Count > 0
+    if before_id:
+        if int(before_id) == int(slide_id):
+            return {**_summary(prs), "moved": False}
+        b = prs.Slides.FindBySlideID(int(before_id))
+        bi, bsec = b.SlideIndex, (b.sectionIndex if has_sections else 0)
+        starts_section = has_sections and prs.SectionProperties.FirstSlide(bsec) == bi
+        if starts_section:
+            sl.MoveToSectionStart(bsec)
+        else:
+            sl.MoveTo(bi - 1 if sl.SlideIndex < bi else bi)
+    elif has_sections and section:
+        sp = prs.SectionProperties
+        sec = int(section)
+        if sp.SlidesCount(sec) == 0 or (sp.SlidesCount(sec) == 1 and sl.sectionIndex == sec):
+            sl.MoveToSectionStart(sec)
+        else:
+            last = sp.FirstSlide(sec) + sp.SlidesCount(sec) - 1
+            sl.MoveTo(last if sl.SlideIndex <= last else last + 1)
+            if sl.sectionIndex != sec:  # landed on the far side of the boundary
+                sl.MoveTo(sl.SlideIndex - 1)
+    else:
+        sl.MoveTo(prs.Slides.Count)
+    if cur_id is not None:
+        S.current = prs.Slides.FindBySlideID(cur_id).SlideIndex
+    S.version += 1
+    return {**_summary(prs), "moved": True, "now_at": sl.SlideIndex,
+            "section": sl.sectionIndex if has_sections else 0}
+
+
 # ---------------------------------------------------------------- MCP surface
 
 @mcp.resource(URI, name="PowerPoint Live slide view", mime_type=MIME,
@@ -222,6 +319,26 @@ async def powerpoint_run(code: str, slide: int = 0) -> dict:
 async def powerpoint_show(slide: int) -> dict:
     """Make slide n (1-based) the current slide in the live view and the PowerPoint window."""
     return await on_com(_show, slide)
+
+
+@mcp.tool(meta=UI)
+async def powerpoint_move(slide_id: int, before_slide_id: int = 0, section: int = 0) -> dict:
+    """Rearrange slides. Move the slide with SlideID `slide_id` so it sits just before `before_slide_id`, or (with
+    `section`, 1-based) at the end of that section; neither = to the end of the deck. SlideIDs are stable across
+    moves - get them from prs.Slides(n).SlideID. The slide sorter view uses this for drag and drop."""
+    return await on_com(_move, slide_id, before_slide_id, section)
+
+
+@mcp.tool(meta=APP_ONLY)
+async def deck_outline() -> dict:
+    """(View only) Sections and slides (id, index, title, hidden, change signature) for the slide sorter."""
+    return await on_com(_outline)
+
+
+@mcp.tool(meta=APP_ONLY)
+async def slide_thumbs(slide_ids: list[int], width: int = 320) -> dict:
+    """(View only) Small PNGs of the given slides, cached by content."""
+    return await on_com(_thumbs_for, slide_ids[:12], max(120, min(width, 640)))
 
 
 @mcp.tool(meta=APP_ONLY)

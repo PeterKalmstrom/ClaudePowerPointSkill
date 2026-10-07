@@ -8,7 +8,7 @@
 
 - **PowerPoint Live (`mcp-app/`):** the skill's own MCP server for Windows — open, run Python against and show
   slides — with an MCP App view that shows the current slide live as Claude, a script or a person changes it.
-  Registered by the plugin.
+  A slide sorter view groups thumbnails by section and rearranges slides by drag and drop. Registered by the plugin.
 
 ## 2.0.0
 

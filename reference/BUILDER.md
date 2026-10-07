@@ -16,12 +16,15 @@ uvx --with python-pptx --with pillow --with pyyaml python scripts/build_deck.py 
 python scripts/build_deck.py --list-directions
 ```
 
-Exit code 2 means the spec broke a limit (each problem is printed); fix the content rather than reaching
+Text is measured as it is placed and stepped down (never below the 27 pt floor for sentences) until it fits its
+box; exit code 3 means something still didn't fit — each case is printed as `fit: slide N …` — so cut words
+or split the slide. Exit code 2 means the spec broke a limit (each problem is printed); fix the content rather than reaching
 for `--force` — the limits are the word budgets in [LAYOUT.md](LAYOUT.md) made concrete. A complete
 example covering every pattern is [`examples/spec/sample-deck.json`](../examples/spec/sample-deck.json);
 its output, rendered with LibreOffice, is [`sample-deck.png`](../examples/spec/sample-deck.png).
 
-Hand-edit a built deck freely, but before rebuilding, harvest the edits — see *A generated deck that
+Hand-edit a built deck freely, but before rebuilding, harvest the edits with `scripts/harvest_edits.py`
+(manifest after each build → harvest before rebuilding → restore after) — see *A generated deck that
 people also edit* in [COM.md](COM.md#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite).
 
 ## Spec shape

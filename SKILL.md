@@ -14,7 +14,7 @@ only the reference file the task needs.
 | Task | Read, in order |
 |---|---|
 | **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · write a spec and build it with `scripts/build_deck.py` ([BUILDER](reference/BUILDER.md), looks in [DESIGN](reference/DESIGN.md)) · showcase-first (below) · the build loop (below) |
-| **Edit an existing deck** | Snapshot first · find the deck by name ([COM](reference/COM.md)) · bulk-read before judging ([AUDIT](reference/AUDIT.md)) |
+| **Edit an existing deck** | Snapshot first · `scripts/read_deck.py` before judging ([AUDIT](reference/AUDIT.md)) · find the open deck by name ([COM](reference/COM.md)) · rebuilding a generated deck? `scripts/harvest_edits.py` first |
 | **Review / audit a deck** | `scripts/lint_deck.py` first (any OS), then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
 | **Before a talk** | Audit clean first, then [PRESENTING](reference/PRESENTING.md) |
 | **Images, video, Remotion, Veo** | [MEDIA](reference/MEDIA.md), then [ANIMATION](reference/ANIMATION.md) if it moves |
@@ -35,7 +35,7 @@ only the reference file the task needs.
 | [BUILDER.md](reference/BUILDER.md) | Spec-driven deck builder: patterns, limits, chart and type defaults | Any OS |
 | [DESIGN.md](reference/DESIGN.md) | Type scale for Full HD, spacing, chart and table defaults, 20 design directions | Any OS |
 | [CONTENT.md](reference/CONTENT.md) | Audience, claim titles, cognitive load, speaker notes, showcase-first | Any OS |
-| [AUDIT.md](reference/AUDIT.md) | Bulk read, defect catalogue with severities, full audit procedure | Scripts Windows; catalogue any OS |
+| [AUDIT.md](reference/AUDIT.md) | Lint codes, reading a whole deck, defect catalogue with severities, full audit procedure | Scripts Windows; catalogue any OS |
 | [PRESENTING.md](reference/PRESENTING.md) | Timing markers, Q&A sheet, notes PDF, rehearsal | Windows + PowerPoint |
 | [AUTOMATION.md](reference/AUTOMATION.md) | Headless PowerPoint for checks, building .pptx without COM | Headless Windows; no-COM any OS |
 | [LABELS.md](reference/LABELS.md) | Sensitivity labels and what encryption breaks | Any OS |
@@ -47,7 +47,7 @@ These apply to every deck. Each links to its full explanation.
 1. **Snapshot before anything destructive** — `scripts/backup_snapshot.py`. Undo is not a backup. ([COM](reference/COM.md#snapshot-before-any-risky-bulk-edit))
 2. **Never trust `ActivePresentation`** — find the deck by exact name, then substring. ([COM](reference/COM.md#multi-presentation-safety--never-trust-activepresentation))
 3. **Rebuild, don't patch** — one idempotent `build_slide_NN.py` per non-trivial slide; name every shape. Three patches = rewrite. ([COM](reference/COM.md#idempotent-build-scripts))
-4. **Never overwrite people's edits** — harvest hand-edited slides before regenerating a deck. ([COM](reference/COM.md#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite))
+4. **Never overwrite people's edits** — `scripts/harvest_edits.py` before regenerating a deck. ([COM](reference/COM.md#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite))
 5. **Full HD = 1440 × 810 pt**, set before inserting slides. ([LAYOUT](reference/LAYOUT.md#slide-size--set-it-before-inserting-anything))
 6. **About 10 visible words per slide (by anchor type), body ≥ 18 pt on a 960-pt slide — ≥ 27 pt on Full HD (1440 pt)**, claim titles. ([LAYOUT](reference/LAYOUT.md#anchor-types-and-word-budgets), [CONTENT](reference/CONTENT.md#titles-make-a-claim-not-a-topic))
 7. **No text baked into images or video** — overlay it in PowerPoint. ([MEDIA](reference/MEDIA.md#generate-images-without-text--overlay-text-in-powerpoint))

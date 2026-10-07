@@ -59,7 +59,7 @@ Keep the licence terms with the image file so the next build can rewrite the cre
 Every point size in this skill (the 18 pt body floor, the 12–14 pt label exception, the type ceilings) was
 learned on 960 × 540 pt slides. **On Full HD (1440 × 810 pt) multiply by 1.5**: body floor 27 pt, labels
 down to 18 pt. The same 18 pt text is two-thirds as big on screen on the wider slide. `lint_deck.py` and
-`audit_deck.py` scale automatically; the full scale is in [DESIGN.md](DESIGN.md).
+`build_deck.py` scale automatically; the full scale is in [DESIGN.md](DESIGN.md).
 
 ## Building from a template
 
@@ -84,18 +84,20 @@ When the user has a company template or brand deck, build **on it**, not next to
 
 **Rule:** PowerPoint TextBoxes word-wrap by default. A headline at 52pt that "should fit" on one line will silently wrap to two lines if it exceeds the container width — and the wrap is invisible until export. Always plan for the worst-case character count and font width.
 
-**Practical ceilings (Aptos Display, bold, single-line):**
+**Practical ceilings (Aptos Display, bold, single-line; Full HD 1440-pt slide):**
 
 | Container width | Safe size | Approx. character ceiling |
 |---|---|---|
-| 540 px | 36pt | ~22 chars |
-| 540 px | 32pt | ~25 chars |
-| 540 px | 28pt | ~28 chars |
-| 800 px | 44pt | ~25 chars |
-| 800 px | 38pt | ~28 chars |
-| 800 px | 32pt | ~33 chars |
+| 810 pt (≈ 56 % of the slide) | 54 pt | ~22 chars |
+| 810 pt | 48 pt | ~25 chars |
+| 810 pt | 42 pt | ~28 chars |
+| 1200 pt (≈ 83 %) | 66 pt | ~25 chars |
+| 1200 pt | 57 pt | ~28 chars |
+| 1200 pt | 48 pt | ~33 chars |
 
-Aptos Display is wider than Inter or Calibri. Other fonts shift the ceiling.
+The ceiling depends on the *ratio* of font size to box width, so on a 960-pt slide divide both by 1.5. Aptos
+Display is wider than Inter or Calibri; other fonts shift the ceiling. `lint_deck.py` estimates characters per
+line (`measure_too_wide`) and the overflow check estimates wrapped height; neither replaces a render.
 
 **Defenses against silent wrap:**
 
@@ -188,52 +190,52 @@ The 10-word rule is the default for **spoken hero slides**. It does not apply un
 
 **Audit caution:** automated word-count checks will false-positive on gallery / matrix / knowledge-graph slides. Always confirm against the anchor type before "fixing" by stripping content.
 
-### Label exception (12–14pt allowed for non-body text)
+### Label exception (smaller sizes allowed for non-body text)
 
-The 18pt slide floor (see Typography below) applies to **body text** — sentences the audience reads. It does not apply to **labels** — short identifying tags attached to a visual.
+The body floor — **27 pt on Full HD, 18 pt on a 960-pt slide** — applies to **body text**: sentences the audience
+reads. It does not apply to **labels**: short identifying tags attached to a visual.
 
-**Label allowed at 12–14pt:**
+**Labels allowed down to 18–21 pt on Full HD (12–14 pt on a 960-pt slide):**
 - Chart axis labels, tick labels, legend labels
 - Caption directly under a flag, icon, or photo
 - Row/column labels in a matrix or table
 - Pill or chip text in a dense gallery
-- Source attributions and citations (≥12pt; 18pt is preferred)
+- Source attributions and citations (≥ 18 pt on Full HD; 27 pt preferred)
 
-**Body text — must be ≥18pt:**
+**Body text — must be at or above the floor (27 pt on Full HD):**
 - Headlines, taglines, sentence fragments
 - Bullet items the audience is meant to read
 - Quotes
 - Anything that appears as a sentence
 
-**Test:** if removing the visual the text describes leaves you with a meaningful sentence, it's body — bump to 18pt minimum.
+**Test:** if removing the visual the text describes leaves you with a meaningful sentence, it's body — bump it to the floor.
 
 ### Hero stat pattern
 
-Recurring recipe for "single big number" slides. Use this typography hierarchy:
+Recurring recipe for "single big number" slides (`build_deck.py` pattern `big_number`). Sizes for Full HD:
 
 | Element | Size | Notes |
 |---|---|---|
-| The number | 80–150pt bold | Accent color, dominant |
-| Unit (immediately below number) | ≥24pt bold | Same color or white |
-| Caption (below unit) | ≥18pt italic muted | Optional context |
-| Source / attribution | ≥18pt italic small | Bottom of card or slide |
+| The number | 120–220 pt bold | Accent colour, dominant |
+| Unit (next to or below the number) | ≥ 36 pt bold | Same colour |
+| Caption | ≥ 27 pt muted | One line of context |
+| Source / attribution | in the speaker notes | Not on the slide |
 
-Anti-pattern: number at 100pt + unit at 14pt — the unit becomes invisible against the number.
+Anti-pattern: number at 150 pt + unit at 21 pt — the unit vanishes next to the number.
 
 ### Two-column comparison pattern
 
 For "humans vs AI", "before vs after", "today vs projected" slides:
 
 ```
-Layout: two equal-width cards side by side, gap 30px
-Left card: cool/warm border (e.g., red) — represents the problem
-Right card: warm/cool border (e.g., cyan) — represents the answer
-Card height: 280–340px depending on row count
-Card structure:
-  - Title row: 22pt bold, accent color
-  - Subtitle row: 14pt italic muted ("— driven by:" or "— values:")
-  - 4–6 bullet rows: 18pt body, white
-Bottom strip below both cards: single bold 20–24pt line with the synthesis
+Full HD (1440 x 810 pt); build_deck.py pattern `compare` does this for you
+Layout: two equal-width columns side by side, gap 48 pt
+Accent rule above the column that is the answer; neutral rule above the other
+Column height: 420-510 pt depending on row count
+Column structure:
+  - Heading: 42-46 pt bold
+  - 2-4 points: 28-30 pt (labels, not sentences, may go to 24 pt)
+Bottom strip below both columns: one bold 34-36 pt line with the synthesis
 ```
 
 **Word count:** ≤6 bullets per card × ~3 words each + 1 synthesis line ≈ 35–40 words across the slide. Acceptable as "comparison pair" anchor (each side read as one unit).
@@ -250,43 +252,44 @@ Bottom strip below both cards: single bold 20–24pt line with the synthesis
 - Bigger elements let you use bigger, more impactful typography
 
 **How to apply — sizing:**
-1. Measure the usable area: slide height minus title bar (e.g., 540 − 90 = 450 tall content area)
+1. Measure the usable area: slide height minus title bar (e.g., 810 − 135 = 675 tall content area on Full HD)
 2. Count the rows/elements and the gap count (for N rows there are N+1 gaps — one above row 1, one below row N, and N−1 between)
-3. Decide gap size (typically 15–25 points) and divide the remaining height among the elements
+3. Decide gap size (typically 24–36 pt on Full HD) and divide the remaining height among the elements
 4. Apply the same formula horizontally for multi-column layouts
 
 **How to apply — typography:**
-- When elements grow, grow the font too. A 120-point-tall row can carry 34pt text; a 75-point row only 26pt.
-- Titles: 36–54pt depending on length
-- Body labels on cards: 28–38pt for impact
-- Secondary labels / captions: 14–20pt
-- Body text in content slides: 18–24pt (still 2-second rule applies)
+- When elements grow, grow the font too. A 180-pt-tall row can carry 50 pt text; a 110-pt row only 40 pt.
+- Titles: 54–80 pt depending on length
+- Body labels on cards: 42–56 pt for impact
+- Secondary labels / captions: 21–30 pt
+- Body text in content slides: 27–36 pt (the 2-second rule still applies)
+- (On a 960-pt slide, divide every number by 1.5.)
 
 **Pattern — three-row, two-column grid (generic example):**
 ```
-Slide: 960 × 540, title panel 0–90
-Content area: y=90 to y=540 = 450 tall
+Slide: 1440 × 810 (Full HD), title panel 0–135
+Content area: y=135 to y=810 = 675 tall
 Target: 3 rows × 2 columns of cards, icon + label
 
 Rows: 3 rows of height R, 4 gaps of height G
-    3R + 4G = 450
-    Pick G = 22, R = 120 → 360 + 88 = 448 (2px slack)
+    3R + 4G = 675
+    Pick G = 33, R = 180 → 540 + 132 = 672 (3 pt slack)
 
 Columns: margin M, icon I, gap g, label L, inner gap IG, then repeat
-    2M + 2I + 2g + 2L + IG = 960
-    M=20, I=100, g=10, L=330, IG=40 → 40 + 200 + 20 + 660 + 40 = 960 ✓
+    2M + 2I + 2g + 2L + IG = 1440
+    M=30, I=150, g=15, L=495, IG=60 → 60 + 300 + 30 + 990 + 60 = 1440 ✓
 
-Row y positions: 112, 254, 396
-Col 1 icon x=20, label x=130
-Col 2 icon x=500, label x=610
+Row y positions: 168, 381, 594
+Col 1 icon x=30, label x=195
+Col 2 icon x=750, label x=915
 ```
 
 **Sanity-check after any layout change:**
-- Top gap above first row ≈ bottom gap below last row (within 10-15 points)
+- Top gap above first row ≈ bottom gap below last row (within 15–20 pt)
 - Inter-row gaps are equal
 - No large void in any quadrant
-- Elements proportional to their container (a 120-tall card with 14pt text looks empty)
-- Take a `slide_snapshot` and look at it — if you spot a visual imbalance, fix it
+- Elements proportional to their container (a 180-pt card with 21 pt text looks empty)
+- Render the slide and look at it — if you spot a visual imbalance, fix it
 
 **When to break the rule:**
 - Deliberate tension or asymmetry (a single big number in one quadrant, whitespace elsewhere for emphasis)

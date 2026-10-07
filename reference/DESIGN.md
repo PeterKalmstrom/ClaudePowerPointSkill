@@ -5,7 +5,7 @@
 ## Sizes on a Full HD slide
 
 Slides are 1440 × 810 pt; text looks two-thirds as big as on an old 960-pt slide, so every size rule
-scales by 1.5. `lint_deck.py` and `audit_deck.py` do this automatically.
+scales by 1.5. `lint_deck.py` and `build_deck.py` do this automatically.
 
 | Role | 960-pt slide | 1440-pt slide (Full HD) |
 |---|---|---|

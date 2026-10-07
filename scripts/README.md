@@ -6,13 +6,13 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 |---|---|---|
 | `build_deck.py` | `python-pptx`, `pillow` (any OS) | Builds a deck from a JSON/YAML spec: 14 patterns, design directions or a template, native charts; `--lint` |
 | `directions.json` | — | The 20 design directions `build_deck.py` and DESIGN.md use |
+| `read_deck.py` | `python-pptx` (any OS) | Whole deck to JSON (ids, layouts, shapes with positions and sizes, charts, tables, notes) or a text outline |
+| `harvest_edits.py` | `python-pptx` (any OS) | Keeps people's hand edits (edited, added, deleted slides) when a generated deck is rebuilt |
 | `lint_deck.py` | `python-pptx`, `pillow` (any OS) | Lints a deck for the AUDIT.md defect codes from the file alone; `--json`, `--room-depth`, `--fix --out` |
 | `extract_theme.py` | `python-pptx` (any OS) | Theme colours, fonts, layouts and placeholders as JSON, or a `brand-spec.md` skeleton |
 | `render_lo.py` | LibreOffice + poppler (any OS) | Approximate slide PNGs without PowerPoint |
 | `diff_renders.py` | `pillow`, `numpy` (any OS) | Which slides changed between two render folders, with heat maps |
 | `backup_snapshot.py` | Python only | Timestamped side copy of a deck before a risky edit |
-| `bulk_read.py` | Windows + PowerPoint, `pywin32` | All slide text + notes to JSON in one COM session |
-| `audit_deck.py` | Windows + PowerPoint, `pywin32` | Words per slide, smallest body font, status per slide, topic-label titles |
 | `check_word_breaks.py` | Windows + PowerPoint, `pywin32` | Fails if any word is broken across two lines |
 | `render_slides.py` | Windows + PowerPoint, `pywin32` | Slides to JPEG via Save As JPEG (renders embedded fonts correctly) |
 | `contact_sheet.py` | Windows + PowerPoint, `pywin32`, `pillow` | All slides as one thumbnail grid PNG |
@@ -21,14 +21,14 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 | `cover_crop.py` | `pillow` (any OS) | Reports stretch distortion and crops an image to a box ratio |
 | `selftest.py` | `python-pptx`, `pillow` (+ `pywin32` with `--com`) | Builds a test deck with known defects and checks every script against it |
 
-`_theme.py` resolves theme colours and slide backgrounds for the linter. `_rules.py` holds the rule helpers shared by the audit and lint scripts (label titles, contrast, overlap, room-depth floors). `_ppt.py` is the shared COM helper: it reuses a deck already open in PowerPoint (matched by
+`_theme.py` resolves theme colours and slide backgrounds for the linter. `_measure.py` estimates text wrapping from font metrics. `_rules.py` holds the rule helpers shared by the build and lint scripts (label titles, contrast, overlap, room-depth floors). `_ppt.py` is the shared COM helper: it reuses a deck already open in PowerPoint (matched by
 path, never `ActivePresentation`), otherwise opens it read-only and windowless, and quits
 PowerPoint only if it started it.
 
 Run from this folder (or pass the full path) so `_ppt.py` is importable:
 
 ```bash
-uvx --with pywin32 python scripts/audit_deck.py --file "C:/path/to/deck.pptx"
+uvx --with python-pptx --with pillow python scripts/lint_deck.py "C:/path/to/deck.pptx"
 ```
 
 ## Self-test

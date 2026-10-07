@@ -458,13 +458,15 @@ Use Nanobanana for a dramatic background image, then add PowerPoint shapes on to
 
 ```python
 # Background image
-bg = slide.Shapes.AddPicture(r"path\to\bg.png", False, True, 0, 0, 960, 540)
+bg = slide.Shapes.AddPicture(r"path\to\bg.png", False, True, 0, 0,
+                              presentation.PageSetup.SlideWidth, presentation.PageSetup.SlideHeight)
 bg.ZOrder(1)  # Send to back
 
 # Overlay shapes on top
-title = slide.Shapes.AddTextbox(1, 20, 20, 920, 60)
+sw = presentation.PageSetup.SlideWidth                     # 1440 on Full HD
+title = slide.Shapes.AddTextbox(1, 80, 56, sw - 160, 100)   # Full HD margins: 80 pt sides, title at 56 pt
 title.TextFrame.TextRange.Text = "Title Over Image"
-title.TextFrame.TextRange.Font.Color.RGB = 16777215  # White
+title.TextFrame.TextRange.Font.Color.RGB = 16777215  # White - check contrast on the busiest part of the photo
 ```
 
 ---

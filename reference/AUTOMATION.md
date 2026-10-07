@@ -30,7 +30,7 @@ user's PowerPoint or leave debris behind:
 ## Building .pptx without PowerPoint (no COM)
 
 On Linux, macOS or CI there is no COM. Write the OOXML directly with **python-pptx** (Python) or a library such as
-PptxGenJS (Node). Everything about content — anchor types, word budgets, the 18pt floor, notes, no text in images —
+PptxGenJS (Node). Everything about content — anchor types, word budgets, the body floor (27 pt on Full HD), notes, no text in images —
 still applies. What changes:
 
 - **Render approximately with LibreOffice:** `python scripts/render_lo.py deck.pptx --out renders/` (needs `soffice`

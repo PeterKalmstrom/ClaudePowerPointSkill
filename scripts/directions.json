@@ -20,6 +20,6 @@
     {"id": "poster-yellow", "tone": "contrarian", "mood": "loud poster, black on yellow", "heading": "Arial Black", "body": "Arial", "accent": "111111", "background": "FFD60A", "text": "111111", "muted": "3D3500", "suits": ["statement", "big_number", "section"]},
     {"id": "night-terminal", "tone": "contrarian", "mood": "engineering, console green on black", "heading": "Consolas", "body": "Segoe UI", "accent": "4ADE80", "background": "0B0F0C", "text": "E6F2EA", "muted": "93A89A", "suits": ["process", "timeline", "big_number"]},
     {"id": "blueprint", "tone": "contrarian", "mood": "technical drawing, white on blue", "heading": "Segoe UI Semibold", "body": "Segoe UI", "accent": "FFD166", "background": "0E3A68", "text": "F4F8FC", "muted": "B6C8DB", "suits": ["process", "matrix", "timeline"]},
-    {"id": "risograph", "tone": "contrarian", "mood": "zine print, two inks", "heading": "Georgia", "body": "Trebuchet MS", "accent": "D6336C", "background": "FFF4E6", "text": "1F2A44", "muted": "5C6478", "suits": ["quote", "statement", "compare"]}
+    {"id": "risograph", "tone": "contrarian", "mood": "zine print, two inks", "heading": "Georgia", "body": "Trebuchet MS", "accent": "C2255C", "background": "FFF4E6", "text": "1F2A44", "muted": "5C6478", "suits": ["quote", "statement", "compare"]}
   ]
 }

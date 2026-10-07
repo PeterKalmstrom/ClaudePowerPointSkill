@@ -1,18 +1,106 @@
 [
-  {"query": "Add a slide to the quarterly-review.pptx I have open showing revenue grew 12% this quarter", "should_trigger": true},
-  {"query": "Make me a 10-slide PowerPoint deck about our cloud migration plan for the board meeting on Friday", "should_trigger": true},
-  {"query": "Can you check my deck C:\\talks\\keynote.pptx for slides with too much text or fonts that are too small?", "should_trigger": true},
-  {"query": "I present this deck in two days - help me add timing to the speaker notes and make a Q&A cheat sheet", "should_trigger": true},
-  {"query": "Embed this mp4 on slide 7 so it plays automatically, and it's 90 MB so make it smaller first", "should_trigger": true},
-  {"query": "The PowerPoint MCP tools stopped showing up in Claude Code after I updated, it says connection closed", "should_trigger": true},
-  {"query": "Generate a background image for my title slide with an AI image model, no text in it", "should_trigger": true},
-  {"query": "Write a python-pptx script on our Linux build server that turns this JSON into a slide deck", "should_trigger": true},
-  {"query": "The bullets on slide 4 should fly in one at a time - add animations to my presentation", "should_trigger": true},
-  {"query": "Rebuild the training deck from the source files but my colleague edited a few slides by hand yesterday", "should_trigger": true},
-  {"query": "Write a Word document summarising the meeting notes I pasted", "should_trigger": false},
-  {"query": "Make a bar chart of these sales figures in Excel with a trend line", "should_trigger": false},
-  {"query": "Build an HTML landing page for our product launch with a hero section", "should_trigger": false},
-  {"query": "Convert this PDF invoice into a CSV of line items", "should_trigger": false},
-  {"query": "Give me five talking points for my team standup tomorrow, just as a bulleted list here in chat", "should_trigger": false},
-  {"query": "Fix the failing unit test in src/parser.ts", "should_trigger": false}
+  {
+    "query": "Add a slide to the quarterly-review.pptx I have open showing revenue grew 12% this quarter",
+    "should_trigger": true
+  },
+  {
+    "query": "Make me a 10-slide PowerPoint deck about our cloud migration plan for the board meeting on Friday",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you check my deck C:\\talks\\keynote.pptx for slides with too much text or fonts that are too small?",
+    "should_trigger": true
+  },
+  {
+    "query": "I present this deck in two days - help me add timing to the speaker notes and make a Q&A cheat sheet",
+    "should_trigger": true
+  },
+  {
+    "query": "Embed this mp4 on slide 7 so it plays automatically, and it's 90 MB so make it smaller first",
+    "should_trigger": true
+  },
+  {
+    "query": "The PowerPoint MCP tools stopped showing up in Claude Code after I updated, it says connection closed",
+    "should_trigger": true
+  },
+  {
+    "query": "Generate a background image for my title slide with an AI image model, no text in it",
+    "should_trigger": true
+  },
+  {
+    "query": "Write a python-pptx script on our Linux build server that turns this JSON into a slide deck",
+    "should_trigger": true
+  },
+  {
+    "query": "The bullets on slide 4 should fly in one at a time - add animations to my presentation",
+    "should_trigger": true
+  },
+  {
+    "query": "Rebuild the training deck from the source files but my colleague edited a few slides by hand yesterday",
+    "should_trigger": true
+  },
+  {
+    "query": "Write a Word document summarising the meeting notes I pasted",
+    "should_trigger": false
+  },
+  {
+    "query": "Make a bar chart of these sales figures in Excel with a trend line",
+    "should_trigger": false
+  },
+  {
+    "query": "Build an HTML landing page for our product launch with a hero section",
+    "should_trigger": false
+  },
+  {
+    "query": "Convert this PDF invoice into a CSV of line items",
+    "should_trigger": false
+  },
+  {
+    "query": "Give me five talking points for my team standup tomorrow, just as a bulleted list here in chat",
+    "should_trigger": false
+  },
+  {
+    "query": "Fix the failing unit test in src/parser.ts",
+    "should_trigger": false
+  },
+  {
+    "query": "Here's my outline in outline.md - turn it into a deck with a chart for the revenue numbers",
+    "should_trigger": true
+  },
+  {
+    "query": "Check deck.pptx for overflowing text, tiny fonts and missing alt text before I send it to the client",
+    "should_trigger": true
+  },
+  {
+    "query": "We regenerate this deck every month from the data, but people edit slides in between - how do I keep their changes?",
+    "should_trigger": true
+  },
+  {
+    "query": "Use our company template brand.potx for the new sales deck",
+    "should_trigger": true
+  },
+  {
+    "query": "Give me a summary of what's on each slide of board-update.pptx",
+    "should_trigger": true
+  },
+  {
+    "query": "Make the deck look more like a magazine feature - serif fonts, more white space",
+    "should_trigger": true
+  },
+  {
+    "query": "Turn this markdown file into a PDF report",
+    "should_trigger": false
+  },
+  {
+    "query": "Create a Google Slides presentation in my Drive for the team offsite",
+    "should_trigger": false
+  },
+  {
+    "query": "Draw an architecture diagram of our microservices as an SVG",
+    "should_trigger": false
+  },
+  {
+    "query": "Write the speech I'll give at my sister's wedding",
+    "should_trigger": false
+  }
 ]

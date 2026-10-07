@@ -1,4 +1,4 @@
-"""Rule helpers shared by audit_deck.py and lint_deck.py (no dependencies)."""
+"""Rule helpers shared by lint_deck.py and build_deck.py (no dependencies)."""
 import re
 
 VERBS = set("""is are was were be been has have had do does did can will must should may

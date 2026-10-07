@@ -1,51 +1,280 @@
 {
   "direction": "clean-corporate",
   "slides": [
-    {"id": "cover", "pattern": "title", "title": "Q1 review: East leads, the rest holds",
-     "subtitle": "Regional performance, January – March 2026",
-     "notes": {"key_fact": "One region outperformed; the others were steady."}},
-    {"id": "growth-hero", "pattern": "big_number", "title": "East grew faster than any region",
-     "number": "+8", "unit": "%", "caption": "East revenue vs Q4. Every other region within ±3 %.",
-     "notes": {"key_fact": "East grew 8 % quarter on quarter.", "facts": ["Constant currency", "One-offs excluded"],
-               "qa": [{"q": "Is it currency?", "a": "No - constant currency."}], "sources": ["Finance dashboard, April 2026"]}},
-    {"id": "growth-chart", "pattern": "chart", "type": "column", "title": "East leads Q1, up 8 %",
-     "categories": ["East", "South", "West", "North"], "series": [{"name": "Growth vs Q4 (%)", "values": [8.0, 3.0, 0.2, -1.5]}],
-     "highlight": "East", "number_format": "+0.0;-0.0", "caption": "North's dip is seasonal and repeats every Q1.",
-     "notes": "Sources: finance dashboard, April 2026."},
-    {"id": "kpis", "pattern": "kpi", "title": "Margins rose while costs held",
-     "metrics": [{"value": "41.2 M", "label": "Total revenue"}, {"value": "+1.5 pt", "label": "Gross margin"},
-                 {"value": "0 %", "label": "Opex change"}], "highlight": 1, "notes": "KPI definitions in the appendix."},
-    {"id": "why-east", "pattern": "compare", "title": "East's playbook differs in two ways",
-     "columns": [{"heading": "East", "points": ["Partner-led sales", "Weekly pipeline review"]},
-                 {"heading": "Other regions", "points": ["Direct sales only", "Monthly review"]}], "highlight": 0,
-     "notes": "Interviews with regional leads, March 2026."},
-    {"id": "rollout", "pattern": "process", "title": "Rolling it out takes four steps",
-     "steps": [{"label": "Pick 2 partners", "detail": "One per region"}, {"label": "Train the team", "detail": "Two days"},
-               {"label": "Weekly reviews", "detail": "From week 3"}, {"label": "Measure in Q3", "detail": "Same metrics"}],
-     "notes": "Owner: sales operations."},
-    {"id": "plan", "pattern": "timeline", "title": "Every region runs the playbook by October",
-     "events": [{"date": "May", "label": "South pilot"}, {"date": "Jul", "label": "West pilot"},
-                {"date": "Sep", "label": "North pilot"}, {"date": "Oct", "label": "All regions live"}], "highlight": 3,
-     "notes": "Dates assume partner contracts by mid-May."},
-    {"id": "options", "pattern": "matrix", "title": "Partners give the most for the least effort",
-     "x_axis": "Effort", "y_axis": "Impact",
-     "quadrants": [{"heading": "Partners", "text": "High impact, low effort"}, {"heading": "New hires", "text": "High impact, high effort"},
-                   {"heading": "Discounts", "text": "Low impact, low effort"}, {"heading": "Rebrand", "text": "Low impact, high effort"}],
-     "highlight": 0, "notes": "Scoring from the March workshop."},
-    {"id": "voice", "pattern": "quote", "title": "What the East team says",
-     "quote": "The weekly review is where the deals actually move.", "attribution": "Regional sales lead", "role": "East",
-     "notes": "Quote approved for internal use."},
-    {"id": "photo", "pattern": "image", "title": "East's growth came from the city centre", "image": "skyline.jpg",
-     "caption": "Illustration.", "alt": "Stylised city skyline at dusk.", "notes": "Image: generated placeholder."},
-    {"id": "numbers", "pattern": "table", "title": "Only East beat its target",
-     "header": ["Region", "Revenue (M)", "Target (M)", "vs target"],
-     "rows": [["East", "12.4", "11.5", "+8%"], ["South", "10.1", "10.0", "+1%"], ["West", "9.6", "9.8", "-2%"], ["North", "9.1", "9.4", "-3%"]],
-     "highlight_row": 0, "notes": "Targets from the 2026 plan."},
-    {"id": "asks", "pattern": "bullets", "title": "Three decisions for today",
-     "items": ["Approve the partner budget", "Name an owner per region", "Agree the Q3 review date"],
-     "notes": "Budget detail in the appendix."},
-    {"id": "next", "pattern": "section", "eyebrow": "Appendix", "title": "Detail and definitions", "notes": "Appendix follows."},
-    {"id": "close", "pattern": "statement", "title": "Copy what works in East, everywhere",
-     "support": "Decision needed today: the partner budget.", "notes": "Close."}
+    {
+      "id": "cover",
+      "pattern": "title",
+      "title": "Q1 review: East leads, the rest holds",
+      "subtitle": "Regional performance, January – March 2026",
+      "notes": {
+        "key_fact": "One region outperformed; the others were steady."
+      }
+    },
+    {
+      "id": "growth-hero",
+      "pattern": "big_number",
+      "title": "East grew faster than any region",
+      "number": "+8",
+      "unit": "%",
+      "caption": "East revenue vs Q4. Every other region within ±3 %.",
+      "notes": {
+        "key_fact": "East grew 8 % quarter on quarter.",
+        "facts": [
+          "Constant currency",
+          "One-offs excluded"
+        ],
+        "qa": [
+          {
+            "q": "Is it currency?",
+            "a": "No - constant currency."
+          }
+        ],
+        "sources": [
+          "Finance dashboard, April 2026"
+        ]
+      }
+    },
+    {
+      "id": "growth-chart",
+      "pattern": "chart",
+      "type": "column",
+      "title": "East leads Q1, up 8 %",
+      "categories": [
+        "East",
+        "South",
+        "West",
+        "North"
+      ],
+      "series": [
+        {
+          "name": "Growth vs Q4 (%)",
+          "values": [
+            8.0,
+            3.0,
+            0.2,
+            -1.5
+          ]
+        }
+      ],
+      "highlight": "East",
+      "number_format": "+0.0;-0.0",
+      "caption": "North's dip is seasonal and repeats every Q1.",
+      "notes": "Sources: finance dashboard, April 2026."
+    },
+    {
+      "id": "kpis",
+      "pattern": "kpi",
+      "title": "Margins rose while costs held",
+      "metrics": [
+        {
+          "value": "41.2 M",
+          "label": "Total revenue"
+        },
+        {
+          "value": "+1.5 pt",
+          "label": "Gross margin"
+        },
+        {
+          "value": "0 %",
+          "label": "Opex change"
+        }
+      ],
+      "highlight": 1,
+      "notes": {
+        "key_fact": "Margin rose 1.5 points with flat operating costs.",
+        "facts": [
+          "KPI definitions in the appendix."
+        ],
+        "sources": [
+          "Finance dashboard, April 2026"
+        ]
+      }
+    },
+    {
+      "id": "why-east",
+      "pattern": "compare",
+      "title": "East's playbook differs in two ways",
+      "columns": [
+        {
+          "heading": "East",
+          "points": [
+            "Partner-led sales",
+            "Weekly pipeline review"
+          ]
+        },
+        {
+          "heading": "Other regions",
+          "points": [
+            "Direct sales only",
+            "Monthly review"
+          ]
+        }
+      ],
+      "highlight": 0,
+      "notes": "Interviews with regional leads, March 2026."
+    },
+    {
+      "id": "rollout",
+      "pattern": "process",
+      "title": "Rolling it out takes four steps",
+      "steps": [
+        {
+          "label": "Pick 2 partners",
+          "detail": "One per region"
+        },
+        {
+          "label": "Train the team",
+          "detail": "Two days"
+        },
+        {
+          "label": "Weekly reviews",
+          "detail": "From week 3"
+        },
+        {
+          "label": "Measure in Q3",
+          "detail": "Same metrics"
+        }
+      ],
+      "notes": "Owner: sales operations."
+    },
+    {
+      "id": "plan",
+      "pattern": "timeline",
+      "title": "Every region runs the playbook by October",
+      "events": [
+        {
+          "date": "May",
+          "label": "South pilot"
+        },
+        {
+          "date": "Jul",
+          "label": "West pilot"
+        },
+        {
+          "date": "Sep",
+          "label": "North pilot"
+        },
+        {
+          "date": "Oct",
+          "label": "All regions live"
+        }
+      ],
+      "highlight": 3,
+      "notes": "Dates assume partner contracts by mid-May."
+    },
+    {
+      "id": "options",
+      "pattern": "matrix",
+      "title": "Partners give the most for the least effort",
+      "x_axis": "Effort",
+      "y_axis": "Impact",
+      "quadrants": [
+        {
+          "heading": "Partners",
+          "text": "High impact, low effort"
+        },
+        {
+          "heading": "New hires",
+          "text": "High impact, high effort"
+        },
+        {
+          "heading": "Discounts",
+          "text": "Low impact, low effort"
+        },
+        {
+          "heading": "Rebrand",
+          "text": "Low impact, high effort"
+        }
+      ],
+      "highlight": 0,
+      "notes": "Scoring from the March workshop."
+    },
+    {
+      "id": "voice",
+      "pattern": "quote",
+      "title": "What the East team says",
+      "quote": "The weekly review is where the deals actually move.",
+      "attribution": "Regional sales lead",
+      "role": "East",
+      "notes": "Quote approved for internal use."
+    },
+    {
+      "id": "photo",
+      "pattern": "image",
+      "title": "East's growth came from the city centre",
+      "image": "skyline.jpg",
+      "caption": "Illustration.",
+      "alt": "Stylised city skyline at dusk.",
+      "notes": "Image: generated placeholder."
+    },
+    {
+      "id": "numbers",
+      "pattern": "table",
+      "title": "Only East beat its target",
+      "header": [
+        "Region",
+        "Revenue (M)",
+        "Target (M)",
+        "vs target"
+      ],
+      "rows": [
+        [
+          "East",
+          "12.4",
+          "11.5",
+          "+8%"
+        ],
+        [
+          "South",
+          "10.1",
+          "10.0",
+          "+1%"
+        ],
+        [
+          "West",
+          "9.6",
+          "9.8",
+          "-2%"
+        ],
+        [
+          "North",
+          "9.1",
+          "9.4",
+          "-3%"
+        ]
+      ],
+      "highlight_row": 0,
+      "notes": {
+        "key_fact": "Only East beat its target.",
+        "sources": [
+          "2026 plan; finance dashboard, April 2026"
+        ]
+      }
+    },
+    {
+      "id": "asks",
+      "pattern": "bullets",
+      "title": "Three decisions for today",
+      "items": [
+        "Approve the partner budget",
+        "Name an owner per region",
+        "Agree the Q3 review date"
+      ],
+      "notes": "Budget detail in the appendix."
+    },
+    {
+      "id": "next",
+      "pattern": "section",
+      "eyebrow": "Appendix",
+      "title": "Detail and definitions",
+      "notes": "Appendix follows."
+    },
+    {
+      "id": "close",
+      "pattern": "statement",
+      "title": "Copy what works in East, everywhere",
+      "support": "Decision needed today: the partner budget.",
+      "notes": "Close."
+    }
   ]
 }

@@ -9,9 +9,7 @@ their placeholders instead of drawing boxes on blank slides. A .potx is read lik
 """
 import argparse
 import json
-import shutil
 import sys
-import tempfile
 
 from pptx import Presentation
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
@@ -27,14 +25,16 @@ def open_any(path):
     """python-pptx refuses the .potx content type; copy to a .pptx name and patch the type."""
     if not path.lower().endswith((".potx", ".potm")):
         return Presentation(path)
+    import io
     import zipfile
-    tmp = tempfile.NamedTemporaryFile(suffix=".pptx", delete=False).name
+    tmp = io.BytesIO()  # in memory: no temp file to clean up
     with zipfile.ZipFile(path) as src, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as dst:
         for item in src.infolist():
             data = src.read(item.filename)
             if item.filename == "[Content_Types].xml":
                 data = data.replace(b"presentationml.template.main+xml", b"presentationml.presentation.main+xml")
             dst.writestr(item, data)
+    tmp.seek(0)
     return Presentation(tmp)
 
 

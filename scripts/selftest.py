@@ -6,14 +6,15 @@
     uvx --with python-pptx --with pillow --with pywin32 python scripts/selftest.py --com
 
 The test deck (5 slides, 1440 x 810 pt) has known defects, so each check knows what to expect:
-  1 "Decisions"       topic-label title, a 4-word body paragraph at 22 pt   -> ** AUDIT, label?
+  1 "Decisions"       topic-label title, a 4-word body paragraph at 22 pt   -> body_below_floor, title_is_label
   2 claim title       short body at 24 pt                                    -> OK
   3 claim title       one long word in a narrow box at 60 pt                 -> broken word
-  4 claim title       speaker notes                                          -> notes in bulk_read
+  4 claim title       speaker notes                                          -> notes in read_deck
   5 hidden slide                                                             -> [skip]
 Exit code 0 = every check passed.
 """
 import argparse
+import io
 import json
 import os
 import shutil
@@ -69,9 +70,49 @@ def build_deck(path):
     text(slide("Long words break lines"), "Internationalization", 60, width=200, name="Narrow")
     s = slide("Notes carry the depth")
     text(s, "Short body", 24)
-    s.notes_slide.notes_text_frame.text = "Key fact: notes are read by bulk_read."
+    s.notes_slide.notes_text_frame.text = "Key fact: notes are read by read_deck."
     hidden = slide("Hidden slide")
     hidden._element.set("show", "0")
+    prs.save(path)
+
+
+def picture_ratio(pic):
+    w, h = Image.open(io.BytesIO(pic.image.blob)).size
+    return w / h
+
+
+def build_lint_edge_deck(path, photo):
+    """Group children in child coordinates, white text on a full-bleed photo, white-on-white table."""
+    from lxml import etree
+    from pptx.dml.color import RGBColor
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Pt(1440), Pt(810)
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Groups are measured on the slide"
+    g = s.shapes.add_group_shape()
+    for i in range(2):
+        tb = g.shapes.add_textbox(Pt(100 + i * 450), Pt(300), Pt(400), Pt(100))
+        tb.text_frame.text = "Grouped label"
+    xfrm = g._element.find("{http://schemas.openxmlformats.org/presentationml/2006/main}grpSpPr/"
+                           "{http://schemas.openxmlformats.org/drawingml/2006/main}xfrm")
+    xfrm.find("{http://schemas.openxmlformats.org/drawingml/2006/main}chOff").set("x", str(Pt(3000)))
+    xfrm.find("{http://schemas.openxmlformats.org/drawingml/2006/main}chOff").set("y", str(Pt(3000)))
+    for tb in g.shapes:  # move children into a far-away child space; the group still sits on the slide
+        tb.left, tb.top = tb.left + Pt(2900), tb.top + Pt(2700)
+    s2 = prs.slides.add_slide(prs.slide_layouts[5])
+    s2.shapes.title.text = "Text on photos is judged by eye"
+    s2.shapes.add_picture(photo, 0, 0, Pt(1440), Pt(810))
+    tb = s2.shapes.add_textbox(Pt(100), Pt(300), Pt(800), Pt(100))
+    tb.text_frame.text = "White text over a dark photo"
+    tb.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
+    s3 = prs.slides.add_slide(prs.slide_layouts[5])
+    s3.shapes.title.text = "Table text needs contrast too"
+    tbl = s3.shapes.add_table(2, 2, Pt(100), Pt(300), Pt(800), Pt(200)).table
+    for cell in tbl.iter_cells():
+        cell.text = "Unreadable"
+        cell.fill.solid()
+        cell.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        cell.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor(255, 255, 255)
     prs.save(path)
 
 
@@ -169,9 +210,20 @@ def main():
 
     sys.path.insert(0, HERE)
     from _rules import looks_like_label as label
-    check("audit_deck: 'Decisions' is a label", label("Decisions"))
-    check("audit_deck: 'The check comes first' is a claim", not label("The check comes first"))
-    check("audit_deck: a question is not flagged", not label("Why Claude?"))
+    check("rules: 'Decisions' is a label", label("Decisions"))
+    check("rules: 'The check comes first' is a claim", not label("The check comes first"))
+    check("rules: a question is not flagged", not label("Why Claude?"))
+
+    code, out = run("read_deck.py", deck)
+    try:
+        data = json.loads(out)
+        check("read_deck: 5 slides with ids and layouts", len(data["slides"]) == 5 and all(s["layout"] for s in data["slides"]))
+        check("read_deck: notes read", "Key fact" in data["slides"][3]["notes"])
+        check("read_deck: hidden slide marked", data["slides"][4]["hidden"])
+        check("read_deck: titles and font sizes read", data["slides"][0]["title"] == "Decisions"
+              and any(22.0 in x.get("sizes_pt", []) for x in data["slides"][0]["shapes"]))
+    except Exception as e:
+        check("read_deck: valid JSON", False, f"{e}: {out[:300]}")
 
     # lint_deck: cross-platform checks against the same deck
     code, out = run("lint_deck.py", deck, "--json")
@@ -236,9 +288,176 @@ def main():
     sys.path.insert(0, HERE)
     from _rules import contrast_ratio
     dirs = json.load(open(os.path.join(HERE, "directions.json"), encoding="utf-8"))["directions"]
-    weak = [d["id"] for d in dirs if contrast_ratio(d["text"], d["background"]) < 7
-            or contrast_ratio(d["muted"], d["background"]) < 4.5 or contrast_ratio(d["accent"], d["background"]) < 3]
-    check(f"directions: all {len(dirs)} pass contrast (text 7:1, muted 4.5:1, accent 3:1)", not weak, ", ".join(weak))
+    from build_deck import quiet_and_muted
+    weak = []
+    for d in dirs:
+        quiet, muted = quiet_and_muted(d)
+        if (contrast_ratio(d["text"], d["background"]) < 7 or contrast_ratio(muted, d["background"]) < 4.5
+                or contrast_ratio(muted, quiet) < 4.5 or contrast_ratio(d["text"], quiet) < 7
+                or contrast_ratio(d["accent"], d["background"]) < 3 or contrast_ratio(d["background"], d["accent"]) < 4.5):
+            weak.append(d["id"])
+    check(f"directions: all {len(dirs)} pass contrast (text 7:1; muted 4.5:1 on background and cards; "
+          "background-on-accent 4.5:1)", not weak, ", ".join(weak))
+
+    # regressions from the October 2026 code review
+    edge = os.path.join(tmp, "edge")
+    os.makedirs(edge, exist_ok=True)
+    Image.new("CMYK", (400, 300), (0, 100, 0, 0)).save(os.path.join(edge, "cmyk.jpg"))
+    rot = Image.new("RGB", (600, 300), (200, 30, 30))
+    ex = rot.getexif()
+    ex[0x0112] = 6  # stored landscape, shown portrait
+    rot.save(os.path.join(edge, "rot.jpg"), exif=ex)
+    espec = {"direction": "clean-corporate", "slides": [
+        {"pattern": "image", "title": "CMYK photos build", "image": "cmyk.jpg"},
+        {"pattern": "image", "title": "Phone photos stay upright", "image": "rot.jpg"},
+        {"pattern": "chart", "type": "pie", "title": "Share splits three ways", "categories": ["A", "B", "C"],
+         "series": [{"name": "Share", "values": [1, 2, 3]}]},
+        {"pattern": "chart", "type": "line", "title": "Six lines rise", "categories": ["Q1", "Q2", "Q3"],
+         "series": [{"name": f"s{i}", "values": [1, 2, i]} for i in range(6)]},
+        {"pattern": "chart", "title": "Gaps in data still build", "categories": ["A", "B"],
+         "series": [{"name": "s", "values": [1, None]}]},
+        {"pattern": "big_number", "title": "Numbers as numbers work", "number": 42},
+        {"pattern": "bullets", "title": "Loose notes work", "items": ["a"],
+         "notes": {"facts": "one string", "qa": [{"q": "only a question"}]}}]}
+    json.dump(espec, open(os.path.join(edge, "edge.json"), "w"))
+    eout = os.path.join(tmp, "edge.pptx")
+    code, out = run("build_deck.py", os.path.join(edge, "edge.json"), "--out", eout, "--lint")
+    check("build_deck: edge cases build and lint clean (CMYK, EXIF, pie, 6 lines, None, numbers, notes)",
+          code == 0 and "0 error(s), 0 warning(s)" in out, out[-500:])
+    if code == 0:
+        ep = Presentation(eout)
+        pic = [sh for sh in ep.slides[1].shapes if sh.shape_type == 13][0]
+        check("build_deck: EXIF-rotated photo placed upright", pic.image.size[0] < pic.image.size[1] * 2.5
+              and abs(picture_ratio(pic) - pic.width / pic.height) < 0.02)
+        pie = ep.slides[2].shapes
+        ch = [sh for sh in pie if sh.has_chart][0].chart
+        check("build_deck: pie slices labelled with their category", ch.plots[0].data_labels.show_category_name)
+        notes = ep.slides[6].notes_slide.notes_text_frame.text
+        check("build_deck: string 'facts' kept whole in notes", "- one string" in notes, notes)
+    json.dump({"slides": [{"pattern": "table", "title": "Ragged rows fail", "header": ["a", "b"], "rows": [["1", "2", "3"]]},
+                          {"pattern": "chart", "title": "Unknown highlight fails", "categories": ["A"], "highlight": "Z",
+                           "series": [{"name": "s", "values": [1]}]}]}, open(os.path.join(edge, "bad.json"), "w"))
+    code, out = run("build_deck.py", os.path.join(edge, "bad.json"), "--out", os.path.join(tmp, "x.pptx"))
+    check("build_deck: ragged rows and unknown highlight rejected", code == 2 and "row 1 has 3 cells" in out
+          and "is not one of the categories" in out, out)
+    tpl = os.path.join(edge, "tpl.pptx")
+    tp = Presentation()
+    for layout in tp.slide_layouts:
+        if layout.name == "Title Only":
+            layout.name = "Headline"  # a template whose layouts aren't named the usual way
+    tp.save(tpl)
+    json.dump({"template": "tpl.pptx", "slides": [{"pattern": "statement", "title": "Templates keep their size"}]},
+              open(os.path.join(edge, "tpl.json"), "w"))
+    code, out = run("build_deck.py", os.path.join(edge, "tpl.json"), "--out", os.path.join(tmp, "tpl-out.pptx"), "--lint")
+    check("build_deck: template without 'Title Only' builds without empty placeholders",
+          "unused_placeholder" not in out and "slides ->" in out, out[-400:])
+    lt = os.path.join(tmp, "lint-edge.pptx")
+    build_lint_edge_deck(lt, photo)
+    code, out = run("lint_deck.py", lt)
+    check("lint_deck: grouped shapes measured on the slide (no false off-slide)", "offslide_shape" not in out, out)
+    check("lint_deck: text on a photo not reported as white on white", "slide 2   a11y_low_text_contrast" not in out, out)
+    check("lint_deck: table cell contrast checked", "Table cell text" in out, out)
+
+    # text fitting: the builder shrinks text to fit and reports what can't; the linter sees the same overflow
+    fit_spec = {"slides": [
+        {"pattern": "bullets", "title": "Long bullets shrink until they fit", "items": [
+            "Approve the partner budget for the coming two quarters, including regional enablement",
+            "Name an owner per region who reports weekly on pipeline and partner activation",
+            "Agree the Q3 review date and the metrics we will judge the rollout on",
+            "Fund the partner portal and the onboarding content it needs before the first partners sign up",
+            "Hire two partner managers with channel experience and give them a quota from the third quarter",
+            "Publish the playbook internally and walk every regional team through it in a live session",
+            "Revisit pricing for partners so that the margin works for them and for us at volume"]},
+        {"pattern": "kpi", "title": "Labels too long for six cards", "metrics": [
+            {"value": "41.2 M", "label": "Total revenue across regions"}, {"value": "+1.5 pt", "label": "Gross margin change"},
+            {"value": "0 %", "label": "Opex change"}, {"value": "12", "label": "New partners"},
+            {"value": "3.2 d", "label": "Days to close"}, {"value": "98 %", "label": "Renewals"}]}]}
+    json.dump(fit_spec, open(os.path.join(edge, "fit.json"), "w"))
+    fout = os.path.join(tmp, "fit.pptx")
+    code, out = run("build_deck.py", os.path.join(edge, "fit.json"), "--out", fout)
+    check("build_deck: reports text it cannot fit (exit 3)", code == 3 and "slide 2" in out and "does not fit" in out
+          and "slide 1" not in out.split("does not fit")[0].split("fit:")[-1], out)
+    fp = Presentation(fout)
+    sizes = [r.font.size.pt for sh in fp.slides[0].shapes if sh.name == "Points"
+             for p in sh.text_frame.paragraphs for r in p.runs]
+    check("build_deck: long bullets shrunk, but not below the 27 pt floor", sizes and 27 <= min(sizes) < 34, str(sizes))
+    code, out = run("lint_deck.py", fout)
+    check("lint_deck: sees the same overflow (text_overflow on slide 2)", "slide 2   text_overflow" in out, out)
+    ov = os.path.join(tmp, "overflow.pptx")
+    op = Presentation()
+    op.slide_width, op.slide_height = Pt(1440), Pt(810)
+    sl = op.slides.add_slide(op.slide_layouts[5])
+    sl.shapes.title.text = "Fixed-size boxes overflow"
+    box = sl.shapes.add_textbox(Pt(100), Pt(200), Pt(500), Pt(80))
+    box.text_frame.word_wrap = True
+    box.text_frame.auto_size = 0  # MSO_AUTO_SIZE.NONE: the box keeps its size
+    box.text_frame.text = "This sentence is far too long for a small fixed box and will spill out below it on the slide"
+    box.text_frame.paragraphs[0].runs[0].font.size = Pt(32)
+    wide = sl.shapes.add_textbox(Pt(700), Pt(200), Pt(200), Pt(200))
+    wide.text_frame.word_wrap = True
+    wide.text_frame.text = "Internationalization"
+    wide.text_frame.paragraphs[0].runs[0].font.size = Pt(48)
+    op.save(ov)
+    code, out = run("lint_deck.py", ov)
+    check("lint_deck: fixed-size box overflow found", "text_overflow" in out, out)
+    check("lint_deck: word wider than its box found", "word_breaks" in out, out)
+
+    # harvest_edits: hand edits survive a rebuild
+    hv = os.path.join(tmp, "harvest")
+    os.makedirs(hv, exist_ok=True)
+    hspec = {"direction": "clean-corporate", "slides": [
+        {"id": "a", "pattern": "statement", "title": "First claim stands"},
+        {"id": "b", "pattern": "statement", "title": "Second claim stands"},
+        {"id": "c", "pattern": "statement", "title": "Third claim stands"}]}
+    json.dump(hspec, open(os.path.join(hv, "spec.json"), "w"))
+    deck_h = os.path.join(hv, "deck.pptx")
+    run("build_deck.py", os.path.join(hv, "spec.json"), "--out", deck_h)
+    run("harvest_edits.py", "manifest", deck_h)
+    hp = Presentation(deck_h)
+    hp.save(os.path.join(hv, "resaved.pptx"))
+    hp.slides[0].shapes.title.text = "First claim, reworded by a colleague"
+    extra = hp.slides.add_slide(hp.slide_layouts[5])
+    extra.shapes.title.text = "A slide a colleague added"
+    extra.shapes.add_picture(photo, Pt(100), Pt(200), Pt(300), Pt(200))
+    lst = hp.slides._sldIdLst
+    moved = list(lst)[-1]
+    lst.remove(moved)
+    lst.insert(1, moved)  # after slide a
+    gone = list(lst)[3]   # slide c
+    hp.part.drop_rel(gone.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"))
+    lst.remove(gone)
+    hp.save(deck_h)
+    code, out = run("harvest_edits.py", "harvest", os.path.join(hv, "resaved.pptx"), "--manifest",
+                    os.path.join(hv, "deck.manifest.json"), "--store", os.path.join(hv, "none"))
+    check("harvest_edits: a plain re-save is not an edit", "0 slide(s) harvested, 0 deletion(s)" in out, out)
+    code, out = run("harvest_edits.py", "harvest", deck_h, "--store", os.path.join(hv, "store"))
+    check("harvest_edits: finds the edit, the added slide and the deletion",
+          "edited   a" in out and "added" in out and "deleted  c" in out, out)
+    hspec["slides"][1]["title"] = "Second claim, updated in the spec"
+    json.dump(hspec, open(os.path.join(hv, "spec.json"), "w"))
+    rebuilt = os.path.join(hv, "rebuilt.pptx")
+    run("build_deck.py", os.path.join(hv, "spec.json"), "--out", rebuilt)
+    final = os.path.join(hv, "final.pptx")
+    code, out = run("harvest_edits.py", "restore", rebuilt, "--store", os.path.join(hv, "store"), "--out", final)
+    titles = [sl.shapes.title.text for sl in Presentation(final).slides] if os.path.exists(final) else []
+    check("harvest_edits: restored deck keeps edits, additions, deletions and spec changes",
+          titles == ["First claim, reworded by a colleague", "A slide a colleague added",
+                     "Second claim, updated in the spec"], str(titles) + out)
+    import zipfile, collections
+    dups = [k for k, v in collections.Counter(zipfile.ZipFile(final).namelist()).items() if v > 1] if titles else ["?"]
+    check("harvest_edits: restored file has no duplicate parts", not dups, str(dups))
+
+    # notes: figures on a slide need a source in the notes
+    nspec = {"slides": [
+        {"pattern": "big_number", "title": "Revenue grew this year", "number": "+12", "unit": "%", "notes": "Strong year."},
+        {"pattern": "big_number", "title": "Costs fell this year", "number": "-4", "unit": "%",
+         "notes": {"key_fact": "Costs fell 4 %.", "sources": ["Annual report 2026, p. 12"]}}]}
+    json.dump(nspec, open(os.path.join(edge, "notes2.json"), "w"))
+    nout = os.path.join(tmp, "notes2.pptx")
+    run("build_deck.py", os.path.join(edge, "notes2.json"), "--out", nout)
+    code, out = run("lint_deck.py", nout)
+    check("lint_deck: figures without a source in the notes flagged; sourced ones not",
+          "slide 1   figure_without_source" in out and "slide 2   figure_without_source" not in out, out)
 
     # extract_theme
     code, out = run("extract_theme.py", deck)
@@ -270,23 +489,6 @@ def main():
 
     # --- Windows + PowerPoint
     if a.com:
-        code, out = run("bulk_read.py", "--file", deck)
-        try:
-            data = json.loads(out)
-            check("bulk_read: 5 slides", len(data["slides"]) == 5)
-            check("bulk_read: notes read", "Key fact" in data["slides"][3]["notes"])
-            check("bulk_read: hidden slide marked", data["slides"][4]["hidden"])
-        except Exception as e:
-            check("bulk_read: valid JSON", False, f"{e}: {out[:300]}")
-
-        code, out = run("audit_deck.py", "--file", deck)
-        rows = {ln.split()[0]: ln for ln in out.splitlines() if ln[:3].strip().isdigit()}
-        check("audit_deck: slide 1 flagged", "** AUDIT" in rows.get("1", ""), out)
-        check("audit_deck: slide 1 min font 22pt", "22pt" in rows.get("1", ""), out)
-        check("audit_deck: slide 1 label? warning", "label?" in rows.get("1", ""), out)
-        check("audit_deck: slide 2 OK", " OK " in rows.get("2", "") + " ", out)
-        check("audit_deck: hidden slide skipped", "[skip]" in rows.get("5", ""), out)
-
         code, out = run("check_word_breaks.py", "--file", deck)
         check("check_word_breaks: finds the broken word on slide 3", code == 1 and "slide 3" in out, out)
 

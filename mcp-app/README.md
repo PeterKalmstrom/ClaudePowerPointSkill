@@ -31,13 +31,42 @@ Needs Windows, desktop PowerPoint and [uv](https://docs.astral.sh/uv/). In a hos
 ## Views
 
 - **Slide** — the current slide, large, with previous/next.
-- **Slide sorter** — thumbnails of every slide grouped by PowerPoint section (hidden slides dimmed, the current
-  one outlined). Drag a thumbnail onto another to move it in front of it, or onto a section's empty space to move
-  it to the end of that section (empty sections too). Click a thumbnail to open it in the Slide view.
+  - **Change highlights:** after any change (by Claude, a script or a person) the shapes that were added, changed
+    or removed flash green, blue or red-dashed for a few seconds.
+  - **Checks:** `lint_deck.py` findings drawn on the slide where they are, with a list below. **Fix** applies the
+    automatic fix live (`powerpoint_fix`); **Ask Claude** sends the finding to the conversation.
+  - **Before / after:** drag a divider across the slide to compare it with the version before its last change.
+  - **Ask Claude:** click a shape or drag an area, type what you want; the request goes into the conversation with
+    the slide, SlideID, shape id and box (hosts that can't take messages from a view get it on the clipboard).
+  - **Accurate:** render through Save As (true embedded fonts and word breaks) instead of the fast `Slide.Export`.
+- **Slide sorter** — thumbnails grouped by section, with lint counts. Click to select (Ctrl/Shift for more),
+  double-click to open, drag one or several onto a slide (goes in front) or a section's empty space (goes to its
+  end). Hide/unhide, start a new section at the selection, rename a section (double-click its name), delete one
+  (×, keeps its slides).
+- **Storyline** — the titles alone, by section, with title findings (label instead of claim, too long, missing,
+  duplicate) and a talk-length estimate from the notes. Click a line to open the slide.
+- **History** — a version is saved before every change made through PowerPoint Live. Restore puts one back
+  (the deck file is replaced and reopened; the state you leave is saved as a version first).
 
-The view polls `slide_state` about once a second and fetches a new picture only when the signature changes —
-so edits by Claude, by a script or by a person in PowerPoint all show up. Images go to the view, not to Claude,
-so the live preview costs no tokens.
+## Tools
 
-The preview uses `Slide.Export`, which shows fallback fonts for embedded fonts. To check a slide closely, render
-it with `scripts/render_slides.py`.
+| Tool | Who | What |
+|---|---|---|
+| `powerpoint_open` | Claude | Open a deck (or attach to an open one) and pick the current slide |
+| `powerpoint_run` | Claude | Run Python against the deck: `app`, `prs`, `slide`, `goto(n)`, `win32com` in scope; returns `print()` output |
+| `powerpoint_show` | Claude, view | Make slide *n* current (the PowerPoint window follows) |
+| `powerpoint_move` | Claude, view | Move slides (by SlideID) before a slide or to the end of a section |
+| `powerpoint_sections` | Claude, view | Add, rename or delete sections |
+| `powerpoint_hide` | Claude, view | Hide or unhide slides |
+| `powerpoint_fix` | Claude, view | Apply a lint fix to one shape, live |
+| `powerpoint_history` / `powerpoint_restore` | Claude, view | List saved versions / put one back |
+| `slide_state`, `slide_image`, `deck_outline`, `slide_thumbs`, `deck_lint`, `history_thumb` | view only | What the views draw |
+
+Live fixes: `unused_placeholder`, `body_below_floor`, `text_overflow` (shrinks using PowerPoint's own text layout,
+never below the floor), `picture_stretched`, `a11y_missing_alt_text` (charts and tables; pictures need Claude),
+`chart_default_palette`, `chart_legend_steals_plot`, `chart_accounting_zero_dash`.
+
+The view polls a cheap change signature about once a second (every two in the sorter and storyline) and fetches
+pictures only when something changed. Pictures go to the view, not to Claude, so the live preview costs no tokens.
+The fast preview uses `Slide.Export`, which shows fallback fonts for embedded fonts — tick **Accurate** or use
+`scripts/render_slides.py` to check a slide closely. Versions live in a temporary folder for the session.

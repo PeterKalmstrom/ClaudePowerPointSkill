@@ -41,6 +41,33 @@ If you hit a defect and figured out the fix, send a PR with:
   under *Version-specific facts* in `SKILL.md`.
 - **Say what it runs on.** Mark COM-only material; Linux, macOS and CI users skip it.
 
+## Code conventions
+
+Every Python file follows the error pattern in `scripts/kShared.py`, the same as the author's C#, TypeScript and
+PowerShell code. `tools/check_kpattern.py` enforces it (CI and the self-test run it).
+
+- **Four parts per function.** (1) First statement after the docstring: `if kS.ErrorMode: return <safe default>`
+  (not in `__init__`). (2) The whole rest of the body in one `try`. (3) `except kToolException: raise` where
+  expected states pass through, then a last `except Exception as e: kS.GlobalErrorHandler(e, "kClass.Method")` -
+  a literal location starting with the class and method name. (4) The handler ends in `return <safe default>`
+  or `raise`.
+- **Expected states are not errors.** A missing file, a spec mistake or no deck open is found by an explicit
+  check that raises `ToolInputException` (exit 2) or `ToolReportableException` (exit 1 or a given code) - never
+  by catching.
+- **The first error halts.** The handler sets `kS.ErrorMode`; every later method returns its default and the run
+  exits 1. Only a fresh run or a person's Resume (`kS.Reset()`) re-arms it - never a `catch`.
+- **Never hide an error.** A catch that only logs or returns a default needs an inline
+  `ERROR-SUPPRESSED-JUSTIFIED: <why>` comment. A function that cannot follow the pattern says why in a
+  `DOCUMENTED EXCEPTION: <why>` comment on or above its `def`.
+- **Naming and shape.** Classes start with `k` (`kDeckReader`); methods, properties, locals and parameters are
+  PascalCase; private fields `_camelCase`. No module-level functions, no lambdas, no nested functions - use a
+  named method. A script starts with `kRun.Main(kXxxApp)`.
+
+**Error reports.** A reported error can be sent to the support flow. The address is `KPS_ERROR_WEBHOOK` (or
+`scripts/kErrorWebhook.url`, kept out of the repository); without one nothing is sent. With a terminal, the
+person sees what would be sent and is asked first (y/N). `KPS_ERROR_AUTOSEND=1` sends without asking (agreed in
+advance); `KPS_ERROR_REPORT=0` switches reporting off (the self-test sets it).
+
 ## Sanity check before opening a PR
 
 - `python tools/check_docs.py` passes (links, anchors, `SKILL.md` size) and `python scripts/selftest.py` passes.

@@ -75,6 +75,69 @@ def build_deck(path):
     prs.save(path)
 
 
+def build_taste_deck(path):
+    """One slide per group of taste defects, each built deliberately."""
+    from pptx.chart.data import CategoryChartData
+    from pptx.dml.color import RGBColor
+    from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+    from pptx.enum.dml import MSO_THEME_COLOR
+    from pptx.enum.text import PP_ALIGN
+
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Pt(1440), Pt(810)
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Taste defects are easy to spot"
+
+    def box(txt, x, y, w=300, h=80, size=20):
+        tb = s.shapes.add_textbox(Pt(x), Pt(y), Pt(w), Pt(h))
+        tb.text_frame.word_wrap = True
+        tb.text_frame.text = txt
+        for r in tb.text_frame.paragraphs[0].runs:
+            r.font.size = Pt(size)
+        return tb
+
+    box("\U0001F4CA Charts", 40, 140)
+    box("Lorem ipsum dolor sit amet, consectetur adipiscing elit.", 40, 240)
+    long = box("This is a long body sentence that keeps going and going so that it is clearly more than eighty characters.",
+               380, 140, 600, 120)
+    long.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+    pale = box("Pale grey text that is hard to read on white", 380, 300, 600, 60)
+    pale.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor(0xDD, 0xDD, 0xDD)
+    box("Read the full report in the appendix for the remaining items and...", 380, 380, 600, 60)
+    for i, slot in enumerate([MSO_THEME_COLOR.ACCENT_1, MSO_THEME_COLOR.ACCENT_2, MSO_THEME_COLOR.ACCENT_3,
+                              MSO_THEME_COLOR.ACCENT_4]):
+        r = s.shapes.add_shape(1, Pt(1040 + i * 90), Pt(140), Pt(80), Pt(80))
+        r.fill.solid()
+        r.fill.fore_color.theme_color = slot
+        r.shadow.inherit = False
+        sp = r._element.spPr
+        from lxml import etree
+        eff = etree.SubElement(sp, "{http://schemas.openxmlformats.org/drawingml/2006/main}effectLst")
+        etree.SubElement(eff, "{http://schemas.openxmlformats.org/drawingml/2006/main}outerShdw", blurRad="50800")
+    for i, hexv in enumerate(["123456", "654321", "ABCDEF"]):
+        r = s.shapes.add_shape(1, Pt(1040 + i * 90), Pt(260), Pt(80), Pt(80))
+        r.fill.solid()
+        r.fill.fore_color.rgb = RGBColor.from_string(hexv)
+    s.notes_slide.notes_text_frame.text = "notes"
+
+    c = prs.slides.add_slide(prs.slide_layouts[5])
+    c.shapes.title.text = "Revenue rises every quarter"
+    data = CategoryChartData()
+    data.categories = ["East", "West"]
+    for q, v in (("Q1", (1, 2)), ("Q2", (2, 3)), ("Q3", (3, 4))):
+        data.add_series(q, v)
+    ch = c.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Pt(100), Pt(150), Pt(800), Pt(500), data).chart
+    ch.has_legend = True
+    ch.legend.position = XL_LEGEND_POSITION.TOP
+    ch.legend.include_in_layout = False
+    for ser, hexv in zip(ch.plots[0].series, ["4472C4", "ED7D31", "A5A5A5"]):
+        ser.format.fill.solid()
+        ser.format.fill.fore_color.rgb = RGBColor.from_string(hexv)
+    ch.value_axis.tick_labels.number_format = '_($* #,##0_);_($* (#,##0);_($* "-"_);_(@_)'
+    ch.value_axis.tick_labels.number_format_is_linked = False
+    prs.save(path)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--com", action="store_true", help="also run the PowerPoint (COM) scripts; Windows only")
@@ -138,6 +201,19 @@ def main():
     code, out = run("lint_deck.py", messy, "--fix", "--out", fixed)
     code2, out2 = run("lint_deck.py", fixed)
     check("lint_deck --fix: removes the empty placeholder", os.path.exists(fixed) and "unused_placeholder" not in out2, out2)
+
+    # lint_deck: taste, contrast and chart checks
+    taste = os.path.join(tmp, "taste.pptx")
+    build_taste_deck(taste)
+    code, out = run("lint_deck.py", taste, "--json")
+    try:
+        got = {i["code"] for i in json.loads(out)["findings"]}
+        for want in ("emoji_as_icon", "lorem_ipsum", "centered_long_body", "shadow_overuse", "a11y_low_text_contrast",
+                     "off_palette_fill", "accent_overload", "chart_legend_steals_plot", "chart_default_palette",
+                     "chart_ordinal_categorical_color", "chart_accounting_zero_dash", "truncated_text"):
+            check(f"lint_deck: finds {want}", want in got, ", ".join(sorted(got)))
+    except Exception as e:
+        check("lint_deck: taste deck JSON", False, f"{e}: {out[:300]}")
 
     # extract_theme
     code, out = run("extract_theme.py", deck)

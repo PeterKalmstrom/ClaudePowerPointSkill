@@ -9,3 +9,6 @@ Adapted: several defect codes in reference/AUDIT.md ("modern-agent slop" codes s
 italic_serif_display, nested_cards and gray_on_color), the two-cadence (per-edit vs full-pass) audit
 rule, and the audience-first persona checklist in reference/CONTENT.md. The material was rewritten and
 shortened for slide decks; it is not a verbatim copy.
+
+Several lint rules in scripts/lint_deck.py (slop and chart codes, the shadow / gradient / focal-hierarchy
+thresholds) follow the same Impeccable-derived catalogue; they are re-implemented in Python, not copied.

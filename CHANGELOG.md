@@ -8,7 +8,12 @@
 - `scripts/extract_theme.py`: theme colours, fonts, layouts and placeholders from a .pptx or .potx; `--markdown`
   writes a brand-spec skeleton. New *Building from a template* section in LAYOUT.md.
 - `scripts/render_lo.py` (LibreOffice renders) and `scripts/diff_renders.py` (before/after diffs with heat maps).
-- Self-test grows to 22 checks without PowerPoint (36 with `--com`). Rule thresholds partly follow PointClaw.
+- `lint_deck.py` phase 2b: theme-aware contrast (theme colours, lumMod/tint, slide/layout/master background,
+  WCAG large text = 18 pt or 14 pt bold) and 20 more codes — emoji icons, lorem ipsum, truncated text, centred
+  long body, wide measure, tiny click targets, shadow overuse, off-palette fills, accent overload, saturated
+  gradients, repeated words, weak focal hierarchy, grid monotony, stock imagery, default-font-only, and chart
+  legend/ordinal-colour/accounting-format/label-collision checks. `extract_theme.py` reads every master's theme.
+- Self-test grows to 34 checks without PowerPoint (36 with `--com`). Rule thresholds partly follow PointClaw.
 - Before/after example now uses a real title placeholder and chart alt text (lint-clean).
 
 ## v1.0.0 — 2026-10-07

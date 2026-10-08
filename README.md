@@ -65,6 +65,10 @@ the shapes, rendering and looking, putting the citation in the notes.
 
 ---
 
+![PowerPoint Live: change highlights, before/after, lint checks, sorter, storyline, rehearsal and theme panel](examples/powerpoint-live.gif)
+
+*PowerPoint Live, the skill's MCP App: the deck updates live while Claude works - changed shapes light up, compare before/after, fix lint findings with one click, rearrange in the sorter, rehearse with timers.*
+
 ## Benchmark
 
 Blind-judged against plain Claude and Anthropic's pptx skill on three briefs (details, method and the round this

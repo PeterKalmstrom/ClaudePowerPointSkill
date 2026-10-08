@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.1.0
 
 - **`build_deck.py` fills the slide.** Every pattern lays its content out over the whole body area: KPI tiles,
   compare and risk cards take the full height, timelines sit on the slide's middle, bullets of up to four short

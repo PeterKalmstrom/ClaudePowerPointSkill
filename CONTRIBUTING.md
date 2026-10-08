@@ -67,8 +67,10 @@ PowerShell code. `tools/check_kpattern.py` enforces it (CI and the self-test run
   PascalCase; private fields `_camelCase`. No module-level functions, no lambdas, no nested functions - use a
   named method. A script starts with `kRun.Main(kXxxApp)`.
 
-**Error reports.** A reported error can be sent to the support flow. The address is `KPS_ERROR_WEBHOOK` (or
-`scripts/kErrorWebhook.url`, kept out of the repository); without one nothing is sent. **Nothing is ever sent without a
+**Error reports.** A reported error can be sent to the support team. It goes to the error relay
+(`kErrorReport.EstateUrl()`), a public address with no key in it: the relay checks the report, removes user names in
+paths, keys, tokens and e-mail addresses, limits how many are accepted, and passes it on. `KPS_ERROR_WEBHOOK` (or
+`scripts/kErrorWebhook.url`, kept out of the repository) overrides the address. **Nothing is ever sent without a
 person's yes:** the report is shown and the person is asked "Do you want to send this error message? (yes/no)";
 no means nothing is sent. Without a terminal the report is saved and Claude asks the user, sending it with
 `scripts/send_error_report.py <file> --yes` only on yes; the script exits **4** and prints

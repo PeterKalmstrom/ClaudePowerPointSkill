@@ -23,9 +23,10 @@ The rules, the same as the C#, TypeScript and PowerShell code this skill's autho
 * EXPECTED states (file not found, a spec mistake, no deck open) are found by explicit precondition checks that
   raise ToolInputException (exit 2) or ToolReportableException (exit 1 or a given code) - never by catching.
 * A deliberate non-reporting catch carries an inline "ERROR-SUPPRESSED-JUSTIFIED: <why>" comment.
-* Reported errors can be sent to the support flow (Power Automate), the same payload the PowerShell kPSErrorReport
-  sends. The address is KPS_ERROR_WEBHOOK, else the first line of scripts/kErrorWebhook.url (kept out of the
-  public repository); without one nothing is sent. NOTHING is ever sent without a person's yes: the report is
+* Reported errors can be sent to the support team, the same payload the PowerShell kPSErrorReport sends. They go
+  to the error relay (kErrorReport.EstateUrl - a public address with no key in it, which checks, cleans and
+  rate-limits a report before passing it on). KPS_ERROR_WEBHOOK, or the first line of scripts/kErrorWebhook.url,
+  overrides the address. NOTHING is ever sent without a person's yes: the report is
   shown and the person is asked "Do you want to send this error message? (yes/no)"; no means nothing is sent.
   Without a terminal (Claude ran the script) the report is saved and Claude must ask the user the same question;
   only on yes is it sent with scripts/send_error_report.py --yes. The script then exits 4 and prints
@@ -105,14 +106,20 @@ class kErrorDetail:
         return Lines
 
     def ToPayload(self):
-        """The fields the support flow expects - identical to kPSErrorDetail.ToPayload."""
-        return {"ProductName": kErrorReport.ProductLabel(), "ProductVersion": kErrorReport.ProductVersion,
-                "FunctionName": self.Location, "ErrorFileName": os.path.basename(self.ScriptName),
-                "ErrorNumber": int(self.LineNumber or 0), "ErrorDescription": self.Message,
-                "Comments": "\n".join(self.Summary() + ([f"full path : {self.ScriptName}"] if self.ScriptName else [])
-                                      + (["Stack:", self.StackTrace] if self.StackTrace else [])),
-                "ClientName": kErrorReport.Component, "ClientEmail": "",
-                "OSVersion": f"Python {platform.python_version()} {platform.system()} {platform.release()}"}
+        """The fields the support flow expects - identical to kPSErrorDetail.ToPayload.
+
+        Each text is cut to the length the error relay accepts for that field (it refuses a longer one with
+        HTTP 400 rather than cutting it itself), so a long stack trace shortens the report instead of losing it.
+        Comments is cut well below its limit of 12000 so the whole report stays under the relay's 16 KB."""
+        Comments = "\n".join(self.Summary() + ([f"full path : {self.ScriptName}"] if self.ScriptName else [])
+                             + (["Stack:", self.StackTrace] if self.StackTrace else []))
+        return {"ProductName": kErrorReport.ProductLabel()[:200], "ProductVersion": kErrorReport.ProductVersion[:50],
+                "FunctionName": self.Location[:300], "ErrorFileName": os.path.basename(self.ScriptName)[:260],
+                "ErrorNumber": min(max(int(self.LineNumber or 0), 0), 10000000),
+                "ErrorDescription": (self.Message or self.ExceptionType)[:2000],
+                "Comments": Comments[:9000],
+                "ClientName": kErrorReport.Component[:200], "ClientEmail": "",
+                "OSVersion": f"Python {platform.python_version()} {platform.system()} {platform.release()}"[:200]}
 
 
 class kErrorReport:
@@ -135,8 +142,15 @@ class kErrorReport:
         return f"{Label} {kErrorReport.ProductVersion}".strip()
 
     @staticmethod
+    def EstateUrl():
+        """The error relay: a public address that is safe to publish - it carries no key. The relay checks,
+        cleans, rate-limits and de-duplicates a report and passes it on to the support flow, whose own address
+        stays in a key vault."""
+        return "https://kerrorrelay-pstt65n2.azurewebsites.net/api/report"
+
+    @staticmethod
     def EffectiveUrl():
-        """KPS_ERROR_WEBHOOK, else the first line of kErrorWebhook.url beside this file, else ""."""
+        """KPS_ERROR_WEBHOOK, else the first line of kErrorWebhook.url beside this file, else the error relay."""
         try:
             if os.environ.get("KPS_ERROR_WEBHOOK"):
                 return os.environ["KPS_ERROR_WEBHOOK"].strip()
@@ -144,7 +158,7 @@ class kErrorReport:
             if os.path.isfile(Path):
                 with open(Path, encoding="utf-8") as File:
                     return (File.readline() or "").strip()
-            return ""
+            return kErrorReport.EstateUrl()
         except Exception as e:  # ERROR-SUPPRESSED-JUSTIFIED: no readable address means "not configured", said below
             kErrorReport.LastStatus = f"the reporting address could not be read: {e}"
             return ""
@@ -263,14 +277,43 @@ class kErrorReport:
                                              headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(Request, timeout=kErrorReport.TimeoutSeconds) as Response:
                 Status = Response.status
+                Answer = kErrorReport.AnswerOf(Response)
             kErrorReport.LastStatus = f"sent, HTTP {Status}"
+            if Answer.get("duplicate") is True:
+                kErrorReport.LastStatus = f"this error was already reported in the last hour, HTTP {Status}"
             return 200 <= Status < 300
         except urllib.error.HTTPError as e:  # ERROR-SUPPRESSED-JUSTIFIED: said on stderr; the error itself still stands
-            kErrorReport.LastStatus = f"the reporting address answered HTTP {e.code}"
+            kErrorReport.LastStatus = kErrorReport.RefusalText(e.code, kErrorReport.AnswerOf(e))
         except Exception as e:  # ERROR-SUPPRESSED-JUSTIFIED: said on stderr; the error itself still stands
             kErrorReport.LastStatus = f"could not reach the reporting address: {e}"
         sys.stderr.write(f"The report was not sent ({kErrorReport.LastStatus}). The error above still stands.\n")
         return False
+
+    @staticmethod
+    def AnswerOf(Response):
+        """The JSON object an answer carries, or {} when it carries none (the relay answers JSON, a flow may not)."""
+        try:
+            Parsed = json.loads(Response.read().decode("utf-8", "replace") or "{}")
+            return Parsed if isinstance(Parsed, dict) else {}
+        except Exception:  # ERROR-SUPPRESSED-JUSTIFIED: an unreadable answer body only shortens the status text
+            return {}
+
+    @staticmethod
+    def RefusalText(Code, Answer):
+        """Why the reporting address did not take the report, in words a person can act on."""
+        Why = str(Answer.get("error", "")).strip()
+        if Code == 429:
+            Minutes = max(1, (int(Answer.get("retryAfterSeconds", 0) or 0) + 59) // 60)
+            return f"too many error reports were sent - try again in about {Minutes} minute(s), HTTP 429"
+        if Code == 413:
+            return "the report is too large for the reporting service, HTTP 413"
+        if Code == 400:
+            return f"the reporting service refused the report: {Why or 'it is not in the expected form'}, HTTP 400"
+        if Code == 503:
+            return "the reporting service is switched off, HTTP 503"
+        if Code == 502:
+            return "the reporting service could not pass the report on - try again later, HTTP 502"
+        return f"the reporting address answered HTTP {Code}" + (f": {Why}" if Why else "")
 
     @staticmethod
     def Reset():

@@ -9,6 +9,10 @@
   halts the run (PowerPoint Live: Resume). Expected states raise `ToolInputException` / `ToolReportableException`.
   k-prefixed classes, PascalCase, no lambdas or nested functions. `tools/check_kpattern.py` enforces it in the
   self-test and CI. Reported errors can be offered to the support flow (`KPS_ERROR_WEBHOOK`).
+- **Error reports work out of the box:** with the person's yes, a report now goes to a public error relay
+  (`kErrorReport.EstateUrl()`), which carries no key and cleans and rate-limits what it passes on.
+  `KPS_ERROR_WEBHOOK` still overrides the address. A refused report says why (too many, too large, not in the
+  expected form), and each field is cut to the length the relay accepts.
 - **PowerPoint Live face-lift:** one design system across all four views (tokens, light/dark, icons, chips,
   segmented tabs, switch, empty states), narrow-panel layout, keyboard and screen-reader labels.
 

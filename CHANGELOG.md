@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- PowerPoint Live: code run through `powerpoint_run` that closes the deck no longer halts
+  the server - the result says `"deck_closed": true`; a Save As is followed to the new file name.
 - **One error-handling and code style for all Python** (`scripts/kShared.py`): every method guards on
   `kS.ErrorMode`, wraps its body, reports to `kS.GlobalErrorHandler` and returns a safe default; the first error
   halts the run (PowerPoint Live: Resume). Expected states raise `ToolInputException` / `ToolReportableException`.

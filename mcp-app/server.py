@@ -945,6 +945,38 @@ class kPowerPointLive:
             kS.GlobalErrorHandler(e, "kPowerPointLive.Prs")
             return None
 
+    def OpenNames(self):
+        """FullName of every open presentation."""
+        if kS.ErrorMode:
+            return []
+        try:
+            return [P.FullName for P in self.App().Presentations]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPowerPointLive.OpenNames")
+            return []
+
+    def Rebind(self, OpenBefore):
+        """After a change: the deck we work on, found again by name. Follows a Save As (the one new name);
+        returns None and forgets the deck when the change closed it."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Open = list(self.App().Presentations)
+            for P in Open:
+                if P.FullName == self.PrsName:
+                    return P
+            Added = [P for P in Open if P.FullName not in OpenBefore]
+            if len(Added) == 1:
+                self.PrsName = Added[0].FullName
+                return Added[0]
+            self.PrsName = None
+            self.Current = 1
+            self.Tracker.Clear()
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPowerPointLive.Rebind")
+            return None
+
     def Clamp(self, Prs, N):
         """Slide number N kept inside the deck (0 for an empty deck)."""
         if kS.ErrorMode:
@@ -1033,7 +1065,13 @@ class kPowerPointLive:
             Tracker = self.Tracker
             self.History.Snapshot(Mutation.Label)
             Before = {Prs.Slides(I).SlideID: Tracker.ShapeMap(Prs.Slides(I)) for I in range(1, Prs.Slides.Count + 1)}
+            OpenBefore = self.OpenNames()
             Result = Mutation.Apply(Prs)
+            Prs = self.Rebind(OpenBefore)
+            if Prs is None:  # the change itself closed the deck: a defined outcome, not an error
+                self.Version += 1
+                return {**(Result or {}), "deck_closed": True, "slide": 0, "count": 0, "version": self.Version,
+                        "note": "The deck was closed by this change. Call powerpoint_open to work on a deck again."}
             for I in range(1, Prs.Slides.Count + 1):
                 Slide = Prs.Slides(I)
                 if Slide.SlideID in Before:
@@ -1274,6 +1312,7 @@ async def PowerpointOpen(path: str = "", slide: int = 0) -> dict:
 async def PowerpointRun(code: str, slide: int = 0, label: str = "") -> dict:
     """Run Python against the open deck through COM. In scope: `app`, `prs` (the deck), `slide` (the current slide),
     `goto(n)` (change the current slide - the live view follows), `win32com`. print() output is returned.
+    If the code closes the deck the result has "deck_closed": true (call powerpoint_open again).
     `label` names the change in the History view. A version is saved first, so the user can undo it.
     Changed shapes are highlighted in the live view. Pin to `prs`, never app.ActivePresentation."""
     if kS.ErrorMode:

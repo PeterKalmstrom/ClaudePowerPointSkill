@@ -2,6 +2,8 @@
 
     python scripts/render_lo.py deck.pptx --out renders/ [--width 1280]
     -> renders/s001.png .. sNNN.png, numbered by SLIDE (hidden slides are skipped, not renumbered)
+    python scripts/render_lo.py deck.pptx --out renders/ --sheet [sheet.png] [--cols 4]
+    -> the same, plus every slide on one contact sheet (default renders/contact.png) to look at in one go
 
 APPROXIMATE: LibreOffice substitutes fonts and breaks lines differently from PowerPoint. Use it
 to catch gross problems - text overflowing its box, overlaps, empty or broken slides, missing
@@ -99,10 +101,21 @@ class kRenderLoApp:
             Parser.add_argument("file")
             Parser.add_argument("--out", default="renders")
             Parser.add_argument("--width", type=int, default=1280)
+            Parser.add_argument("--sheet", nargs="?", const="", default=None,
+                                help="also write a contact sheet (default <out>/contact.png)")
+            Parser.add_argument("--cols", type=int, default=4, help="contact sheet columns")
+            Parser.add_argument("--sheet-width", type=int, default=480, help="thumbnail width on the sheet (px)")
             Args = Parser.parse_args()
-            for File in kLoRenderer.Render(Args.file, Args.out, Args.width):
+            Files = kLoRenderer.Render(Args.file, Args.out, Args.width)
+            for File in Files:
                 print(File)
-            return 0
+            if Args.sheet is not None and Files:
+                from contact_sheet import kContactSheet  # Pillow; any OS
+                Sheet = kContactSheet.Build(Files, Args.cols, Args.sheet_width,
+                                            Args.sheet or os.path.join(Args.out, "contact.png"))
+                if Sheet:
+                    print(f"sheet: {Sheet}")
+            return 1 if kS.ErrorMode else 0
         except kToolException:
             raise
         except Exception as e:

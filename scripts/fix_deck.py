@@ -1,6 +1,8 @@
-"""Repair the mechanical defects lint_deck.py finds - any OS, python-pptx. Writes a copy; never the input.
+"""Repair the mechanical defects lint_deck.py finds - any OS, python-pptx. Writes a copy, or with --in-place the
+input itself after saving the original as <deck>.pptx.bak.
 
     uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --out fixed.pptx
+    uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --in-place
     uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --out fixed.pptx --only floor,alt
     uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --dry-run
 
@@ -20,6 +22,7 @@ choices - the things that need a person (or Claude looking at the render).
 import argparse
 import io
 import os
+import shutil
 import subprocess
 import sys
 
@@ -255,11 +258,15 @@ class kFixDeckApp:
             Ap.add_argument("--dry-run", action="store_true", help="list the fixes without writing")
             Ap.add_argument("--crop-photos", action="store_true",
                             help="crop stretched pictures to fill their box instead of shrinking them (photos only)")
+            Ap.add_argument("--in-place", action="store_true",
+                            help="fix the input itself; the original is kept as <file>.bak first")
             A = Ap.parse_args()
-            if not A.out and not A.dry_run:
-                Ap.error("--out is required (the input is never overwritten), or use --dry-run")
+            if A.in_place and A.out:
+                Ap.error("use --out or --in-place, not both")
+            if not A.out and not A.dry_run and not A.in_place:
+                Ap.error("--out is required (or --in-place, which keeps a .bak), or use --dry-run")
             if A.out and os.path.abspath(A.out) == os.path.abspath(A.file):
-                Ap.error("--out must differ from the input")
+                Ap.error("--out must differ from the input (use --in-place to overwrite it with a .bak kept)")
             Only = set(A.only.split(",")) if A.only else set(FIXES)
             Unknown = Only - set(FIXES)
             if Unknown:
@@ -275,6 +282,13 @@ class kFixDeckApp:
             print(f"\n{len(self._made)} fix(es){' (dry run, nothing written)' if A.dry_run else ''}")
             if A.dry_run or not self._made and not A.out:
                 return 0
+            if A.in_place:
+                if not self._made:
+                    return 0  # nothing to fix: the input is left exactly as it was
+                Backup = A.file + ".bak"
+                shutil.copy2(A.file, Backup)  # the original first, so a bad fix can be undone
+                print(f"original kept as {Backup}")
+                A.out = A.file
             Prs.save(A.out)
             print(f"-> {A.out}\n\nWhat's left (lint_deck.py):")
             sys.stdout.flush()

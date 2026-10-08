@@ -13,7 +13,7 @@ only the reference file the task needs.
 
 | Task | Read, in order |
 |---|---|
-| **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · write a spec (`scripts/spec.schema.json`), show `--plan`, then build with `scripts/build_deck.py` ([BUILDER](reference/BUILDER.md), looks in [DESIGN](reference/DESIGN.md)) · showcase-first (below) · the build loop (below) |
+| **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · write a spec (`scripts/spec.schema.json`), show `--plan`, then build with `scripts/build_deck.py` — show the thing itself: `email`, `kpi_chart`, `cost_table`, `quiz`, `risks` beat bullets ([BUILDER](reference/BUILDER.md), looks in [DESIGN](reference/DESIGN.md)) · look at all slides at once with `render_lo.py --sheet` · showcase-first (below) · the build loop (below) |
 | **Edit an existing deck** | Snapshot first · `scripts/read_deck.py` before judging ([AUDIT](reference/AUDIT.md)) · find the open deck by name ([COM](reference/COM.md)) · rebuilding a generated deck? `scripts/harvest_edits.py` first |
 | **Review / audit a deck** | `scripts/lint_deck.py` first (any OS) · `scripts/fix_deck.py` for the mechanical fixes · then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
 | **Before a talk** | Audit clean first, then [PRESENTING](reference/PRESENTING.md) |
@@ -53,7 +53,7 @@ These apply to every deck. Each links to its full explanation.
 6. **About 10 visible words per slide (by anchor type), body ≥ 18 pt on a 960-pt slide — ≥ 27 pt on Full HD (1440 pt)**, claim titles. ([LAYOUT](reference/LAYOUT.md#anchor-types-and-word-budgets), [CONTENT](reference/CONTENT.md#titles-make-a-claim-not-a-topic))
 7. **No text baked into images or video** — overlay it in PowerPoint. ([MEDIA](reference/MEDIA.md#generate-images-without-text--overlay-text-in-powerpoint))
 8. **Crop pictures, never stretch them.** ([LAYOUT](reference/LAYOUT.md#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly))
-9. **The slide carries the punch, the notes carry the depth** — notes first, fixed order. ([CONTENT](reference/CONTENT.md#write-the-notes-first-in-a-fixed-order))
+9. **The slide carries the punch, the notes carry the depth** — notes on every slide, written first, fixed order. Never invent facts beyond the brief: mark anything you add as `Assumption:` in the notes. An ask states its reasons and its cost or impact. ([CONTENT](reference/CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief), [ask](reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost))
 10. **Lint, then render and LOOK** before calling anything done — `scripts/lint_deck.py` catches what the file shows (overlaps, stretched pictures, small text, missing alt text) on any OS; the render catches the rest. Render via Save As JPEG on Windows, not `Slide.Export`; `scripts/render_lo.py` elsewhere (approximate). (Loop below; [LAYOUT](reference/LAYOUT.md#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg))
 
 ## Showcase-first for multi-slide sections
@@ -153,6 +153,8 @@ A consolidated catalog of the silent failures that have actually shipped broken 
 | Chaining effects with "After Previous" | One slow effect shifts every later one; builds drift | [Native animation traps](reference/ANIMATION.md#native-animation-traps) |
 | Rebuilding an encrypted / labelled deck with python-pptx or `Presentations.Add()` | Output carries no sensitivity label — confidential content leaks unlabelled | [Sensitivity labels](reference/LABELS.md#sensitivity-labels) |
 | Calling `ExportAsFixedFormat` positionally from pywin32 | `TypeError: The Python instance can not be converted to a COM object` — no PDF | [Presenter prep](reference/PRESENTING.md#presenter-prep) |
+| Inventing specifics the brief never gave (times, extensions, targets, "root cause fixed") | The room knows the real answer; credibility goes, and the notes can't defend it | [Never invent facts](reference/CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief) |
+| A bare "Approve X" ask slide | Reads as a slogan: no reasons, no cost, nothing to weigh | [The ask states its reasons and its cost](reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost) |
 | `for p in app.Presentations: if ...: target = p` without `break` | Picks the *last* matching presentation in enumeration order (effectively random when multiple match the substring) | [Multi-presentation safety](reference/COM.md#multi-presentation-safety--never-trust-activepresentation) |
 
 When one of these bites, fix it and **add a row here** if it's a new variant. The signal is: "I lost an hour to a silent failure" → it belongs in this table.

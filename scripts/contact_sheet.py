@@ -2,22 +2,55 @@
 monotone-anchor stretches and forgotten template slides that per-slide review misses.
 
     uvx --with pywin32 --with pillow python contact_sheet.py --file deck.pptx [--cols 6] [--slide-width 240]
-    -> <deck>_contact.png beside the deck
+    -> <deck>_contact.png beside the deck (renders through PowerPoint: Windows)
+    python contact_sheet.py --renders renders/ [--out sheet.png]      (any OS)
+    -> a sheet from PNG/JPEG renders already on disk (render_lo.py, render_slides.py); render_lo.py --sheet
+       does both steps at once
 """
 import argparse
+import glob
 import os
+import re
 import tempfile
 
 from PIL import Image, ImageDraw
 
-from kShared import ToolReportableException, kRun, kS, kToolException
-from render_slides import kSlideRenderer
+from kShared import ToolInputException, ToolReportableException, kRun, kS, kToolException
 
 CAPTION, PAD = 18, 8
 
 
 class kContactSheet:
     """Lays rendered slides out as a grid."""
+
+    @staticmethod
+    def SlideNumber(Path):
+        """The slide number in a render's name (s007.png -> 7), else 0 - the sort key and the caption."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            Found = re.findall(r"(\d+)", os.path.basename(Path))
+            return int(Found[-1]) if Found else 0
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kContactSheet.SlideNumber")
+            return 0
+
+    @staticmethod
+    def FromFolder(Folder):
+        """The slide renders (PNG/JPEG) in Folder, in slide order."""
+        if kS.ErrorMode:
+            return []
+        try:
+            if not os.path.isdir(Folder):
+                raise ToolInputException(f"renders folder not found: {Folder}")
+            Files = [F for F in glob.glob(os.path.join(Folder, "*"))
+                     if F.lower().endswith((".png", ".jpg", ".jpeg")) and "contact" not in os.path.basename(F).lower()]
+            return sorted(Files, key=kContactSheet.SlideNumber)
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kContactSheet.FromFolder")
+            return []
 
     @staticmethod
     def Build(Files, Cols, SlideWidth, Out):
@@ -36,8 +69,8 @@ class kContactSheet:
             for Index, File in enumerate(Files):
                 X = PAD + (Index % Cols) * (Width + PAD)
                 Y = PAD + (Index // Cols) * (Height + CAPTION + PAD)
-                Sheet.paste(Image.open(File).resize((Width, Height)), (X, Y))
-                Draw.text((X, Y + Height + 2), str(Index + 1), fill="black")
+                Sheet.paste(Image.open(File).convert("RGB").resize((Width, Height)), (X, Y))
+                Draw.text((X, Y + Height + 2), str(kContactSheet.SlideNumber(File) or Index + 1), fill="black")
             Sheet.save(Out)
             return Out
         except kToolException:
@@ -55,16 +88,23 @@ class kContactSheetApp:
             return 1
         try:
             Parser = argparse.ArgumentParser()
-            Parser.add_argument("--file", required=True)
+            Source = Parser.add_mutually_exclusive_group(required=True)
+            Source.add_argument("--file", help="a deck to render through PowerPoint (Windows)")
+            Source.add_argument("--renders", help="a folder of slide renders, e.g. from render_lo.py (any OS)")
             Parser.add_argument("--cols", type=int, default=6)
             Parser.add_argument("--slide-width", type=int, default=240)
             Parser.add_argument("--out")
             Args = Parser.parse_args()
-            Files = kSlideRenderer.Render(Args.file, tempfile.mkdtemp(prefix="contact-"))
+            if Args.renders:
+                Files = kContactSheet.FromFolder(Args.renders)
+                Default = os.path.join(Args.renders, "contact.png")
+            else:
+                from render_slides import kSlideRenderer  # PowerPoint through COM: Windows only
+                Files = kSlideRenderer.Render(Args.file, tempfile.mkdtemp(prefix="contact-"))
+                Default = os.path.splitext(Args.file)[0] + "_contact.png"
             if kS.ErrorMode:
                 return 1
-            Out = kContactSheet.Build(Files, Args.cols, Args.slide_width,
-                                      Args.out or os.path.splitext(Args.file)[0] + "_contact.png")
+            Out = kContactSheet.Build(Files, Args.cols, Args.slide_width, Args.out or Default)
             if Out:
                 print(Out)
             return 0

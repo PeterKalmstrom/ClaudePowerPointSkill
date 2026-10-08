@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **`build_deck.py` fills the slide.** Every pattern lays its content out over the whole body area: KPI tiles,
+  compare and risk cards take the full height, timelines sit on the slide's middle, bullets of up to four short
+  items become full-width bands, and sibling boxes share one text size. Text grows up to a ceiling per role
+  (bullets 44 pt, card points 40, details 36, KPI values 120 on one line) and nothing of four or more words is set
+  below the 27 pt Full HD floor. Fixes from a blind benchmark (October 2026), where the skill's decks were judged
+  sparse and small: process/timeline details were 24 pt (`body_below_floor` on specs within the limits); a
+  highlighted step's number sat in the chevron's notch (it is now inside the arrow, clear of the notch); `compare`
+  headings had no limit (now 40 characters, 24 with three columns, checked before building); content sat in the
+  top half of the slide.
+- **Five new patterns:** `email` (a mocked message - from, to, subject, body, attachment - with numbered callout
+  markers and notes), `kpi_chart` (two to four KPI tiles beside a native chart), `cost_table` (rows with an automatic
+  total row, the total large beside it, an optional note), `quiz` (lettered options; the answer in the notes, or on
+  an extra answer slide with `"reveal": "slide"`) and `risks` (cards with likelihood and impact chips and the
+  mitigation). Schema, `--plan`, limits, docs and self-test cover them; the sample spec shows all 19 patterns.
+- **Speaker notes and facts:** the builder lists every slide whose spec has no notes; `CONTENT.md` adds *Every
+  slide gets notes; never invent facts beyond the brief* (assumptions marked `Assumption:` in the notes) and *The
+  ask states its reasons and its cost*, linked from the core rules and the anti-patterns table.
+- **`lint_deck.py`:** `word_budget` is per pattern on decks `build_deck.py` made (bullets 30, compare 32, process
+  36, email 130, risks 64 …; `--budget` scales them); `figure_without_source` skips the cover and section dividers;
+  `repeated_word` looks at display type only (≥ 45 pt on Full HD), not grown body text.
+- **Contact sheets on any OS:** `render_lo.py --sheet` writes the renders plus `contact.png`; `contact_sheet.py
+  --renders <folder>` builds a sheet from renders already on disk (`--file` still renders through PowerPoint).
+- **`fix_deck.py --in-place`** fixes the input itself after keeping the original as `<deck>.pptx.bak`.
+
 - **PowerPoint Live, round 3:** a **Rehearse** view that drives the real slide show (`powerpoint_slideshow`:
   start/next/previous/black/end/state) with notes, next slide, elapsed and per-slide timers and ahead/behind against
   the timing markers; a **talk-length meter** (markers, else notes or visible words at 130 wpm; per slide and section

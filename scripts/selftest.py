@@ -619,11 +619,13 @@ class kSelfTest:
                     "Hire two partner managers with channel experience and give them a quota from the third quarter",
                     "Publish the playbook internally and walk every regional team through it in a live session",
                     "Revisit pricing for partners so that the margin works for them and for us at volume"]},
-                {"pattern": "kpi", "title": "Labels too long for six cards", "metrics": [
-                    {"value": "41.2 M", "label": "Total revenue across regions"},
-                    {"value": "+1.5 pt", "label": "Gross margin change"},
-                    {"value": "0 %", "label": "Opex change"}, {"value": "12", "label": "New partners"},
-                    {"value": "3.2 d", "label": "Days to close"}, {"value": "98 %", "label": "Renewals"}]}]}
+                {"pattern": "compare", "title": "Points too long for three cards", "columns": [
+                    {"heading": "Option " + Letter, "points": [
+                        "Approve the partner budget for two quarters, with regional enablement",
+                        "Name an owner per region who reports weekly on pipeline and activation",
+                        "Agree the Q3 review date and the metrics we judge the rollout on",
+                        "Fund the partner portal and the onboarding content it needs to launch"]}
+                    for Letter in "ABC"]}]}
             self.WriteJson(FitSpec, os.path.join(Edge, "fit.json"))
             FitOut = os.path.join(Tmp, "fit.pptx")
             Code, Out = self.RunScript("build_deck.py", os.path.join(Edge, "fit.json"), "--out", FitOut)
@@ -721,6 +723,7 @@ class kSelfTest:
         try:
             Tmp, Edge = self.Tmp, self.Edge
             NotesSpec = {"slides": [
+                {"pattern": "title", "title": "Revenue up 12 % this year", "notes": "Cover: no source needed."},
                 {"pattern": "big_number", "title": "Revenue grew this year", "number": "+12", "unit": "%",
                  "notes": "Strong year."},
                 {"pattern": "big_number", "title": "Costs fell this year", "number": "-4", "unit": "%",
@@ -729,8 +732,9 @@ class kSelfTest:
             NotesOut = os.path.join(Tmp, "notes2.pptx")
             self.RunScript("build_deck.py", os.path.join(Edge, "notes2.json"), "--out", NotesOut)
             Code, Out = self.RunScript("lint_deck.py", NotesOut)
-            self.Check("lint_deck: figures without a source in the notes flagged; sourced ones not",
-                       "slide 1   figure_without_source" in Out and "slide 2   figure_without_source" not in Out, Out)
+            self.Check("lint_deck: figures without a source in the notes flagged; sourced ones and the cover not",
+                       "slide 2   figure_without_source" in Out and "slide 3   figure_without_source" not in Out
+                       and "slide 1   figure_without_source" not in Out, Out)
 
             # spec schema: generated from the builder, committed, and the sample validates against it
             Code, Out = self.RunScript("build_deck.py", "--print-schema")
@@ -753,7 +757,7 @@ class kSelfTest:
                 self.Say("(skipped schema validation: pip install jsonschema)")
             Code, Out = self.RunScript("build_deck.py", self.Sample, "--plan")
             self.Check("build_deck --plan: prints the story without building",
-                       Code == 0 and "Deck plan (14 slides" in Out, Out)
+                       Code == 0 and "Deck plan (19 slides" in Out, Out)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckNotesAndSchema")
             return
@@ -783,6 +787,186 @@ class kSelfTest:
             self.Check("fix_deck: refuses to overwrite its input", Code == 2, Out)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckFixDeck")
+            return
+
+    @staticmethod
+    def RichSpec():
+        """A spec with one slide of every newer pattern (email, kpi_chart, cost_table, quiz, risks) plus the
+        patterns whose rough edges were fixed (process details, a highlighted step, short bullets)."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            Notes = {"key_fact": "Self-test slide.", "sources": ["Self-test data"]}
+            return {"direction": "clean-corporate", "slides": [
+                {"id": "email", "pattern": "email", "title": "This email shows four red flags", "notes": Notes,
+                 "from": "IT Desk <help@examp1e-support.co>", "to": "you@example.com",
+                 "subject": "URGENT: your mailbox closes today",
+                 "body": ["Dear user,", "Verify your password within 2 hours to keep your mailbox:",
+                          "https://verify-login.example.co", "IT Department"],
+                 "attachment": "Report.html",
+                 "callouts": [{"target": "from", "note": "Look-alike sender"},
+                              {"target": "subject", "note": "Urgency"},
+                              {"target": "body", "line": 2, "note": "Link to a look-alike site"},
+                              {"target": "attachment", "note": "Unexpected attachment"}]},
+                {"id": "kpichart", "pattern": "kpi_chart", "title": "Revenue grew every quarter", "notes": Notes,
+                 "metrics": [{"value": "+44 %", "label": "Q4 vs Q1"}, {"value": "19.8", "label": "MUSD in 2026"}],
+                 "highlight_metric": 0, "type": "column", "categories": ["Q1", "Q2", "Q3", "Q4"],
+                 "series": [{"name": "Revenue", "values": [4.1, 4.6, 5.2, 5.9]}], "highlight": "Q4"},
+                {"id": "cost", "pattern": "cost_table", "title": "The pilot costs 200 kSEK", "notes": Notes,
+                 "unit": "kSEK", "note": "The buffer is only spent if needed.",
+                 "rows": [{"item": "Overtime buffer", "amount": 120, "detail": "Covers peaks"},
+                          {"item": "Tooling", "amount": 30, "detail": "Scheduling tools"},
+                          {"item": "Evaluation", "amount": 50, "detail": "Surveys"}]},
+                {"id": "quiz", "pattern": "quiz", "title": "Which of these is phishing?", "reveal": "slide",
+                 "notes": "Hands up before the answer.", "explain": "A: urgency and a payment request.",
+                 "options": [{"text": "A text from 'the CEO' asking for gift cards", "correct": True},
+                             {"text": "The HR newsletter from the usual address"},
+                             {"text": "A meeting invite you agreed yesterday"}]},
+                {"id": "risks", "pattern": "risks", "title": "Three risks could slow next year", "notes": Notes,
+                 "highlight": 0, "risks": [
+                     {"risk": "Longer sales cycles", "likelihood": "high", "impact": "high",
+                      "mitigation": "Add sales engineers to take technical validation off the deal path."},
+                     {"risk": "A data-centre outage", "likelihood": "low", "impact": "high",
+                      "mitigation": "Report the post-mortem actions at the next review."},
+                     {"risk": "Hiring behind plan", "likelihood": "medium", "impact": "medium",
+                      "mitigation": "Prioritise the open roles by revenue impact."}]},
+                {"id": "steps", "pattern": "process", "title": "Rolling it out takes three steps", "notes": Notes,
+                 "highlight": 1, "steps": [
+                     {"label": "Pick partners", "detail": "One partner in every region"},
+                     {"label": "Train the team", "detail": "Two days of hands-on training"},
+                     {"label": "Measure", "detail": "The same metrics as last quarter"}]},
+                {"id": "asks", "pattern": "bullets", "title": "Three decisions for today", "notes": Notes,
+                 "items": ["Approve the partner budget", "Name an owner per region", "Agree the review date"]}]}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.RichSpec")
+            return {}
+
+    @staticmethod
+    def Bottom(Slide):
+        """The lowest edge (pt) of any shape on a slide other than its title."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            return max([(Shape.top + Shape.height) / 12700 for Shape in Slide.shapes
+                        if not (Shape.is_placeholder and Shape.has_text_frame and Shape == Slide.shapes.title)] or [0])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.Bottom")
+            return 0.0
+
+    def CheckPatterns(self):
+        """The newer patterns build and lint clean, slides are filled, and the October 2026 rough edges stay fixed."""
+        if kS.ErrorMode:
+            return
+        try:
+            Tmp, Edge = self.Tmp, self.Edge
+            Spec = self.RichSpec()
+            self.WriteJson(Spec, os.path.join(Edge, "rich.json"))
+            Rich = os.path.join(Tmp, "rich.pptx")
+            Code, Out = self.RunScript("build_deck.py", os.path.join(Edge, "rich.json"), "--out", Rich)
+            self.Check("build_deck: email, kpi_chart, cost_table, quiz and risks build (quiz adds its answer slide)",
+                       Code == 0 and f"{len(Spec['slides']) + 1} slides" in Out, Out)
+            Code, Out = self.RunScript("lint_deck.py", Rich, "--json")
+            try:
+                Items = json.loads(Out)["findings"]
+            except Exception as e:  # ERROR-SUPPRESSED-JUSTIFIED: output that is not the expected JSON is a FAIL here
+                Items = [{"severity": "error", "code": f"no JSON: {e}", "slide": 0}]
+            Bad = [f"{I['slide']}:{I['code']}" for I in Items if I["severity"] in ("error", "warn")]
+            self.Check("build_deck: the new patterns lint clean (no errors or warnings)", not Bad, ", ".join(Bad))
+            Codes = {(I["slide"], I["code"]) for I in Items}
+            self.Check("lint_deck: no body_below_floor on process details (labels are no longer 24 pt)",
+                       not any(C == "body_below_floor" for _, C in Codes), str(sorted(Codes)))
+            self.Check("lint_deck: word budget is per pattern (no word_budget on the email, risks, process or "
+                       "cost slides)", not any(C == "word_budget" and N in (1, 3, 6, 7) for N, C in Codes),
+                       str(sorted(Codes)))
+            Deck = Presentation(Rich)
+            Slides = list(Deck.slides)
+            Low = [N for N, Slide in enumerate(Slides, 1) if self.Bottom(Slide) < 0.8 * 810]
+            self.Check("build_deck: content reaches the lower part of every slide (no empty bottom 40 %)",
+                       not Low, f"slides ending above 80 % of the height: {Low}")
+            Sizes = [Run.font.size.pt for Shape in Slides[-1].shapes if Shape.name.startswith("Point")
+                     and Shape.has_text_frame for Para in Shape.text_frame.paragraphs for Run in Para.runs]
+            self.Check("build_deck: a few short bullets become bands with text grown above 34 pt (up to 44 pt)",
+                       Sizes and 34 < min(Sizes) <= 44 and len({S.name for S in Slides[-1].shapes} & {
+                           "Point1", "Point2", "Point3", "PointBand3"}) == 4, str(Sizes))
+            Details = [Run.font.size.pt for Shape in Slides[-2].shapes if Shape.name.startswith("StepDetail")
+                       for Para in Shape.text_frame.paragraphs for Run in Para.runs]
+            self.Check("build_deck: process details at or above the 27 pt floor", Details and min(Details) >= 27,
+                       str(Details))
+            Arrow = [Shape for Shape in Slides[-2].shapes if Shape.name == "Step2"]
+            self.Check("build_deck: a step's number sits inside its arrow, clear of the notch",
+                       Arrow and Arrow[0].text_frame.text == "2"
+                       and Arrow[0].text_frame.margin_left >= Pt(96 * 0.32), str(Arrow))
+            Table = [Shape for Shape in Slides[2].shapes if Shape.name == "CostTable"]
+            Last = Table[0].table.rows[len(Table[0].table.rows) - 1] if Table else None
+            self.Check("build_deck: cost_table adds the total row (120 + 30 + 50 = 200)",
+                       Last is not None and Last.cells[0].text == "Total" and Last.cells[len(Last.cells) - 1].text == "200",
+                       str([C.text for C in Last.cells]) if Last is not None else "no table")
+            Names = {Shape.name for Shape in Slides[0].shapes}
+            self.Check("build_deck: email has its header, body and a numbered marker per callout",
+                       {"EmailFrom", "EmailSubject", "EmailBody1", "EmailAttachment", "Marker4", "Callout4"} <= Names,
+                       str(sorted(Names)))
+            Answer = Slides[4]
+            AnswerNotes = Answer.notes_slide.notes_text_frame.text if Answer.has_notes_slide else ""
+            self.Check("build_deck: quiz reveal 'slide' adds an answer slide; the answer is in the notes",
+                       Answer.shapes.title.text_frame.text == "Answer: A" and "ANSWER: A:" in AnswerNotes
+                       and "ANSWER: A:" in Slides[3].notes_slide.notes_text_frame.text, AnswerNotes)
+            Chips = [Shape.text_frame.text for Shape in Slides[5].shapes if "Chip" in Shape.name]
+            self.Check("build_deck: risks get a likelihood and an impact chip each", len(Chips) == 6
+                       and "HIGH" in Chips and "LOW" in Chips, str(Chips))
+
+            # the spec checks for the newer patterns and the compare heading limit
+            Bad = {"slides": [
+                {"pattern": "compare", "title": "Three columns", "columns": [
+                    {"heading": "A heading of thirty characters", "points": ["x"]}, {"heading": "B", "points": ["y"]},
+                    {"heading": "C", "points": ["z"]}]},
+                {"pattern": "quiz", "title": "No right answer", "options": [{"text": "a"}, {"text": "b"}]},
+                {"pattern": "email", "title": "Bad callouts", "from": "a", "subject": "b", "body": ["c"],
+                 "callouts": [{"target": "body", "line": 3, "note": "x"}, {"target": "attachment", "note": "y"}]},
+                {"pattern": "cost_table", "title": "Text amount", "rows": [{"item": "a", "amount": "lots"}]},
+                {"pattern": "kpi_chart", "title": "Bad metric", "metrics": [{"value": "1", "label": "a"},
+                                                                           {"value": "2", "label": "b"}],
+                 "highlight_metric": 5, "categories": ["a", "b"], "series": [{"name": "s", "values": [1, 2]}]}]}
+            self.WriteJson(Bad, os.path.join(Edge, "bad-rich.json"))
+            Code, Out = self.RunScript("build_deck.py", os.path.join(Edge, "bad-rich.json"), "--out",
+                                       os.path.join(Tmp, "bad-rich.pptx"))
+            for Want, Text in (("3-column compare heading over 24 characters", "with 3 columns the limit is 24"),
+                               ("quiz without a correct option", "\"correct\": true"),
+                               ("email callout on a missing body line", "line 3 is not a body paragraph"),
+                               ("email callout on a missing attachment", "points at the attachment"),
+                               ("cost_table amount that is not a number", "needs a numeric 'amount'"),
+                               ("kpi_chart highlight_metric out of range", "highlight_metric 5")):
+                self.Check(f"build_deck: rejects a {Want} (exit 2)", Code == 2 and Text in Out, Out[-800:])
+
+            # notes: the builder says which slides have none
+            self.WriteJson({"slides": [{"pattern": "statement", "title": "A slide without notes"}]},
+                           os.path.join(Edge, "nonotes.json"))
+            Code, Out = self.RunScript("build_deck.py", os.path.join(Edge, "nonotes.json"), "--out",
+                                       os.path.join(Tmp, "nonotes.pptx"))
+            self.Check("build_deck: warns about a slide without speaker notes (exit code unchanged)",
+                       Code == 0 and "has no speaker notes" in Out, Out)
+
+            # contact sheet from a folder of renders (any OS), fix_deck --in-place keeps a .bak
+            Renders = os.path.join(Tmp, "sheet")
+            os.makedirs(Renders, exist_ok=True)
+            for Number in (1, 2, 10):
+                Image.new("RGB", (320, 180), "white").save(os.path.join(Renders, f"s{Number:03d}.png"))
+            Code, Out = self.RunScript("contact_sheet.py", "--renders", Renders, "--cols", "2")
+            self.Check("contact_sheet --renders: one sheet from a folder of renders (any OS)",
+                       Code == 0 and os.path.exists(os.path.join(Renders, "contact.png")), Out)
+            InPlace = os.path.join(Tmp, "inplace.pptx")
+            shutil.copy(self.Taste, InPlace)
+            Code, Out = self.RunScript("fix_deck.py", InPlace, "--in-place")
+            self.Check("fix_deck --in-place: fixes the input and keeps the original as .bak",
+                       os.path.exists(InPlace + ".bak") and "-> " + InPlace in Out
+                       and open(InPlace, "rb").read() != open(InPlace + ".bak", "rb").read(), Out[-400:])
+            if shutil.which("soffice") and shutil.which("pdftoppm"):
+                Code, Out = self.RunScript("render_lo.py", Rich, "--out", os.path.join(Tmp, "rich-lo"), "--sheet")
+                self.Check("render_lo --sheet: renders and a contact sheet", Code == 0 and os.path.exists(
+                    os.path.join(Tmp, "rich-lo", "contact.png")), Out)
+            else:
+                self.Say("(skipped render_lo --sheet: LibreOffice/pdftoppm not installed)")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckPatterns")
             return
 
     def CheckThemeAndRenders(self):
@@ -938,6 +1122,7 @@ class kSelfTestApp:
             Test.CheckHarvest()
             Test.CheckNotesAndSchema()
             Test.CheckFixDeck()
+            Test.CheckPatterns()
             Test.CheckThemeAndRenders()
             Test.CheckErrorPattern()
             Test.CheckCom()

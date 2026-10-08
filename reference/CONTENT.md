@@ -67,6 +67,36 @@ claim, the hierarchy is wrong.
 
 **Pattern:** the slide carries the punch; the notes carry the depth. A presenter should be able to deliver a 90-second talk from the slide alone, *and* a 10-minute deep dive from the notes alone, on the same content.
 
+### Every slide gets notes; never invent facts beyond the brief
+
+**Rule:** every slide — the cover and the close included — has speaker notes, and nothing on a slide or in its
+notes goes beyond what the brief, the data or a named source says. Anything you add to make the story work (a
+rating, a target, a start date, a mitigation, a process step, a time) is marked as an assumption in the notes —
+`Assumption: …` under *Pitfalls* — so the presenter knows what to confirm before standing up.
+
+**Why:** in a blind benchmark (October 2026) the judge's notes on all three decks that lost points were the same:
+slides with one-word or no notes, and confident details nobody had given ("15 minutes", "ext. 4400", "root cause
+fixed", "multi-region failover"). Invented specifics are the fastest way to lose a room that knows the real answer.
+
+**How to apply:** write the notes first (next section). `build_deck.py` prints `notes: slide N … has no speaker
+notes` for every slide the spec left without, and `lint_deck.py` reports `missing_notes`. A worked example
+(a training email, a sample price) is labelled as made up in the notes, and placeholder contact details are
+written as "give the real number here", never as a plausible fake.
+
+### The ask states its reasons and its cost
+
+**Rule:** the slide that asks for a decision says three things: **what** is asked (a verb and a number: "approve
+3 sales engineers"), **why** (two or three reasons from the deck — the risk it answers, the evidence) and **what it
+costs or changes** (money, headcount, time, or the impact to expect, and how it will be checked). If the brief gives
+no cost, say what the cost consists of and that the figure comes from Finance — do not make one up.
+
+**Why:** an ask with no reasons or cost ("Approve 3 extra sales engineers today") reads as a slogan; the judge
+scored it as a thin ask. Decision-makers approve what they can weigh.
+
+**How to apply:** build the ask as a `compare` (*Why now* / *Cost and impact*) or `kpi` slide rather than a bare
+`statement`; repeat the decision on the closing slide. Put the expected questions ("What does it cost?", "What if
+it fails?") in the notes' Q&A.
+
 ### Write the notes first, in a fixed order
 
 Write a slide's notes **before** its visible text — the notes hold the full argument, the slide is the compression.

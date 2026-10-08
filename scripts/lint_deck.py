@@ -52,6 +52,18 @@ C_NS = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 SEVERITY_ORDER = {"error": 0, "warn": 1, "info": 2}
 IDENTITY_TF = (1.0, 0.0, 1.0, 0.0)
 
+# build_deck.py patterns, recognised by the shape names the builder gives them (first match wins), and the
+# visible-word budget each one reads well with on a 960-pt slide's default of 12 (reference/LAYOUT.md#anchor-types-and-word-budgets).
+PATTERN_MARKERS = [("EmailBar", "email"), ("CostTable", "cost_table"), ("Option1", "quiz"), ("Risk1", "risks"),
+                   ("Card1+Chart", "kpi_chart"), ("Chart", "chart"), ("Value1", "kpi"), ("HeroNumber", "big_number"),
+                   ("Points", "bullets"), ("Point1", "bullets"), ("Heading1", "compare"), ("StepLabel1", "process"), ("Rail", "timeline"),
+                   ("QuoteMark", "quote"), ("Table", "table"), ("Photo", "image"), ("Quadrant1", "matrix"),
+                   ("Subtitle", "title"), ("Eyebrow", "section"), ("Support", "statement")]
+PATTERN_BUDGET = {"title": 15, "section": 10, "statement": 20, "big_number": 12, "kpi": 25, "bullets": 30,
+                  "compare": 32, "process": 36, "timeline": 30, "quote": 60, "chart": 16, "table": 999, "image": 16,
+                  "matrix": 999, "email": 130, "kpi_chart": 26, "cost_table": 40, "quiz": 40, "risks": 64}
+COVER_PATTERNS = {"title", "section"}  # no figure_without_source: a cover's numbers are the talk's own headline
+
 GROUP_TF = {}  # shape_id -> (sx, tx, sy, ty): child coordinates -> slide coordinates (pt)
 GROWN = {}     # shape_id -> estimated height (pt) of a "resize to fit text" box once its text is laid out
 
@@ -385,6 +397,21 @@ class kLintDeck:
     # ------------------------------------------------------------ checks
 
     @staticmethod
+    def PatternOf(Shapes):
+        """The build_deck.py pattern a slide was built with, from its shape names; "" for any other slide."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Names = {S.name for S in Shapes}
+            for Marker, Pattern in PATTERN_MARKERS:
+                if all(Part in Names for Part in Marker.split("+")):
+                    return Pattern
+            return ""
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.PatternOf")
+            return ""
+
+    @staticmethod
     def LintSlide(N, Slide, Sw, Sh_, Floor, Budget, F, Theme):
         """Every per-slide check. Returns the slide's title text."""
         if kS.ErrorMode:
@@ -507,7 +534,7 @@ class kLintDeck:
                             if Cpl > 75:
                                 F.Add(N, "warn", "measure_too_wide", f"About {Cpl:.0f} characters per line "
                                       "(comfortable: 45–75); narrow the box or raise the size.", S.name)
-                        if Size >= 24 * kLintDeck.Scale:
+                        if Size >= 30 * kLintDeck.Scale:  # display type; grown body text (up to ~27 pt on 960) is not
                             BigTokens.update(Wd.lower() for Wd in re.findall(r"[^\W\d_]{4,}", PtText)
                                              if Wd.lower() not in STOP_WORDS)
                     # contrast: run colour (or theme text colour) against shape fill (or slide background)
@@ -584,8 +611,11 @@ class kLintDeck:
                 if getattr(S, "has_chart", False):
                     kLintDeck.LintChart(N, S, F, Theme)
 
-            if Words > Budget:
-                F.Add(N, "info", "word_budget", f"{Words} visible words (budget {Budget}). Fine for gallery, matrix, "
+            Pattern = kLintDeck.PatternOf(Shapes)
+            Allowed = round(Budget * PATTERN_BUDGET[Pattern] / 12) if Pattern else Budget
+            if Words > Allowed:
+                F.Add(N, "info", "word_budget", f"{Words} visible words (budget {Allowed}"
+                      + (f" for a {Pattern} slide" if Pattern else "") + "). Fine for gallery, matrix, "
                       "chart, quote and reference slides; otherwise cut or move to the notes.")
             if len(Colours) > MAX_COLOURS:
                 F.Add(N, "warn", "palette_too_many_colours", f"{len(Colours)} distinct fill colours (> {MAX_COLOURS}).")
@@ -635,7 +665,9 @@ class kLintDeck:
             HasChart = any(getattr(X, "has_chart", False) and X.has_chart for X in Shapes)
             HasFigure = HasChart or re.search(r"\d+(?:[.,]\d+)?\s*(?:%|percent|pt\b|[kKmMbB]n?\b|x\b)|[$€£¥]\s?\d",
                                               Shown)
-            if HasFigure and Notes.strip() and not re.search(
+            Cover = N == 1 or Pattern in COVER_PATTERNS or any(
+                kLintDeck.PhType(X) == PP_PLACEHOLDER.CENTER_TITLE for X in Shapes)
+            if HasFigure and not Cover and Notes.strip() and not re.search(
                     r"source|doi|https?://|www\.|according to|\(\d{4}\)|©|källa|quelle", Notes, re.I):
                 F.Add(N, "info", "figure_without_source", "The slide shows figures but the notes name no source; add "
                       "where the numbers come from (SOURCES: …).")
@@ -852,7 +884,8 @@ class kLintDeckApp:
             Ap.add_argument("--room-depth", type=float,
                             help="viewing distance in feet; sets the floor (20->14, 30->18, 50->24, more->28)")
             Ap.add_argument("--budget", type=int, default=12,
-                            help="visible words per slide before an info finding (default 12)")
+                            help="visible words per slide before an info finding (default 12; slides built by "
+                                 "build_deck.py get their pattern's budget, scaled by this)")
             Ap.add_argument("--json", action="store_true")
             Ap.add_argument("--fail-on", choices=["error", "warn"], default="error")
             Ap.add_argument("--fix", action="store_true", help="apply safe fixes; needs --out")

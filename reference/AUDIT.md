@@ -22,7 +22,7 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `title_is_label` | info | 1–2 words, no verb, not a question — a topic, not a claim |
 | `body_below_floor` | warn | A paragraph of 4+ words between the label ceiling and the floor. Both scale with slide width: 12 / 18 pt on a 960-pt slide, **18 / 27 pt on Full HD**; `--room-depth` raises the floor |
 | `too_many_bullets` | warn | More than 7 paragraphs in one shape |
-| `word_budget` | info | More than 12 visible words — accept for gallery, matrix, chart, quote, reference slides |
+| `word_budget` | info | More than 12 visible words — or, on a slide `build_deck.py` made, more than its pattern's budget (bullets 30, compare 32, process 36, email 130, risks 64…; `--budget` scales them) — accept for gallery, matrix, chart, quote, reference slides |
 | `text_overflow` | warn / error > 1.5× | Text needs more height than its box (estimated from real font metrics, measured against LibreOffice to the line), or a box that grows with its text spills out of the card behind it |
 | `text_shrinks` | info | The box is set to shrink text on overflow — check the shrunk size stays above the floor |
 | `word_breaks` | warn | A single word is wider than its box and will break mid-word (on Windows, `check_word_breaks.py` gives the exact answer) |
@@ -49,12 +49,12 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `off_palette_fill` | warn | 3+ shapes with hard-coded colours that aren't theme colours |
 | `accent_overload` | warn | 4+ different accent colours on one slide |
 | `gradient_high_chroma` | warn | A gradient with a saturated (> 0.45) hard-coded stop |
-| `repeated_word` | warn | The same word 3+ times in large (≥ 24 pt) type |
+| `repeated_word` | warn | The same word 3+ times in display (≥ 30 pt on a 960-pt slide, 45 pt on Full HD) type |
 | `weak_focal_hierarchy` | info | The two largest text sizes are within 1.08–1.6× of each other — nothing clearly leads |
 | `grid_monotony` | info | 4+ identical boxes in a row |
 | `stock_or_cartoon_image` | info | Picture name, alt text or link points at a stock or generic-illustration site |
 | `missing_notes` | info | No speaker notes |
-| `figure_without_source` | info | The slide shows numbers (%, currency, a chart or table figures) but the notes name no source |
+| `figure_without_source` | info | The slide shows numbers (%, currency, a chart or table figures) but the notes name no source (not on the cover or a section divider) |
 | `duplicate_titles` / `mixed_font_families` | warn | Deck-wide: repeated titles / more than 3 fonts set directly on text |
 | `default_font_only` | info | Deck-wide: one default face (Calibri, Aptos, Arial, Inter…) for everything |
 
@@ -68,12 +68,14 @@ match the ones the author's PowerPoint add-in uses.
 ## Fixing what lint finds — `scripts/fix_deck.py` (any OS)
 
 Mechanical defects have mechanical fixes. `fix_deck.py` applies only the safe ones, lists each change, writes a
-copy (never the input) and lints the result, so what's left is what needs judgement:
+copy — or, with `--in-place`, the input itself after keeping the original as `deck.pptx.bak` — and lints the
+result, so what's left is what needs judgement:
 
 ```bash
 uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --dry-run            # what it would do
 uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --out fixed.pptx
 uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --out fixed.pptx --only floor,alt
+uvx --with python-pptx --with pillow python scripts/fix_deck.py deck.pptx --in-place                # keeps deck.pptx.bak
 ```
 
 | Fix | Repairs |
@@ -230,7 +232,9 @@ For 15+ slides, also look at a contact sheet — it shows colour drift between s
 similar layouts in a row and forgotten template slides:
 
 ```bash
-uvx --with pywin32 --with pillow python scripts/contact_sheet.py --file deck.pptx [--cols 6] [--slide-width 240]
+uvx --with pywin32 --with pillow python scripts/contact_sheet.py --file deck.pptx [--cols 6] [--slide-width 240]  # Windows
+python scripts/render_lo.py deck.pptx --out renders/ --sheet          # any OS: renders + renders/contact.png
+python scripts/contact_sheet.py --renders renders/ --cols 4           # any OS: a sheet from renders on disk
 ```
 
 **Reporting back:** lead with the numbers (N slides, M flagged, K accepted as anchor exceptions), then a table of

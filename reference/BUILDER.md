@@ -16,8 +16,8 @@ uvx --with python-pptx --with pillow --with pyyaml python scripts/build_deck.py 
 python scripts/build_deck.py --list-directions
 ```
 
-Text is measured as it is placed and stepped down (never below the 27 pt floor for sentences) until it fits its
-box; exit code 3 means something still didn't fit — each case is printed as `fit: slide N …` — so cut words
+Every pattern lays its content out over the whole body area and grows text up to a ceiling per role (below),
+then steps it down (never below the 27 pt floor for sentences) until it fits its box; exit code 3 means something still didn't fit — each case is printed as `fit: slide N …` — so cut words
 or split the slide. Exit code 2 means the spec broke a limit (each problem is printed); fix the content rather than reaching
 for `--force` — the limits are the word budgets in [LAYOUT.md](LAYOUT.md) made concrete. A complete
 example covering every pattern is [`examples/spec/sample-deck.json`](../examples/spec/sample-deck.json);
@@ -67,9 +67,9 @@ fact — without building it: show that to the user first, then build.
 | `section` | `title`, `eyebrow` | 60 / 30 | Chapter break every 7–10 slides |
 | `statement` | `title`, `support` | 90 / 140 | One big claim or the close |
 | `big_number` | `title`, `number`, `unit`, `caption` | number ≤ 12, unit ≤ 10, caption ≤ 90 | One figure that is the point |
-| `kpi` | `title`, `metrics[{value, label}]`, `highlight` | 3–6 metrics; value ≤ 12, label ≤ 28 | A few headline numbers |
+| `kpi` | `title`, `metrics[{value, label, note}]`, `highlight` | 3–6 metrics; value ≤ 12, label ≤ 28, note ≤ 50 | A few headline numbers |
 | `bullets` | `title`, `items[]` | 1–7 items, ≤ 100 chars | Asks, agendas, short lists |
-| `compare` | `title`, `columns[{heading, points[]}]`, `highlight` | 2–3 columns, 1–4 points ≤ 70 | Before/after, us/them, options |
+| `compare` | `title`, `columns[{heading, points[]}]`, `highlight` | 2–3 columns, heading ≤ 40 (≤ 24 with 3 columns), 1–4 points ≤ 70 | Before/after, us/them, options |
 | `process` | `title`, `steps[{label, detail}]`, `highlight` | 3–8 steps; label ≤ 30, detail ≤ 60 | Ordered steps (chevrons up to 5) |
 | `timeline` | `title`, `events[{date, label}]`, `highlight` | 3–7 events; date ≤ 16, label ≤ 40 | Dates and milestones |
 | `quote` | `quote`, `attribution`, `role`, `title` | quote ≤ 240 | A real person's words (credit in notes) |
@@ -77,6 +77,30 @@ fact — without building it: show that to the user first, then build.
 | `table` | `title`, `header[]`, `rows[[]]`, `highlight_row` | 2–6 columns, 1–8 rows | Numbers people will read |
 | `image` | `title`, `image`, `caption`, `alt`, `focus_x`, `focus_y` | caption ≤ 120 | A photo, cover-cropped to the body box |
 | `matrix` | `title`, `quadrants[{heading, text}]`, `x_axis`, `y_axis`, `highlight` | 4 quadrants; heading ≤ 30, text ≤ 90 | 2 × 2 prioritisation |
+| `email` | `title`, `from`, `to`, `subject`, `body[]`, `attachment`, `callouts[{target, line, note}]` | from/to ≤ 70, subject ≤ 90, 1–6 body paragraphs ≤ 160, 0–5 callouts, note ≤ 70 | A realistic mocked message (phishing, support, a template to copy) with numbered markers |
+| `kpi_chart` | `title`, `metrics[{value, label, note}]`, `highlight_metric`, and the `chart` fields | 2–4 metrics; 2–12 categories, 1–4 series | Two to four headline numbers beside the chart that proves them |
+| `cost_table` | `title`, `rows[{item, amount, detail}]`, `unit`, `total_label`, `note`, `highlight` | 1–7 rows; item ≤ 40, detail ≤ 70, note ≤ 140; `amount` a number | Costs with an automatic total row and the total, large, beside the table |
+| `quiz` | `title` (the question), `options[{text, correct}]`, `explain`, `reveal`, `answer_title` | 2–4 options ≤ 80, at least one `correct` | A question for the room; the answer goes in the notes, or with `"reveal": "slide"` on an extra answer slide |
+| `risks` | `title`, `risks[{risk, likelihood, impact, mitigation}]`, `highlight` | 2–4 risks; risk ≤ 50, mitigation ≤ 120; levels `low` / `medium` / `high` | Risk cards, each with a likelihood and an impact chip and its mitigation |
+
+- **`compare` headings** fit their column: up to 40 characters with two columns, 24 with three.
+- **`process`** shows up to five steps as arrows with the number inside (clear of the notch) above a card each;
+  six to eight steps become numbered cards in two rows.
+- **`bullets`** with up to four short items (≤ 80 characters) become full-width bands; longer lists stay a list.
+- **`email` callouts** point at `from`, `to`, `subject`, `attachment` or a `body` paragraph (`line`, 0-based); the
+  builder draws a numbered marker at that line and the numbered note beside the message, and adds the callouts to
+  the notes. A body paragraph that starts with `http` is drawn as a link.
+- **`quiz`** always writes `ANSWER:` (and `WHY:` from `explain`) into the notes; `"reveal": "slide"` adds a slide
+  `<id>-answer` with the right options in the accent.
+
+### Filling the slide
+
+Content is laid out from the title's foot to the bottom margin and from margin to margin: cards and tiles take the
+full body height, sibling boxes share one text size (the largest that fits all of them), and short text grows. The
+ceilings, on the 1440-pt grid: bullets 44 pt, points in cards 40, details and mitigations 36, headings in cards 44,
+KPI values 120 (kept on one line). Nothing with four or more words is set below 27 pt — a smaller role size is
+raised to the floor first. If a slide still looks empty in the render, it is short of content, not of layout: add
+the evidence (a chart beside the numbers, the mitigation beside the risk) rather than enlarging what is there.
 
 ## What the builder decides for you
 
@@ -85,9 +109,24 @@ fact — without building it: show that to the user first, then build.
   0.5 pt gridlines otherwise; 75 % bar gap; 2.25 pt lines; the `highlight` category in the accent and
   every other bar quiet; several series as shades of the accent. Alt text is generated from the data
   unless you give `alt`.
-- **Type:** sizes for a 1440-pt slide (body 34, captions 28, labels 24 — all at or above the 27 pt Full HD
-  floor for sentences); headings use the theme's heading font, everything else the body font.
+- **Type:** sizes for a 1440-pt slide (body 34 growing to 44, captions 28, labels 24 for one-to-three-word
+  labels only); any text of four or more words is at or above the 27 pt Full HD floor; headings use the theme's
+  heading font, everything else the body font.
+- **Notes:** the spec's notes, plus what the pattern adds (email callouts, the quiz answer). A slide whose spec has
+  no notes is listed as `notes: slide N (id) has no speaker notes` — write them; see
+  [CONTENT.md](CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief).
 - **Colour:** text, muted text, accent, background and a quiet neutral, all as theme colours.
 
-The builder does not check line breaks or overflow — that needs a render. Always finish with
-`lint_deck.py`, a render, and a look at every slide.
+The builder estimates line breaks from font metrics; the real ones need a render. Always finish with
+`lint_deck.py`, a render, and a look at every slide — `render_lo.py deck.pptx --out renders/ --sheet` writes
+every slide plus one contact sheet (`renders/contact.png`) on any OS.
+
+## Content the builder cannot supply
+
+- **The ask** states what is asked, why (two or three reasons) and what it costs or changes; a bare statement is a
+  slogan ([CONTENT.md](CONTENT.md#the-ask-states-its-reasons-and-its-cost)). `compare` with *Why now* / *Cost and
+  impact* is the usual shape.
+- **No invented facts.** Ratings, targets, dates, times and mitigations the brief does not give are marked
+  `Assumption: …` in the notes' pitfalls; a worked example (an email, a price) is labelled as made up.
+- **Pick the pattern that shows the thing:** a mocked `email` for phishing or support, `kpi_chart` for numbers with
+  their trend, `risks` for risks, `cost_table` for a budget, `quiz` for checking understanding — not bullets.

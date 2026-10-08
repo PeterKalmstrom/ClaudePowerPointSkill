@@ -671,6 +671,13 @@
                         "number"
                       ],
                       "maxLength": 28
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 50
                     }
                   },
                   "required": [
@@ -938,7 +945,7 @@
                         "string",
                         "number"
                       ],
-                      "maxLength": 30
+                      "maxLength": 40
                     },
                     "points": {
                       "type": "array",
@@ -2041,6 +2048,921 @@
               "pattern",
               "title",
               "quadrants"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "const": "email"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "description": "Stable slide id; keep it when the content changes."
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 70,
+                "description": "Write it as a claim, not a topic."
+              },
+              "notes": {
+                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "key_fact": {
+                        "type": "string"
+                      },
+                      "facts": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "pitfalls": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "sources": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "qa": {
+                        "oneOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "q"
+                                  ],
+                                  "properties": {
+                                    "q": {
+                                      "type": "string"
+                                    },
+                                    "a": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "from": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 70
+              },
+              "to": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 70
+              },
+              "subject": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 90
+              },
+              "body": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "number"
+                  ],
+                  "maxLength": 160
+                },
+                "minItems": 1,
+                "maxItems": 6
+              },
+              "attachment": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 40
+              },
+              "callouts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "target": {
+                      "enum": [
+                        "from",
+                        "to",
+                        "subject",
+                        "body",
+                        "attachment"
+                      ]
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 70
+                    }
+                  },
+                  "required": [
+                    "note"
+                  ]
+                },
+                "minItems": 0,
+                "maxItems": 5
+              }
+            },
+            "required": [
+              "pattern",
+              "title",
+              "from",
+              "subject",
+              "body"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "const": "kpi_chart"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "description": "Stable slide id; keep it when the content changes."
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 70,
+                "description": "Write it as a claim, not a topic."
+              },
+              "notes": {
+                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "key_fact": {
+                        "type": "string"
+                      },
+                      "facts": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "pitfalls": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "sources": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "qa": {
+                        "oneOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "q"
+                                  ],
+                                  "properties": {
+                                    "q": {
+                                      "type": "string"
+                                    },
+                                    "a": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "metrics": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "value": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 12
+                    },
+                    "label": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 28
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 40
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "label"
+                  ]
+                },
+                "minItems": 2,
+                "maxItems": 4
+              },
+              "highlight_metric": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "enum": [
+                  "column",
+                  "bar",
+                  "line",
+                  "pie"
+                ]
+              },
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "number"
+                  ]
+                },
+                "minItems": 2,
+                "maxItems": 12
+              },
+              "series": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": [
+                        "string",
+                        "number"
+                      ]
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "values"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 4
+              },
+              "highlight": {
+                "type": [
+                  "integer",
+                  "string"
+                ]
+              },
+              "number_format": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "caption": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 90
+              },
+              "alt": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              }
+            },
+            "required": [
+              "pattern",
+              "title",
+              "metrics",
+              "categories",
+              "series"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "const": "cost_table"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "description": "Stable slide id; keep it when the content changes."
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 70,
+                "description": "Write it as a claim, not a topic."
+              },
+              "notes": {
+                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "key_fact": {
+                        "type": "string"
+                      },
+                      "facts": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "pitfalls": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "sources": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "qa": {
+                        "oneOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "q"
+                                  ],
+                                  "properties": {
+                                    "q": {
+                                      "type": "string"
+                                    },
+                                    "a": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "item": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 40
+                    },
+                    "amount": {
+                      "type": "number"
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 70
+                    }
+                  },
+                  "required": [
+                    "item",
+                    "amount"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 7
+              },
+              "unit": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 12
+              },
+              "total_label": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 20
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 140
+              },
+              "highlight": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "pattern",
+              "title",
+              "rows"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "const": "quiz"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "description": "Stable slide id; keep it when the content changes."
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 90,
+                "description": "Write it as a claim, not a topic."
+              },
+              "notes": {
+                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "key_fact": {
+                        "type": "string"
+                      },
+                      "facts": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "pitfalls": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "sources": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "qa": {
+                        "oneOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "q"
+                                  ],
+                                  "properties": {
+                                    "q": {
+                                      "type": "string"
+                                    },
+                                    "a": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "text": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 80
+                    },
+                    "correct": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ]
+                },
+                "minItems": 2,
+                "maxItems": 4
+              },
+              "explain": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 160
+              },
+              "reveal": {
+                "enum": [
+                  "notes",
+                  "slide"
+                ]
+              },
+              "answer_title": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 55
+              }
+            },
+            "required": [
+              "pattern",
+              "title",
+              "options"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "const": "risks"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "description": "Stable slide id; keep it when the content changes."
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 70,
+                "description": "Write it as a claim, not a topic."
+              },
+              "notes": {
+                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "key_fact": {
+                        "type": "string"
+                      },
+                      "facts": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "pitfalls": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "sources": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "qa": {
+                        "oneOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "q"
+                                  ],
+                                  "properties": {
+                                    "q": {
+                                      "type": "string"
+                                    },
+                                    "a": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "risks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "risk": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 50
+                    },
+                    "likelihood": {
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high"
+                      ]
+                    },
+                    "impact": {
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high"
+                      ]
+                    },
+                    "mitigation": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 120
+                    }
+                  },
+                  "required": [
+                    "risk",
+                    "mitigation"
+                  ]
+                },
+                "minItems": 2,
+                "maxItems": 4
+              },
+              "highlight": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "pattern",
+              "title",
+              "risks"
             ]
           }
         ]

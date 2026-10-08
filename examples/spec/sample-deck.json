@@ -252,6 +252,175 @@
       }
     },
     {
+      "id": "east-trend",
+      "pattern": "kpi_chart",
+      "title": "East pulled ahead every month of the quarter",
+      "metrics": [
+        {
+          "value": "+8 %",
+          "label": "East vs Q4",
+          "note": "Best of four regions"
+        },
+        {
+          "value": "12.4 M",
+          "label": "East revenue in Q1"
+        }
+      ],
+      "highlight_metric": 0,
+      "type": "line",
+      "categories": [
+        "Jan",
+        "Feb",
+        "Mar"
+      ],
+      "series": [
+        {
+          "name": "East",
+          "values": [
+            3.9,
+            4.1,
+            4.4
+          ]
+        },
+        {
+          "name": "Other regions (avg)",
+          "values": [
+            3.2,
+            3.2,
+            3.3
+          ]
+        }
+      ],
+      "number_format": "0.0",
+      "notes": {
+        "key_fact": "East's gap widened each month.",
+        "sources": [
+          "Finance dashboard, April 2026"
+        ]
+      }
+    },
+    {
+      "id": "rollout-risks",
+      "pattern": "risks",
+      "title": "Two risks could stall the rollout",
+      "highlight": 0,
+      "risks": [
+        {
+          "risk": "Partners sign up slowly",
+          "likelihood": "medium",
+          "impact": "high",
+          "mitigation": "Start with the two partners East already works with; add others from June."
+        },
+        {
+          "risk": "Regions skip the weekly review",
+          "likelihood": "low",
+          "impact": "medium",
+          "mitigation": "Each region's owner reports at the monthly leadership meeting."
+        }
+      ],
+      "notes": {
+        "key_fact": "Partner pace is the risk that matters.",
+        "pitfalls": [
+          "Ratings are the team's assessment, not data."
+        ]
+      }
+    },
+    {
+      "id": "rollout-cost",
+      "pattern": "cost_table",
+      "title": "The rollout costs 410 k this year",
+      "unit": "k",
+      "highlight": 0,
+      "rows": [
+        {
+          "item": "Partner fees",
+          "amount": 240,
+          "detail": "Two partners per region"
+        },
+        {
+          "item": "Training",
+          "amount": 90,
+          "detail": "Two days per regional team"
+        },
+        {
+          "item": "Portal",
+          "amount": 80,
+          "detail": "Partner onboarding content"
+        }
+      ],
+      "note": "Partner fees are paid only on closed deals.",
+      "notes": {
+        "key_fact": "410 k in total, most of it paid only on results.",
+        "sources": [
+          "Budget draft v3, April 2026"
+        ]
+      }
+    },
+    {
+      "id": "partner-invite",
+      "pattern": "email",
+      "title": "The partner invite makes one clear ask",
+      "from": "Regional sales lead <lead.east@example.com>",
+      "to": "partner@example.org",
+      "subject": "Join our partner programme - kick-off on 12 May",
+      "body": [
+        "Hi Sam,",
+        "We'd like you to be one of two launch partners in the East region.",
+        "Can you join the kick-off on 12 May? It takes two hours.",
+        "Best, Alex"
+      ],
+      "callouts": [
+        {
+          "target": "subject",
+          "note": "The date is in the subject"
+        },
+        {
+          "target": "body",
+          "line": 1,
+          "note": "Why them, in one line"
+        },
+        {
+          "target": "body",
+          "line": 2,
+          "note": "One ask, with the time it takes"
+        }
+      ],
+      "notes": {
+        "key_fact": "Use this invite as the template for every region.",
+        "facts": [
+          "Names and addresses are examples."
+        ]
+      }
+    },
+    {
+      "id": "check",
+      "pattern": "quiz",
+      "title": "Quick check: which region beat its target?",
+      "reveal": "notes",
+      "options": [
+        {
+          "text": "East",
+          "correct": true
+        },
+        {
+          "text": "South"
+        },
+        {
+          "text": "West"
+        },
+        {
+          "text": "North"
+        }
+      ],
+      "explain": "Only East: 12.4 M against a target of 11.5 M.",
+      "notes": {
+        "key_fact": "Ask the room before revealing.",
+        "sources": [
+          "Finance dashboard, April 2026"
+        ]
+      }
+    },
+    {
       "id": "asks",
       "pattern": "bullets",
       "title": "Three decisions for today",

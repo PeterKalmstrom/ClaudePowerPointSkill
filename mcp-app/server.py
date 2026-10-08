@@ -13,8 +13,14 @@ Tools for the model (the view uses them too):
   powerpoint_hide      hide or unhide slides
   powerpoint_fix       apply a lint fix to one shape, live
   powerpoint_history   list saved versions; powerpoint_restore puts one back
+  powerpoint_slideshow start, step through, black out and end the real slide show (the Rehearse view)
+  powerpoint_apply_direction  restyle the deck in a design direction (theme colours + fonts)
+  powerpoint_set_theme change theme colour slots and fonts
+  powerpoint_layout_variants  how to make hidden layout variants of a slide; powerpoint_choose_variant /
+                       powerpoint_discard_variants keep one or drop them
   powerpoint_resume    re-arm the server after an unexpected error halted it
-Tools only the view calls: slide_state, slide_image, deck_outline, slide_thumbs, deck_lint, history_thumb.
+Tools only the view calls: slide_state, slide_image, deck_outline, slide_thumbs, deck_lint, history_thumb,
+design_previews, theme_info, layout_variants.
 
 Every change made through these tools is preceded by a saved version, so it can be undone from the History view.
 
@@ -27,6 +33,7 @@ import base64
 import contextlib
 import io
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -58,6 +65,24 @@ MAX_VERSIONS = 25
 NO_TEXT_TYPES = {7, 10, 12, 16}   # msoEmbeddedOLEObject, msoLinkedOLEObject, msoOLEControlObject, msoMedia
 GOTO_VIEWS = {1, 3, 9}            # ppViewSlide, ppViewNotesPage, ppViewNormal: the views that can GotoSlide
 SECTION_ACTIONS = ("add", "rename", "delete")
+SHOW_ACTIONS = ("start", "next", "previous", "black", "end", "state")
+SHOW_STATES = {1: "running", 2: "paused", 3: "black", 4: "white", 5: "done"}   # PpSlideShowState
+WPM = 130                         # speaking rate behind every talk-length estimate (reference/CONTENT.md)
+# A timing marker opens the notes (reference/PRESENTING.md): [15 sec], [2 min], [1:30]
+MARKER = re.compile(r"^\s*\[\s*(?:(\d+)\s*:\s*(\d{1,2})|(\d+(?:\.\d+)?)\s*(s|secs?|seconds?|m|mins?|minutes?))\s*\]",
+                    re.IGNORECASE)
+MAX_PREVIEWS = 6
+DEFAULT_DIRECTIONS = ["clean-corporate", "editorial-serif", "dark-stage", "nordic-calm", "bold-signal", "sunset-warm"]
+DIRECTION_SLOTS = ("dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6")
+SLOT_INDEX = {"dk1": 1, "lt1": 2, "dk2": 3, "lt2": 4, "accent1": 5, "accent2": 6, "accent3": 7, "accent4": 8,
+              "accent5": 9, "accent6": 10, "hlink": 11, "folHlink": 12}   # MsoThemeColorSchemeIndex
+HEX = re.compile(r"^#?([0-9A-Fa-f]{6})$")
+TEXT_PAIRS = [("dk1", "lt1"), ("dk2", "lt1"), ("dk1", "lt2"), ("dk2", "lt2"), ("lt1", "dk1"), ("lt1", "dk2"),
+              ("hlink", "lt1")]
+GRAPHIC_PAIRS = [(f"accent{I}", "lt1") for I in range(1, 7)]
+VARIANT_TAG = "PPTLIVE-VARIANT-OF"     # Slide.Tags: the SlideID this hidden slide is a layout variant of
+VARIANT_NAME_TAG = "PPTLIVE-VARIANT-NAME"
+PP_SAVE_AS_PPTX = 24                  # ppSaveAsOpenXMLPresentation: python-pptx reads it even when the deck is .pptm
 
 mcp = FastMCP("powerpoint-live")
 
@@ -124,7 +149,7 @@ class kChangeTracker:
                 return "empty"
             Slide = Prs.Slides(N)
             Map = self.ShapeMap(Slide)
-            return str(hash((Slide.SlideID, bool(Slide.SlideShowTransition.Hidden),
+            return str(hash((Slide.SlideID, bool(Slide.SlideShowTransition.Hidden), self.Live.ThemeEpoch,
                              tuple((K, tuple(V["box"]), V["text"]) for K, V in Map.items()))))
         except Exception as e:
             kS.GlobalErrorHandler(e, "kChangeTracker.Signature")
@@ -491,6 +516,97 @@ class kFixMutation(kMutation):
             return {}
 
 
+class kThemeMutation(kMutation):
+    """powerpoint_set_theme / powerpoint_apply_direction: theme colours and fonts on every slide master."""
+
+    def __init__(self, Live, Colors, Major, Minor, Label):
+        try:
+            super().__init__(Live, Label)
+            self.Colors = dict(Colors or {})
+            self.Major = Major or ""
+            self.Minor = Minor or ""
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeMutation.__init__")
+
+    def Apply(self, Prs):
+        """Write the colours and fonts through COM; every slide's signature changes so pictures are redrawn."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            self.Live.ThemeEditor.SetLive(Prs, self.Colors, self.Major, self.Minor)
+            self.Live.ThemeEpoch += 1
+            return {"theme": {"colors": self.Colors, "major_font": self.Major, "minor_font": self.Minor}}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeMutation.Apply")
+            return {}
+
+
+class kChooseVariantMutation(kMutation):
+    """powerpoint_choose_variant: the chosen variant takes the original's place; the rest are deleted."""
+
+    def __init__(self, Live, SlideId, VariantId):
+        try:
+            super().__init__(Live, "use layout variant")
+            self.SlideId = int(SlideId)
+            self.VariantId = int(VariantId)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kChooseVariantMutation.__init__")
+
+    def Apply(self, Prs):
+        """Unhide (as the original was), untag, move into place, delete the original and the other variants."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            Live = self.Live
+            Sorter, Variants = Live.Sorter, Live.Variants
+            Orig = Sorter.SlideById(Prs, self.SlideId)
+            Chosen = Sorter.SlideById(Prs, self.VariantId)
+            Others = [S.SlideID for S in Variants.Of(Prs, self.SlideId) if S.SlideID != self.VariantId]
+            Chosen.SlideShowTransition.Hidden = Orig.SlideShowTransition.Hidden
+            Variants.Untag(Chosen)
+            Sorter.MoveOne(Prs, Chosen, self.SlideId, 0)
+            for Sid in Others:
+                Sorter.SlideById(Prs, Sid).Delete()
+            Orig.Delete()
+            Live.Current = Sorter.SlideById(Prs, self.VariantId).SlideIndex
+            return {"chosen": self.VariantId, "replaced": self.SlideId, "discarded": Others}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kChooseVariantMutation.Apply")
+            return {}
+
+
+class kDiscardVariantsMutation(kMutation):
+    """powerpoint_discard_variants: delete every variant of one slide."""
+
+    def __init__(self, Live, SlideId):
+        try:
+            super().__init__(Live, "discard layout variants")
+            self.SlideId = int(SlideId)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDiscardVariantsMutation.__init__")
+
+    def Apply(self, Prs):
+        """Delete the variants; the original becomes the current slide."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            Live = self.Live
+            Ids = [S.SlideID for S in Live.Variants.Of(Prs, self.SlideId)]
+            for Sid in Ids:
+                Live.Sorter.SlideById(Prs, Sid).Delete()
+            Live.Current = Live.Sorter.SlideById(Prs, self.SlideId).SlideIndex
+            return {"discarded": Ids}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDiscardVariantsMutation.Apply")
+            return {}
+
+
 # ---------------------------------------------------------------- sorter, outline, thumbnails
 
 class kSorter:
@@ -570,7 +686,8 @@ class kSorter:
             return []
 
     def Outline(self):
-        """Sections and slides (id, title, hidden, notes words, change signature)."""
+        """Sections and slides (id, title, hidden, notes and visible words, talk time, variant of, change signature);
+        talk time per section and in total counts the slides the show will play (not hidden ones)."""
         if kS.ErrorMode:
             return None
         try:
@@ -583,11 +700,14 @@ class kSorter:
                 Slide = Prs.Slides(N)
                 Slides.append({"index": N, "id": Slide.SlideID, "section": Slide.sectionIndex if Has else 0,
                                "title": self.Title(Slide), "hidden": bool(Slide.SlideShowTransition.Hidden),
-                               "notes_words": len(self.NotesText(Slide).split()),
+                               **Live.Talk.ForSlide(Slide), "variant_of": Live.Variants.VariantOf(Slide),
                                "signature": Live.Tracker.Signature(Prs, N)})
             for Sec in Sections:
                 Sec["slides"] = [X["id"] for X in Slides if X["section"] == Sec["index"]]
-            return {**Live.Summary(Prs), "sections": Sections, "slides": Slides, "has_sections": Has}
+                Sec["estimate_sec"] = sum(X["planned_sec"] for X in Slides
+                                          if X["section"] == Sec["index"] and not X["hidden"])
+            return {**Live.Summary(Prs), "sections": Sections, "slides": Slides, "has_sections": Has, "wpm": WPM,
+                    "estimate_sec": sum(X["planned_sec"] for X in Slides if not X["hidden"])}
         except kToolException:
             raise
         except Exception as e:
@@ -838,6 +958,620 @@ class kLintBridge:
             return None
 
 
+# ---------------------------------------------------------------- talk length, slide show, designs, theme, variants
+
+class kTalkTime:
+    """Speaking time per slide: the timing marker in the notes, else an estimate from the words at WPM."""
+
+    def __init__(self, Live):
+        try:
+            self.Live = Live
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTalkTime.__init__")
+
+    def MarkerSeconds(self, Notes):
+        """Seconds of the timing marker that opens the notes ([15 sec], [2 min], [1:30]), or None."""
+        if kS.ErrorMode:
+            return None
+        try:
+            M = MARKER.match(Notes or "")
+            if M is None:
+                return None
+            if M.group(1) is not None:
+                return int(M.group(1)) * 60 + int(M.group(2))
+            Value = float(M.group(3))
+            return round(Value * 60 if M.group(4).lower().startswith("m") else Value)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTalkTime.MarkerSeconds")
+            return None
+
+    def VisibleWords(self, Slide):
+        """Words of text on the slide itself (group members included)."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            Live = self.Live
+            return sum(len(Live.Tracker.ShapeText(Shape).split()) for Shape in Live.Walk(Slide.Shapes))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTalkTime.VisibleWords")
+            return 0
+
+    def Seconds(self, Words):
+        """Speaking time of Words words at WPM."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            return round(Words * 60 / WPM)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTalkTime.Seconds")
+            return 0
+
+    def ForSlide(self, Slide, Notes=None):
+        """notes_words, visible_words, estimate_sec (from the notes, else the visible words), marker_sec and
+        planned_sec (the marker when there is one, else the estimate)."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            Notes = self.Live.Sorter.NotesText(Slide) if Notes is None else Notes
+            NotesWords, Visible = len(Notes.split()), self.VisibleWords(Slide)
+            Estimate = self.Seconds(NotesWords if NotesWords else Visible)
+            Marker = self.MarkerSeconds(Notes)
+            return {"notes_words": NotesWords, "visible_words": Visible, "estimate_sec": Estimate,
+                    "estimate_from": "notes" if NotesWords else "slide", "marker_sec": Marker,
+                    "planned_sec": Marker if Marker is not None else Estimate}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kTalkTime.ForSlide")
+            return {}
+
+
+class kSlideShow:
+    """powerpoint_slideshow: drives the real slide show of the deck (SlideShowSettings.Run, SlideShowWindow.View)."""
+
+    def __init__(self, Live):
+        try:
+            self.Live = Live
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideShow.__init__")
+
+    def Window(self, Prs):
+        """The slide show window of this deck, or None when no show of it is running."""
+        if kS.ErrorMode:
+            return None
+        try:
+            for W in self.Live.App().SlideShowWindows:
+                if W.Presentation.FullName == Prs.FullName:
+                    return W
+            return None
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideShow.Window")
+            return None
+
+    def Require(self, Prs):
+        """The running show's window; no show is an expected state the caller is told about."""
+        if kS.ErrorMode:
+            return None
+        try:
+            W = self.Window(Prs)
+            if W is None:
+                raise ToolReportableException("no slide show of this deck is running - call powerpoint_slideshow "
+                                              "with action=start first")
+            return W
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideShow.Require")
+            return None
+
+    def Do(self, Action):
+        """Run one action; every action answers with the show's state."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if Action not in SHOW_ACTIONS:
+                raise ToolInputException("action must be start, next, previous, black, end or state")
+            Prs = self.Live.Prs()
+            if Action == "start":
+                self.Start(Prs)
+            elif Action != "state":
+                View = self.Require(Prs).View
+                if Action != "end" and View.State == 5:
+                    if Action == "previous":
+                        View.Previous()   # from the end-of-show screen back onto the last slide
+                    elif Action == "next":
+                        raise ToolReportableException("the show is at its end - previous or end")
+                    else:
+                        raise ToolReportableException("the show is at its end - black needs a slide on screen")
+                elif Action == "next":
+                    View.Next()
+                elif Action == "previous":
+                    View.Previous()
+                elif Action == "black":
+                    View.State = 1 if View.State == 3 else 3   # ppSlideShowRunning <-> ppSlideShowBlackScreen
+                else:
+                    View.Exit()
+            return {**self.State(Prs), "action": Action}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideShow.Do")
+            return None
+
+    def Start(self, Prs):
+        """SlideShowSettings.Run, then go to the current slide; a running show is reused."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if Prs.Slides.Count == 0:
+                raise ToolReportableException("the deck has no slides to show")
+            W = self.Window(Prs)
+            if W is None:
+                W = Prs.SlideShowSettings.Run()
+            N = self.Live.Clamp(Prs, self.Live.Current or 1)
+            if W.View.State == 5 or W.View.Slide.SlideIndex != N:
+                W.View.GotoSlide(N)
+            return None
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideShow.Start")
+            return None
+
+    def State(self, Prs):
+        """Running or not, the slide on screen (the current slide when no show runs), its notes and timing,
+        the next slide the show will reach and the planned time before this slide."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            Live = self.Live
+            W = self.Window(Prs)
+            Show = SHOW_STATES.get(W.View.State, "running") if W is not None else "stopped"
+            if W is not None and Show != "done":
+                Live.Current = W.View.Slide.SlideIndex   # the Slide view follows the show
+            N = Live.Clamp(Prs, Live.Current or 1)
+            Out = {**Live.Summary(Prs), "running": W is not None, "state": Show, "slide": N, "slide_id": None,
+                   "notes": "", "next_slide": 0, "next_slide_id": None, "planned_before_sec": 0, "planned_total_sec": 0}
+            if not N:
+                return Out
+            Before = Total = 0
+            for I in range(1, Prs.Slides.Count + 1):
+                Slide = Prs.Slides(I)
+                Hidden = bool(Slide.SlideShowTransition.Hidden)
+                if I == N:
+                    Notes = Live.Sorter.NotesText(Slide)
+                    Out.update({"slide_id": Slide.SlideID, "notes": Notes, **Live.Talk.ForSlide(Slide, Notes)})
+                if Hidden and I != N:
+                    continue
+                Planned = Live.Talk.ForSlide(Slide)["planned_sec"]
+                Total += Planned
+                if I < N:
+                    Before += Planned
+                elif I > N and not Out["next_slide"]:
+                    Out["next_slide"], Out["next_slide_id"] = I, Slide.SlideID
+            Out["planned_before_sec"], Out["planned_total_sec"] = Before, Total
+            return Out
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideShow.State")
+            return {}
+
+
+class kDesignStudio:
+    """Design directions (scripts/directions.json, applied as scripts/build_deck.py kDeckDesign does): previews
+    rendered from a copy of the deck, and the live theme change."""
+
+    def __init__(self, Live):
+        try:
+            self.Live = Live
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDesignStudio.__init__")
+
+    def All(self):
+        """Every direction in directions.json."""
+        if kS.ErrorMode:
+            return []
+        try:
+            from build_deck import kSpecSchema
+            return kSpecSchema.Directions()
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDesignStudio.All")
+            return []
+
+    def Resolve(self, Names):
+        """The directions called Names (empty = six contrasting defaults); unknown names are the caller's mistake."""
+        if kS.ErrorMode:
+            return []
+        try:
+            ById = {D["id"]: D for D in self.All()}
+            Names = [N for N in (Names or []) if N] or [N for N in DEFAULT_DIRECTIONS if N in ById]
+            if len(Names) > MAX_PREVIEWS:
+                raise ToolInputException(f"at most {MAX_PREVIEWS} directions at a time")
+            Unknown = [N for N in Names if N not in ById]
+            if Unknown:
+                raise ToolInputException(f"unknown direction(s) {', '.join(Unknown)}; known: {', '.join(ById)}")
+            return [ById[N] for N in Names]
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDesignStudio.Resolve")
+            return []
+
+    def Slots(self, D):
+        """The theme colours and fonts a direction gives a deck - kDeckDesign.ApplyDirection on a blank deck,
+        read back with kTheme, so they are exactly what build_deck writes."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            from pptx import Presentation
+            from build_deck import kDeckDesign
+            from _theme import kTheme
+            Blank = Presentation()
+            kDeckDesign.ApplyDirection(Blank, D)
+            Theme = kTheme(Blank.slide_master)
+            return {"colors": {K: Theme.Colours[K] for K in DIRECTION_SLOTS}, "major_font": Theme.Major,
+                    "minor_font": Theme.Minor}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDesignStudio.Slots")
+            return {}
+
+    def SpreadTheme(self, Pptx):
+        """Give every slide master the first master's theme (ApplyDirection writes only the first)."""
+        if kS.ErrorMode:
+            return None
+        try:
+            from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+            Blob = Pptx.slide_master.part.part_related_by(RT.THEME).blob
+            for Master in list(Pptx.slide_masters)[1:]:
+                Master.part.part_related_by(RT.THEME)._blob = Blob
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDesignStudio.SpreadTheme")
+            return None
+
+    def RenderWith(self, Src, D, N, Width):
+        """Slide N of the copy Src restyled in direction D: python-pptx writes the theme into another copy,
+        a windowless read-only PowerPoint opens it and Slide.Export draws the slide. The open deck is untouched."""
+        if kS.ErrorMode:
+            return None
+        try:
+            from pptx import Presentation
+            from build_deck import kDeckDesign
+            Pptx = Presentation(Src)
+            kDeckDesign.ApplyDirection(Pptx, D)
+            self.SpreadTheme(Pptx)
+            Path = os.path.join(self.Live.Work, f"design-{D['id']}.pptx")
+            Pptx.save(Path)
+            Copy = self.Live.App().Presentations.Open(Path, -1, 0, 0)   # read-only, untitled no, no window
+            try:
+                return self.Live.Png(Copy.Slides(N), Width)
+            finally:
+                Copy.Close()
+                os.remove(Path)
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDesignStudio.RenderWith")
+            return None
+
+    def Previews(self, Slide, Names, Width):
+        """design_previews: the slide in up to six directions, plus the list of every direction."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Live = self.Live
+            Ds = self.Resolve(Names)
+            Prs = Live.Prs()
+            N = Live.Clamp(Prs, Slide or Live.Current or 1)
+            if not N:
+                raise ToolReportableException("the deck has no slides to preview")
+            Src = os.path.join(Live.Work, "design-src.pptx")
+            Prs.SaveCopyAs(Src, PP_SAVE_AS_PPTX)
+            Out = []
+            for D in Ds:
+                Out.append({"direction": D["id"], "mood": D.get("mood", ""), "tone": D.get("tone", ""),
+                            "heading": D["heading"], "body": D["body"], "accent": D["accent"],
+                            "background": D["background"], "text": D["text"], "png": self.RenderWith(Src, D, N, Width)})
+            os.remove(Src)
+            return {"slide": N, "slide_id": Prs.Slides(N).SlideID, "previews": Out,
+                    "directions": [{"id": D["id"], "mood": D.get("mood", ""), "tone": D.get("tone", "")}
+                                   for D in self.All()]}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDesignStudio.Previews")
+            return None
+
+    def ApplyLive(self, Name):
+        """powerpoint_apply_direction: the direction's colours and fonts on the whole live deck, after a version."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if not Name:
+                raise ToolInputException("name a direction - see design_previews or scripts/directions.json")
+            D = self.Resolve([Name])[0]
+            Slots = self.Slots(D)
+            Res = self.Live.Mutate(kThemeMutation(self.Live, Slots["colors"], Slots["major_font"], Slots["minor_font"],
+                                                  f"design direction {Name}"))
+            return {**(Res or {}), "direction": Name}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDesignStudio.ApplyLive")
+            return None
+
+
+class kThemeEditor:
+    """theme_info and powerpoint_set_theme: theme colour slots, fonts and contrast pairs."""
+
+    def __init__(self, Live):
+        try:
+            self.Live = Live
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeEditor.__init__")
+
+    def Bgr(self, Hex):
+        """RRGGBB to the BGR integer COM's .RGB expects."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            return int(Hex[4:6] + Hex[2:4] + Hex[0:2], 16)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeEditor.Bgr")
+            return 0
+
+    def Clean(self, Colors, Major, Minor):
+        """The colours as {slot: RRGGBB}; unknown slots, bad hex or nothing to change are the caller's mistake."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            Out = {}
+            for Slot, Value in (Colors or {}).items():
+                if Slot not in SLOT_INDEX:
+                    raise ToolInputException(f"unknown theme slot {Slot}; slots: {', '.join(SLOT_INDEX)}")
+                M = HEX.match(str(Value).strip())
+                if M is None:
+                    raise ToolInputException(f"{Slot}: {Value!r} is not a RRGGBB hex colour")
+                Out[Slot] = M.group(1).upper()
+            if not Out and not (Major or "").strip() and not (Minor or "").strip():
+                raise ToolInputException("nothing to change - give colors, major_font or minor_font")
+            return Out
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeEditor.Clean")
+            return {}
+
+    def SetLive(self, Prs, Colors, Major, Minor):
+        """Theme colours (ThemeColorScheme.Colors(i).RGB, BGR) and Latin fonts on every design's slide master."""
+        if kS.ErrorMode:
+            return None
+        try:
+            for I in range(1, Prs.Designs.Count + 1):
+                Theme = Prs.Designs(I).SlideMaster.Theme
+                for Slot, Hex in Colors.items():
+                    Theme.ThemeColorScheme.Colors(SLOT_INDEX[Slot]).RGB = self.Bgr(Hex)
+                if Major:
+                    Theme.ThemeFontScheme.MajorFont.Item(1).Name = Major   # msoThemeLatin
+                if Minor:
+                    Theme.ThemeFontScheme.MinorFont.Item(1).Name = Minor
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeEditor.SetLive")
+            return None
+
+    def Pairs(self, Colours):
+        """Contrast of text on backgrounds (4.5:1) and accents on the background (3:1, large text and graphics)."""
+        if kS.ErrorMode:
+            return []
+        try:
+            from _rules import kRules
+            Out = []
+            for Pairs, Need, Kind in ((TEXT_PAIRS, 4.5, "text"), (GRAPHIC_PAIRS, 3.0, "graphics")):
+                for Fg, Bg in Pairs:
+                    if Fg in Colours and Bg in Colours:
+                        Ratio = kRules.ContrastRatio(Colours[Fg], Colours[Bg])
+                        Out.append({"fg": Fg, "bg": Bg, "ratio": round(Ratio, 2), "min": Need, "kind": Kind,
+                                    "pass": Ratio >= Need})
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeEditor.Pairs")
+            return []
+
+    def Info(self):
+        """theme_info: the current slide's theme read with kTheme from a Save As copy, and its contrast pairs."""
+        if kS.ErrorMode:
+            return None
+        try:
+            from pptx import Presentation
+            from _theme import kTheme
+            Live = self.Live
+            Prs = Live.Prs()
+            Copy = os.path.join(Live.Work, "theme.pptx")
+            Prs.SaveCopyAs(Copy, PP_SAVE_AS_PPTX)
+            Pptx = Presentation(Copy)
+            N = Live.Clamp(Prs, Live.Current or 1)
+            Master = Pptx.slides[N - 1].slide_layout.slide_master if N else Pptx.slide_master
+            Theme = kTheme(Master)
+            Colours = dict(Theme.Colours)
+            os.remove(Copy)
+            return {**Live.Summary(Prs), "colors": Colours, "major_font": Theme.Major or "",
+                    "minor_font": Theme.Minor or "", "pairs": self.Pairs(Colours), "masters": Prs.Designs.Count}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeEditor.Info")
+            return None
+
+    def Set(self, Colors, Major, Minor):
+        """powerpoint_set_theme: checked first, then a version, then the change."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Clean = self.Clean(Colors, Major, Minor)
+            return self.Live.Mutate(kThemeMutation(self.Live, Clean, (Major or "").strip(), (Minor or "").strip(),
+                                                   "theme colours and fonts"))
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeEditor.Set")
+            return None
+
+
+class kVariants:
+    """Layout variants: hidden copies of a slide, right after it, tagged PPTLIVE-VARIANT-OF=<SlideID>."""
+
+    def __init__(self, Live):
+        try:
+            self.Live = Live
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kVariants.__init__")
+
+    def VariantOf(self, Slide):
+        """The SlideID this slide is a variant of, or 0."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            Value = str(Slide.Tags.Item(VARIANT_TAG) or "").strip()
+            return int(Value) if Value.isdigit() else 0
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kVariants.VariantOf")
+            return 0
+
+    def Of(self, Prs, SlideId):
+        """The variants of one slide, in deck order."""
+        if kS.ErrorMode:
+            return []
+        try:
+            return [Prs.Slides(I) for I in range(1, Prs.Slides.Count + 1)
+                    if self.VariantOf(Prs.Slides(I)) == int(SlideId)]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kVariants.Of")
+            return []
+
+    def Untag(self, Slide):
+        """Remove the variant tags from a slide."""
+        if kS.ErrorMode:
+            return None
+        try:
+            for Tag in (VARIANT_TAG, VARIANT_NAME_TAG):
+                if Slide.Tags.Item(Tag):
+                    Slide.Tags.Delete(Tag)
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kVariants.Untag")
+            return None
+
+    def Require(self, Prs, SlideId, VariantId=0):
+        """The slide's variants; none (or a VariantId that is not one of them) is reported before any version."""
+        if kS.ErrorMode:
+            return []
+        try:
+            self.Live.Sorter.SlideById(Prs, SlideId)
+            Found = self.Of(Prs, SlideId)
+            if not Found:
+                raise ToolReportableException(f"slide {SlideId} has no layout variants - see "
+                                              "powerpoint_layout_variants")
+            if VariantId and int(VariantId) not in [S.SlideID for S in Found]:
+                raise ToolInputException(f"slide {VariantId} is not a variant of slide {SlideId} - call "
+                                         "layout_variants")
+            return Found
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kVariants.Require")
+            return []
+
+    def Guide(self, Slide, Count):
+        """powerpoint_layout_variants: what Claude needs to make the variants itself with powerpoint_run."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Live = self.Live
+            Prs = Live.Prs()
+            N = Live.Clamp(Prs, Slide or Live.Current or 1)
+            if not N:
+                raise ToolReportableException("the deck has no slides")
+            Live.Current = N
+            Orig = Prs.Slides(N)
+            if self.VariantOf(Orig):
+                raise ToolInputException(f"slide {N} is itself a variant - ask for variants of slide "
+                                         f"{self.VariantOf(Orig)}")
+            Count = max(1, min(int(Count or 3), MAX_PREVIEWS))
+            Existing = [{"id": S.SlideID, "index": S.SlideIndex, "name": S.Tags.Item(VARIANT_NAME_TAG)}
+                        for S in self.Of(Prs, Orig.SlideID)]
+            Code = (f"orig = prs.Slides({N})\n"
+                    f"for k, name in enumerate([...{Count} short layout names...]):\n"
+                    "    v = orig.Duplicate().Item(1)\n"
+                    "    v.MoveTo(orig.SlideIndex + 1 + k)\n"
+                    "    v.SlideShowTransition.Hidden = -1\n"
+                    f"    v.Tags.Add(\"{VARIANT_TAG}\", str(orig.SlideID))\n"
+                    f"    v.Tags.Add(\"{VARIANT_NAME_TAG}\", name)\n"
+                    "    # now rearrange v's shapes into that layout (keep every word and number)\n")
+            return {**Live.Summary(Prs), "slide": N, "slide_id": Orig.SlideID, "count": Count, "existing": Existing,
+                    "how": (f"Make {Count} layout variants of slide {N} yourself with ONE powerpoint_run (label "
+                            "\"layout variants\"): duplicate the slide, keep each copy HIDDEN, right after the "
+                            f"original, tagged {VARIANT_TAG}=<original SlideID> and {VARIANT_NAME_TAG}=<a short "
+                            "name>; then rearrange each copy into a genuinely different layout (reference/LAYOUT.md). "
+                            "Never change the original. The view shows them in a Variants strip; the user picks one "
+                            "(powerpoint_choose_variant) or discards them (powerpoint_discard_variants)."),
+                    "code": Code}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kVariants.Guide")
+            return None
+
+    def List(self, SlideId, Width):
+        """layout_variants: the original and its variants with thumbnails."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Live = self.Live
+            Prs = Live.Prs()
+            Orig = Live.Sorter.SlideById(Prs, SlideId)
+            Found = self.Of(Prs, Orig.SlideID)
+            Pngs = {T["id"]: T["png"] for T in
+                    Live.Sorter.ThumbsFor([Orig.SlideID] + [S.SlideID for S in Found], Width)["thumbs"]}
+            return {"slide_id": Orig.SlideID, "slide": Orig.SlideIndex,
+                    "original": {"id": Orig.SlideID, "index": Orig.SlideIndex, "png": Pngs.get(Orig.SlideID)},
+                    "variants": [{"id": S.SlideID, "index": S.SlideIndex,
+                                  "name": S.Tags.Item(VARIANT_NAME_TAG) or f"Variant {K + 1}",
+                                  "png": Pngs.get(S.SlideID)} for K, S in enumerate(Found)]}
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kVariants.List")
+            return None
+
+    def Choose(self, SlideId, VariantId):
+        """powerpoint_choose_variant, checked before a version is saved."""
+        if kS.ErrorMode:
+            return None
+        try:
+            self.Require(self.Live.Prs(), SlideId, VariantId or -1)
+            return self.Live.Mutate(kChooseVariantMutation(self.Live, SlideId, VariantId))
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kVariants.Choose")
+            return None
+
+    def Discard(self, SlideId):
+        """powerpoint_discard_variants, checked before a version is saved."""
+        if kS.ErrorMode:
+            return None
+        try:
+            self.Require(self.Live.Prs(), SlideId)
+            return self.Live.Mutate(kDiscardVariantsMutation(self.Live, SlideId))
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kVariants.Discard")
+            return None
+
+
 # ---------------------------------------------------------------- the live deck (one COM thread)
 
 class kPowerPointLive:
@@ -848,6 +1582,7 @@ class kPowerPointLive:
             self.PrsName = None   # FullName of the deck we work on
             self.Current = 1
             self.Version = 0
+            self.ThemeEpoch = 0   # bumped by every theme change: slide signatures (and so pictures) follow it
             self.Work = tempfile.mkdtemp(prefix="pptlive-")
             self.Pool = ThreadPoolExecutor(max_workers=1,
                                            initializer=self.ComInit if sys.platform == "win32" else None)
@@ -855,6 +1590,11 @@ class kPowerPointLive:
             self.History = kVersionHistory(self)
             self.Lint = kLintBridge(self)
             self.Sorter = kSorter(self)
+            self.Talk = kTalkTime(self)
+            self.SlideShow = kSlideShow(self)
+            self.Design = kDesignStudio(self)
+            self.ThemeEditor = kThemeEditor(self)
+            self.Variants = kVariants(self)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kPowerPointLive.__init__")
 
@@ -1166,6 +1906,8 @@ class kPowerPointLive:
                                  for K, V in Shapes.items()]
                 Out["changes"] = self.Tracker.Changes.get(Slide.SlideID)
                 Out["slide_id"] = Slide.SlideID
+                Out["variant_of"] = self.Variants.VariantOf(Slide)
+                Out["variants"] = len(self.Variants.Of(Prs, Slide.SlideID))
             return Out
         except kToolException:
             raise
@@ -1564,6 +2306,147 @@ async def HistoryThumb(version: int) -> dict:
         raise
     except Exception as e:
         kS.GlobalErrorHandler(e, "server.HistoryThumb")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="powerpoint_slideshow", meta=UI)
+async def PowerpointSlideshow(action: str = "state") -> dict:
+    """Drive the real slide show. action: "start" (SlideShowSettings.Run, from the current slide; a running show is
+    reused), "next", "previous", "black" (toggle a black screen), "end", "state". Every answer has running, state
+    (running/paused/black/white/done/stopped), the slide on screen, its notes, timing marker and talk estimate, the
+    next slide and the planned time before this slide. Next/previous/black/end need a running show."""
+    if kS.ErrorMode:
+        raise Live.HaltedError()
+    try:
+        return await Live.OnCom(Live.SlideShow.Do, (action or "state").strip().lower())
+    except kToolException:
+        raise
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.PowerpointSlideshow")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="design_previews", meta=APP_ONLY)
+async def DesignPreviews(slide: int = 0, directions: list[str] | None = None, width: int = 480) -> dict:
+    """(View only) The slide restyled in up to six design directions (empty = six contrasting ones), rendered from a
+    copy - the open deck is not touched. Also lists every direction."""
+    if kS.ErrorMode:
+        raise Live.HaltedError()
+    try:
+        return await Live.OnCom(Live.Design.Previews, slide, directions or [], max(160, min(width, 960)))
+    except kToolException:
+        raise
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.DesignPreviews")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="powerpoint_apply_direction", meta=UI)
+async def PowerpointApplyDirection(direction: str) -> dict:
+    """Apply a design direction (an id from scripts/directions.json, e.g. "editorial-serif") to the whole deck:
+    its theme colours and heading/body fonts on every slide master, exactly as build_deck.py writes them.
+    Shapes with hard-coded colours keep them. A version is saved first."""
+    if kS.ErrorMode:
+        raise Live.HaltedError()
+    try:
+        return await Live.OnCom(Live.Design.ApplyLive, (direction or "").strip())
+    except kToolException:
+        raise
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.PowerpointApplyDirection")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="theme_info", meta=APP_ONLY)
+async def ThemeInfo() -> dict:
+    """(View only) The current slide's theme: colour slots as RRGGBB, major/minor fonts and contrast pairs
+    (text 4.5:1, graphics and large text 3:1) with pass/fail."""
+    if kS.ErrorMode:
+        raise Live.HaltedError()
+    try:
+        return await Live.OnCom(Live.ThemeEditor.Info)
+    except kToolException:
+        raise
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.ThemeInfo")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="powerpoint_set_theme", meta=UI)
+async def PowerpointSetTheme(colors: dict[str, str] | None = None, major_font: str = "", minor_font: str = "") -> dict:
+    """Change the deck's theme on every slide master: `colors` maps slots (dk1, lt1, dk2, lt2, accent1-accent6,
+    hlink, folHlink) to RRGGBB hex; `major_font` / `minor_font` set the heading / body typeface. Only what is given
+    changes. Check contrast after (text 4.5:1 on its background). A version is saved first."""
+    if kS.ErrorMode:
+        raise Live.HaltedError()
+    try:
+        return await Live.OnCom(Live.ThemeEditor.Set, colors or {}, major_font, minor_font)
+    except kToolException:
+        raise
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.PowerpointSetTheme")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="powerpoint_layout_variants", meta=UI)
+async def PowerpointLayoutVariants(slide: int = 0, count: int = 3) -> dict:
+    """Start layout alternatives for slide n (0 = current). Returns the original's SlideID, any variants that already
+    exist, and HOW to make them: you create `count` variants yourself with one powerpoint_run - duplicate the slide,
+    keep each copy hidden right after the original, tag it PPTLIVE-VARIANT-OF=<original SlideID> and
+    PPTLIVE-VARIANT-NAME=<short name>, then rearrange it into a different layout. The user compares them in the
+    view and picks one (powerpoint_choose_variant) or drops them (powerpoint_discard_variants)."""
+    if kS.ErrorMode:
+        raise Live.HaltedError()
+    try:
+        return await Live.OnCom(Live.Variants.Guide, slide, count)
+    except kToolException:
+        raise
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.PowerpointLayoutVariants")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="layout_variants", meta=APP_ONLY)
+async def LayoutVariants(slide_id: int, width: int = 320) -> dict:
+    """(View only) The original slide and its layout variants, with thumbnails."""
+    if kS.ErrorMode:
+        raise Live.HaltedError()
+    try:
+        return await Live.OnCom(Live.Variants.List, slide_id, max(120, min(width, 640)))
+    except kToolException:
+        raise
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.LayoutVariants")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="powerpoint_choose_variant", meta=UI)
+async def PowerpointChooseVariant(slide_id: int, variant_id: int) -> dict:
+    """Replace slide `slide_id` with its layout variant `variant_id` (both SlideIDs): the variant is unhidden
+    (unless the original was hidden), untagged and moved into place; the original and the other variants are
+    deleted. A version is saved first."""
+    if kS.ErrorMode:
+        raise Live.HaltedError()
+    try:
+        return await Live.OnCom(Live.Variants.Choose, slide_id, variant_id)
+    except kToolException:
+        raise
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.PowerpointChooseVariant")
+        raise Live.HaltedError() from e
+
+
+@mcp.tool(name="powerpoint_discard_variants", meta=UI)
+async def PowerpointDiscardVariants(slide_id: int) -> dict:
+    """Delete every layout variant of slide `slide_id` (SlideID); the original stays. A version is saved first."""
+    if kS.ErrorMode:
+        raise Live.HaltedError()
+    try:
+        return await Live.OnCom(Live.Variants.Discard, slide_id)
+    except kToolException:
+        raise
+    except Exception as e:
+        kS.GlobalErrorHandler(e, "server.PowerpointDiscardVariants")
         raise Live.HaltedError() from e
 
 

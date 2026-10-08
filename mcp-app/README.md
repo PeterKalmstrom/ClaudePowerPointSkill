@@ -39,12 +39,31 @@ Needs Windows, desktop PowerPoint and [uv](https://docs.astral.sh/uv/). In a hos
   - **Ask Claude:** click a shape or drag an area, type what you want; the request goes into the conversation with
     the slide, SlideID, shape id and box (hosts that can't take messages from a view get it on the clipboard).
   - **Accurate:** render through Save As (true embedded fonts and word breaks) instead of the fast `Slide.Export`.
+  - **Design:** the current slide rendered in six design directions (`scripts/directions.json`; **More** pages
+    through all of them). Each preview is made from a Save As copy restyled by `build_deck.py`'s
+    `kDeckDesign.ApplyDirection` and drawn by a windowless PowerPoint, so the open deck is not touched. Click a
+    preview twice to apply that direction (theme colours + heading/body fonts) to the whole deck.
+  - **Theme:** the theme colour slots as swatches (click one to change it), the heading and body fonts, and the
+    contrast pairs (text 4.5:1, accents as graphics or large text 3:1) with pass/fail, recomputed as you edit.
+    **Apply to deck** writes them to every slide master.
+  - **Layout variants:** when Claude has made variants of the current slide (`powerpoint_layout_variants`), a
+    strip shows the original and each variant; pick one to compare it with the original on a slider, **Use this**
+    (click twice) replaces the original, **Discard all** deletes the variants.
 - **Slide sorter** — thumbnails grouped by section, with lint counts. Click to select (Ctrl/Shift for more),
   double-click to open, drag one or several onto a slide (goes in front) or a section's empty space (goes to its
   end). Hide/unhide, start a new section at the selection, rename a section (double-click its name), delete one
-  (×, keeps its slides).
+  (×, keeps its slides). Each slide shows its talk time and each section its total (see below).
 - **Storyline** — the titles alone, by section, with title findings (label instead of claim, too long, missing,
-  duplicate) and a talk-length estimate from the notes. Click a line to open the slide.
+  duplicate) and a talk-length estimate from the notes, plus a bar of the talk time by section against the target.
+  Click a line to open the slide.
+- **Rehearse** — the current slide large, its speaker notes, the next slide, an elapsed timer and a per-slide timer
+  against the slide's plan, and an ahead / on time / behind chip. Start, Previous, Next, Black and End drive the
+  real slide show in PowerPoint (`powerpoint_slideshow`); ←/→/Space and B work too.
+
+**Talk length.** A slide's time is its timing marker when the notes open with one (`[15 sec]`, `[2 min]`, `[1:30]`
+- `reference/PRESENTING.md`), else its notes words at 130 words a minute, else its visible words when it has no
+notes. Hidden slides do not count. The target (default 20 min) is set in the sorter or storyline and remembered in
+the browser.
 - **History** — a version is saved before every change made through PowerPoint Live. Restore puts one back
   (the deck file is replaced and reopened; the state you leave is saved as a version first).
 
@@ -63,7 +82,16 @@ Needs Windows, desktop PowerPoint and [uv](https://docs.astral.sh/uv/). In a hos
 | `powerpoint_resume` | Claude, view | Re-arm the server after an unexpected error halted it |
 | `powerpoint_send_error_report` | Claude, view | Answer a waiting error report - `send=true` only after the user said yes to "Do you want to send this error message?" |
 | `error_reports`, `error_report_answer` | view only | Error reports waiting for the person's Yes/No ("Do you want to send this error message?"); nothing is sent without Yes |
-| `slide_state`, `slide_image`, `deck_outline`, `slide_thumbs`, `deck_lint`, `history_thumb` | view only | What the views draw |
+| `powerpoint_slideshow` | Claude, view | `action`: start (from the current slide), next, previous, black (toggle), end, state - the real slide show |
+| `powerpoint_apply_direction` | Claude, view | Restyle the whole deck in a design direction (theme colours + fonts, as `build_deck.py` writes them) |
+| `powerpoint_set_theme` | Claude, view | Change theme colour slots (`colors`: slot -> RRGGBB) and the major/minor fonts on every slide master |
+| `powerpoint_layout_variants` | Claude | How to make layout variants of a slide: Claude duplicates it with `powerpoint_run` as hidden slides right after it, tagged `PPTLIVE-VARIANT-OF=<SlideID>` and `PPTLIVE-VARIANT-NAME` |
+| `powerpoint_choose_variant` / `powerpoint_discard_variants` | Claude, view | Replace the original with a variant (the others are deleted) / delete the variants |
+| `slide_state`, `slide_image`, `deck_outline`, `slide_thumbs`, `deck_lint`, `history_thumb` | view only | What the views draw (`deck_outline` carries per-slide `visible_words`, `estimate_sec`, `marker_sec`, `planned_sec` and section / deck totals) |
+| `design_previews`, `theme_info`, `layout_variants` | view only | Direction previews from a copy; theme slots, fonts and contrast pairs; a slide's variants with thumbnails |
+
+Every theme, direction and variant change saves a version first, so History can undo it. Slide-show actions do
+not change the deck and save no version.
 
 Expected states (no deck open, file not found, not on Windows, a shape that is gone) come back as tool errors with
 a plain message. The first *unexpected* error is reported to the global error handler (`scripts/kShared.py`) and

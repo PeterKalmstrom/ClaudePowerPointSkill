@@ -282,6 +282,93 @@
   .ver .what .vn { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; margin-right: 6px; }
   .ver .what .muted { font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
   @media (max-width: 420px) { .ver .pic { width: 96px; } }
+
+  /* ---------------------------------------------------------------- shared: panels, fields, ok chip */
+  .chip.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--bg)); border-color: transparent; }
+  .panel { margin-top: var(--s3); display: grid; gap: var(--s3); }
+  .panel-head { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+  .panel-head h4 { margin: 0; font-size: var(--t-sm); font-weight: 600; }
+  .panel-head .muted { font-size: var(--t-xs); flex: 1 1 200px; min-width: 0; }
+  .field { display: grid; gap: 4px; font-size: var(--t-xs); color: var(--muted); min-width: 0; }
+  .field input, .talk input { border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--bg); color: var(--fg);
+           padding: 5px var(--s2); min-width: 0; transition: border-color var(--fast) var(--ease); }
+  .field input:hover, .talk input:hover { border-color: var(--muted); }
+  .field input:focus-visible, .talk input:focus-visible { border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel-soft); }
+  .pic.loading::after { content: ""; position: absolute; top: calc(50% - 4px); left: calc(50% - 4px); width: 8px; height: 8px;
+           border-radius: 50%; background: var(--muted); animation: pulse 1.4s ease-in-out infinite; }
+  .note-ok { color: var(--ok); font-weight: 500; font-size: var(--t-xs); }
+
+  /* ---------------------------------------------------------------- design directions */
+  .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(176px, 100%), 1fr)); gap: var(--s3); }
+  button.dcard { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 6px; padding: var(--s2);
+           min-height: 0; height: auto; text-align: left; white-space: normal; line-height: 1.3; }
+  .dcard .pic, .vthumb .pic, .rh-next .pic { position: relative; aspect-ratio: 16 / 9; background: var(--surface-2);
+           border-radius: var(--r-sm); overflow: hidden; outline: 1px solid var(--line); }
+  .dcard .pic img, .vthumb .pic img, .rh-next .pic img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
+  .dcard .nm { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+  .dcard .mood { color: var(--muted); font-size: var(--t-xs); font-weight: 400; }
+  .dcard .act { font-size: var(--t-xs); color: var(--accent); font-weight: 600; min-height: 1.3em; }
+  .dcard.armed { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .dots { display: inline-flex; gap: 3px; margin-left: auto; }
+  .dots i { width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+
+  /* ---------------------------------------------------------------- theme */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: var(--s2); }
+  .sw { position: relative; display: flex; gap: var(--s2); align-items: center; padding: 6px; border: 1px solid var(--line);
+        border-radius: var(--r-md); background: var(--bg); cursor: pointer; transition: border-color var(--fast) var(--ease); }
+  .sw:hover { border-color: var(--line-strong); }
+  .sw:focus-within { box-shadow: var(--ring); }
+  .sw.edited { border-color: var(--accent); background: var(--accent-soft); }
+  .sw .c { width: 28px; height: 28px; border-radius: var(--r-sm); box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); flex: none; }
+  .sw input[type=color] { position: absolute; left: 6px; bottom: 6px; width: 28px; height: 4px; opacity: 0; border: 0; padding: 0; }
+  .sw .slot { display: block; font-weight: 600; font-size: var(--t-xs); }
+  .sw .hex { display: block; font: 11px/1.3 var(--mono); color: var(--muted); text-transform: uppercase; }
+  .fonts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+  @media (max-width: 420px) { .fonts { grid-template-columns: 1fr; } }
+  .pairs { display: grid; gap: 2px; }
+  .pair { display: flex; gap: var(--s2); align-items: center; padding: 4px var(--s2); border-radius: var(--r-sm); }
+  .pair:hover { background: var(--surface-2); }
+  .pair .sample { width: 40px; height: 24px; display: grid; place-items: center; border-radius: var(--r-sm); font-weight: 700;
+                  box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); flex: none; }
+  .pair .what { flex: 1; min-width: 0; }
+  .pair .ratio { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* ---------------------------------------------------------------- layout variants */
+  .vstrip { display: flex; gap: var(--s2); overflow-x: auto; padding: 2px 2px 4px; }
+  button.vthumb { flex: 0 0 136px; flex-direction: column; align-items: stretch; gap: 4px; padding: 4px; height: auto; min-height: 0;
+                  white-space: normal; font-weight: 500; font-size: var(--t-xs); line-height: 1.25; text-align: left; }
+  .vthumb .cap2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vcompare .stage { box-shadow: var(--shadow); }
+
+  /* ---------------------------------------------------------------- talk length */
+  .talk { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; font-size: var(--t-xs); color: var(--muted); }
+  .talk input { width: 64px; font-variant-numeric: tabular-nums; }
+  .talk .chip { font-variant-numeric: tabular-nums; }
+  .thumb .cap .tm, .story li .tm { margin-left: auto; flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .thumb .cap .tm.marked, .story li .tm.marked { color: var(--fg); }
+  .meter { position: relative; display: flex; height: 10px; margin: var(--s2) 0 var(--s1); border-radius: var(--r-pill);
+           background: var(--surface-2); }
+  .meter .seg { height: 100%; min-width: 2px; border-right: 2px solid var(--bg); }
+  .meter .seg:first-child { border-radius: var(--r-pill) 0 0 var(--r-pill); }
+  .meter .seg:nth-child(odd) { background: var(--accent); }
+  .meter .seg:nth-child(even) { background: color-mix(in srgb, var(--accent) 55%, var(--surface-2)); }
+  .meter .seg.over { background: var(--err); }
+  .meter .tgt { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--fg); border-radius: 1px; }
+  .meter-legend { display: flex; gap: var(--s2); flex-wrap: wrap; font-size: var(--t-xs); color: var(--muted); }
+
+  /* ---------------------------------------------------------------- rehearse */
+  .rh-top { display: flex; align-items: flex-end; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s3); }
+  .timer .k { display: block; font-size: var(--t-xs); color: var(--muted); }
+  .timer .v { display: block; font-size: 22px; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .timer .v small { font-size: var(--t-sm); font-weight: 500; color: var(--muted); }
+  .timer .v.over { color: var(--warn); }
+  .rh-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--s3); align-items: start; }
+  @media (max-width: 600px) { .rh-grid { grid-template-columns: 1fr; } }
+  .rh-side { display: grid; gap: var(--s3); min-width: 0; }
+  .rh-next .k { font-size: var(--t-xs); color: var(--muted); margin-bottom: 4px; display: flex; gap: var(--s2); }
+  .rh-notes { white-space: pre-wrap; max-height: 340px; overflow: auto; font-size: var(--t-md); line-height: 1.5; overflow-wrap: anywhere; }
+  .rh-notes .head { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin-bottom: var(--s2); white-space: normal; }
+  .rh-notes .none { color: var(--muted); font-style: italic; }
 </style>
 </head>
 <body>
@@ -300,12 +387,19 @@
   <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 9h6.6l.7-9"/></symbol>
   <symbol id="i-resume" viewBox="0 0 16 16"><path d="M5 3l8 5-8 5z"/></symbol>
   <symbol id="i-fix" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1"/></symbol>
+  <symbol id="i-black" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="9" rx="1.5"/><path d="M5 14h6M4.5 5.5l7 4"/></symbol>
+  <symbol id="i-design" viewBox="0 0 16 16"><path d="M8 2a6 6 0 1 0 0 12c1 0 1.3-.8.9-1.5-.5-.8 0-1.7 1-1.7H12a2.5 2.5 0 0 0 2-2.5C14 4.6 11.3 2 8 2z"/><circle cx="5" cy="7" r=".8"/><circle cx="7.5" cy="4.8" r=".8"/><circle cx="10.6" cy="5.6" r=".8"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><path d="M9.5 11.5h4M11.5 9.5v4"/></symbol>
+  <symbol id="i-variants" viewBox="0 0 16 16"><rect x="2" y="5" width="9" height="7" rx="1"/><path d="M5 3h8a1 1 0 0 1 1 1v6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></symbol>
 </defs></svg>
 <div class="wrap">
   <div class="tabs" role="tablist" aria-label="View">
     <button role="tab" data-tab="slide" aria-selected="true">Slide</button>
     <button role="tab" data-tab="sorter" aria-selected="false">Slide sorter</button>
     <button role="tab" data-tab="story" aria-selected="false">Storyline</button>
+    <button role="tab" data-tab="rehearse" aria-selected="false">Rehearse</button>
     <button role="tab" data-tab="history" aria-selected="false">History</button>
   </div>
 
@@ -333,6 +427,8 @@
       <button class="toggle" id="b-checks" aria-pressed="false" title="Show lint findings on the slide"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-checks"/></svg>Checks</button>
       <button class="toggle" id="b-compare" aria-pressed="false" title="Compare with the slide before the last change" disabled><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-compare"/></svg><span>Before<span class="lbl-long"> / after</span></span></button>
       <button class="toggle" id="b-ask" aria-pressed="false" title="Point at a shape or drag an area, then ask Claude"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-ask"/></svg>Ask Claude</button>
+      <button class="toggle" id="b-design" aria-pressed="false" title="Preview this slide in other design directions"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-design"/></svg>Design</button>
+      <button class="toggle" id="b-theme" aria-pressed="false" title="Theme colours, fonts and contrast"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-theme"/></svg>Theme</button>
       <span class="spacer"></span>
       <label class="switch" title="Render through Save As (true embedded fonts). Slower."><input type="checkbox" id="accurate" role="switch"> Accurate</label>
     </div>
@@ -343,6 +439,42 @@
         <span id="ask-note" role="status"></span></div>
     </div>
     <div class="findings" id="findings" hidden></div>
+
+    <div class="card panel" id="varbox" hidden aria-label="Layout variants">
+      <div class="panel-head"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-variants"/></svg><h4>Layout variants</h4>
+        <span class="chip" id="var-count"></span><span class="muted">Hidden copies Claude made of this slide. Pick one to compare it with the original.</span></div>
+      <div class="vstrip" id="vstrip"></div>
+      <div class="vcompare" id="vcompare" hidden>
+        <div class="stage" id="vstage"><img id="v-before" alt="The original slide"><img id="v-after" class="after" alt="">
+          <div class="divider"></div><span class="tag" style="left:8px">Original</span><span class="tag" id="v-tag" style="right:8px">Variant</span></div>
+        <input type="range" id="vcut" min="0" max="100" value="50" aria-label="Original and variant">
+      </div>
+      <div class="row"><button class="primary" id="v-use" disabled><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-fix"/></svg><span class="lbl">Use this</span></button>
+        <button class="ghost" id="v-discard"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-trash"/></svg><span class="lbl">Discard all</span></button>
+        <span class="note-ok" id="v-note" role="status"></span></div>
+    </div>
+
+    <div class="card panel" id="designbox" hidden aria-label="Design directions">
+      <div class="panel-head"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-design"/></svg><h4>Design directions</h4>
+        <span class="muted" id="d-sub">This slide in other directions. The deck is not touched until you apply one (click twice).</span>
+        <button class="sm" id="d-more" title="Six more directions">More</button>
+        <button class="sm ghost icon" id="d-close" aria-label="Close design directions" title="Close"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-clear"/></svg></button></div>
+      <div class="dgrid" id="dgrid"></div>
+      <span class="note-ok" id="d-note" role="status"></span>
+    </div>
+
+    <div class="card panel" id="themebox" hidden aria-label="Theme">
+      <div class="panel-head"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-theme"/></svg><h4>Theme</h4>
+        <span class="muted">Click a colour to change it. Applies to every slide master; a version is saved first.</span>
+        <button class="sm ghost icon" id="t-close" aria-label="Close theme" title="Close"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-clear"/></svg></button></div>
+      <div class="swatches" id="swatches"></div>
+      <div class="fonts"><label class="field">Headings (major font)<input id="t-major" spellcheck="false"></label>
+        <label class="field">Body (minor font)<input id="t-minor" spellcheck="false"></label></div>
+      <div><div class="panel-head"><h4>Contrast</h4><span class="muted">Text needs 4.5:1 on its background; accents used as graphics or large text 3:1.</span></div>
+        <div class="pairs" id="pairs"></div></div>
+      <div class="row"><button class="primary" id="t-apply" disabled><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-fix"/></svg>Apply to deck</button>
+        <button class="ghost" id="t-reset" disabled>Reset</button><span class="note-ok" id="t-note" role="status"></span></div>
+    </div>
   </section>
 
   <section id="v-sorter" hidden>
@@ -353,10 +485,38 @@
       <button class="sm" id="s-section" disabled title="Start a new section at the first selected slide"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-section"/></svg><span>New section<span class="lbl-long"> here</span></span></button>
       <button class="sm ghost" id="s-clear" disabled title="Clear the selection"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-clear"/></svg>Clear</button>
     </div>
+    <div class="talk" id="talk-sorter"></div>
     <div id="sorter"></div>
   </section>
 
   <section id="v-story" class="story" hidden></section>
+
+  <section id="v-rehearse" hidden>
+    <div class="rh-top">
+      <span class="chip" id="rh-state">Not running</span>
+      <span class="timer"><span class="k">Elapsed</span><span class="v" id="rh-elapsed">0:00</span></span>
+      <span class="timer"><span class="k">This slide</span><span class="v" id="rh-slide">0:00</span></span>
+      <span class="chip" id="rh-pace" hidden></span>
+      <span class="spacer"></span>
+      <span class="muted" id="rh-plan"></span>
+    </div>
+    <div class="rh-grid">
+      <div class="stage-frame"><div class="stage" id="rh-stage"><div class="placeholder">Waiting for PowerPoint…</div><img id="rh-img" alt="" hidden></div></div>
+      <div class="rh-side">
+        <div class="rh-next"><div class="k"><span>Next</span><b id="rh-next-n"></b></div><div class="pic" id="rh-next"></div></div>
+        <div class="card rh-notes" id="rh-notes" aria-label="Speaker notes"></div>
+      </div>
+    </div>
+    <div class="bar tools">
+      <button class="primary" id="rh-start" title="Start the slide show from the current slide"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-resume"/></svg>Start</button>
+      <button class="icon" id="rh-prev" aria-label="Previous slide in the show" title="Previous (←)" disabled><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-prev"/></svg></button>
+      <button class="icon" id="rh-nextb" aria-label="Next slide in the show" title="Next (→ or Space)" disabled><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-next"/></svg></button>
+      <button class="toggle" id="rh-black" aria-pressed="false" title="Black screen (B)" disabled><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-black"/></svg>Black</button>
+      <button id="rh-end" title="End the slide show" disabled><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-stop"/></svg>End</button>
+      <span class="spacer"></span>
+      <span class="muted" style="font-size:var(--t-xs)">Drives the real slide show in PowerPoint.</span>
+    </div>
+  </section>
 
   <section id="v-history" hidden>
     <p class="lede">A version is saved before every change made through PowerPoint Live. Restoring replaces the deck file with that version and reopens it; the state you leave is saved as a version too.</p>
@@ -421,7 +581,7 @@
   function setMode(m) {
     mode = m;
     document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === m));
-    for (const v of ["slide", "sorter", "story", "history"]) $("v-" + v).hidden = v !== m;
+    for (const v of ["slide", "sorter", "story", "rehearse", "history"]) $("v-" + v).hidden = v !== m;
     refresh(true);
   }
   document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => setMode(b.dataset.tab));
@@ -553,6 +713,8 @@
       drawOverlay(); renderFindings(); reportSize();
     }
     flashChanges(s.changes);
+    await updateVariants(s);
+    if (designOpen) loadDesign(false);
   }
 
   async function go(delta) { if (state) await act("powerpoint_show", { slide: state.slide + delta }); }
@@ -655,6 +817,7 @@
   }
 
   function buildSorter(o) {
+    talkRow($("talk-sorter"), o, false);
     const root = $("sorter"); root.textContent = "";
     const byId = new Map(o.slides.map(s => [s.id, s]));
     selected = new Set([...selected].filter(i => byId.has(i)));
@@ -673,6 +836,7 @@
         };
         h.appendChild(name);
         h.appendChild(el("span", "chip count", `${sec.slides.length} slide${sec.slides.length === 1 ? "" : "s"}`));
+        if (sec.estimate_sec != null) { const c = el("span", "chip count", "≈ " + fmt(sec.estimate_sec)); c.title = "Talk time of the slides shown in this section"; h.appendChild(c); }
         if (sec.index > 1 || o.sections.length > 1) {
           const x = btn("x ghost sm icon", "trash"); x.title = "Delete section (keeps its slides)"; x.setAttribute("aria-label", `Delete section ${sec.name}`);
           x.onclick = () => act("powerpoint_sections", { action: "delete", section: sec.index });
@@ -692,6 +856,7 @@
         if (n) { const b = el("span", "lintn", String(n)); b.setAttribute("aria-label", `${n} lint finding(s)`); b.title = `${n} lint finding(s)`; pic.appendChild(b); }
         t.appendChild(pic);
         const cap = el("div", "cap"); cap.appendChild(el("b", null, String(s.index))); cap.appendChild(el("span", null, s.title));
+        if (s.planned_sec != null) cap.appendChild(timeChip(s));
         t.appendChild(cap);
         t.addEventListener("click", ev => selectClick(ev, s));
         t.addEventListener("dblclick", async () => { await act("powerpoint_show", { slide: s.index }); setMode("slide"); });
@@ -757,6 +922,7 @@
     head.textContent = `${o.count} slides · ${o.slides.filter(s => s.hidden).length} hidden · read the titles alone: do they tell the story?` +
                        (words ? ` · ~${Math.round(words / 130)} min of notes` : "");
     root.appendChild(head);
+    const talk = el("div"); root.appendChild(talk); talkRow(talk, o, true);
     for (const sec of o.sections) {
       if (o.has_sections) root.appendChild(el("h3", null, sec.name || "Untitled section"));
       const ol = el("ol");
@@ -769,6 +935,7 @@
           const p = el("span", "pill " + f.severity, TITLE_FLAGS[f.code]); p.title = f.message; li.appendChild(p);
         }
         if (s.hidden) li.appendChild(el("span", "pill", "hidden"));
+        if (s.planned_sec != null) li.appendChild(timeChip(s));
         li.onclick = async () => { await act("powerpoint_show", { slide: s.index }); setMode("slide"); };
         li.tabIndex = 0; li.onkeydown = ev => { if (ev.key === "Enter") li.onclick(); };
         ol.appendChild(li);
@@ -807,6 +974,302 @@
     }
     reportSize();
   }
+
+
+  // ------------------------------------------------------------ talk length (sorter, storyline)
+  const fmt = sec => { const t = Math.max(0, Math.round(Number(sec) || 0)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+  const TARGET_KEY = "pptlive.talkTargetMin";
+  function getTarget() {
+    try { const v = Number(localStorage.getItem(TARGET_KEY)); return v > 0 ? v : 20; }
+    catch { return 20; }   // ERROR-SUPPRESSED-JUSTIFIED: storage blocked (private window, preview): the default target is used
+  }
+  function setTarget(v) {
+    try { localStorage.setItem(TARGET_KEY, String(v)); }
+    catch { /* ERROR-SUPPRESSED-JUSTIFIED: storage blocked: the target lasts for this view only */ }
+  }
+  let targetMin = getTarget();
+  function timeChip(s) {
+    const t = el("span", "tm" + (s.marker_sec != null ? " marked" : ""), fmt(s.planned_sec));
+    t.title = s.marker_sec != null ? `Timing marker in the notes: ${fmt(s.marker_sec)} (estimate ${fmt(s.estimate_sec)})`
+      : `Estimated from ${s.estimate_from === "notes" ? s.notes_words + " words of notes" : s.visible_words + " words on the slide (no notes)"} at ${outline && outline.wpm || 130} wpm`;
+    return t;
+  }
+  function talkStatus(total) {
+    const target = targetMin * 60, d = total - target;
+    if (d > 60) return { cls: "error", text: `${fmt(d)} over` };
+    if (d < -120) return { cls: "warn", text: `${fmt(-d)} short` };
+    return { cls: "ok", text: "on target" };
+  }
+  function talkRow(host, o, withBar) {
+    host.textContent = "";
+    const total = o.estimate_sec || 0, st = talkStatus(total);
+    const row = el("div", "talk");
+    row.appendChild(ic("clock"));
+    const lab = el("label", null, "Talk length target ");
+    const inp = el("input"); inp.type = "number"; inp.min = "1"; inp.max = "240"; inp.step = "1"; inp.value = String(targetMin);
+    inp.setAttribute("aria-label", "Target talk length in minutes");
+    inp.onchange = () => { const v = Math.round(Number(inp.value)); if (v > 0 && v <= 240) { targetMin = v; setTarget(v); if (outline) (mode === "story" ? buildStory : buildSorter)(outline); } };
+    lab.appendChild(inp); lab.appendChild(document.createTextNode(" min")); row.appendChild(lab);
+    row.appendChild(el("span", "spacer"));
+    const tot = el("span", "chip", `≈ ${fmt(total)} of ${fmt(targetMin * 60)}`); tot.title = `Slides the show will play; timing markers where the notes have one, else ${o.wpm || 130} words a minute`;
+    row.appendChild(tot); row.appendChild(el("span", "chip " + st.cls, st.text));
+    host.appendChild(row);
+    if (!withBar) return;
+    const span = Math.max(total, targetMin * 60) || 1;
+    const meter = el("div", "meter"); meter.setAttribute("role", "img");
+    meter.setAttribute("aria-label", `Talk length ${fmt(total)} against a target of ${fmt(targetMin * 60)}`);
+    let run = 0;
+    for (const sec of o.sections) {
+      const v = sec.estimate_sec || 0; if (!v) continue;
+      const seg = el("div", "seg" + (run >= targetMin * 60 ? " over" : "")); seg.style.width = (v / span * 100) + "%";
+      seg.title = `${sec.name || "Deck"}: ${fmt(v)}`; meter.appendChild(seg); run += v;
+    }
+    const tgt = el("div", "tgt"); tgt.style.left = (targetMin * 60 / span * 100) + "%"; tgt.title = `Target ${fmt(targetMin * 60)}`; meter.appendChild(tgt);
+    host.appendChild(meter);
+    if (o.has_sections) {
+      const leg = el("div", "meter-legend");
+      for (const sec of o.sections) leg.appendChild(el("span", null, `${sec.name || "Untitled"} ${fmt(sec.estimate_sec || 0)}`));
+      host.appendChild(leg);
+    }
+  }
+
+  // ------------------------------------------------------------ two-step confirm (a second click within 4 s acts)
+  function confirm2(b, armedText, onConfirm) {
+    const lbl = b.querySelector(".lbl") || b, plain = lbl.textContent;
+    if (b.dataset.armed) { delete b.dataset.armed; lbl.textContent = plain; onConfirm(); return; }
+    b.dataset.armed = "1"; b.dataset.plain = plain; lbl.textContent = armedText; b.classList.add("armed");
+    setTimeout(() => { if (!b.dataset.armed) return; delete b.dataset.armed; lbl.textContent = b.dataset.plain; b.classList.remove("armed"); }, 4000);
+  }
+
+  // ------------------------------------------------------------ layout variants (Slide view)
+  let varKey = null, varData = null, varPick = null;
+  async function updateVariants(s) {
+    const of = s.variant_of || (s.variants ? s.slide_id : 0);
+    if (!of) { if (!$("varbox").hidden) { $("varbox").hidden = true; varKey = null; reportSize(); } return; }
+    const key = `${of}|${s.variants}|${s.signature}|${s.version}`;
+    if (key === varKey) return;
+    varKey = key;
+    const v = await call("layout_variants", { slide_id: of, width: 320 });
+    varData = v;
+    if (!v || !v.variants.length) { $("varbox").hidden = true; reportSize(); return; }
+    if (!v.variants.some(x => x.id === varPick)) varPick = null;
+    renderVariants();
+  }
+  function vthumb(item, label, isOrig) {
+    const b = el("button", "vthumb"); b.setAttribute("aria-pressed", String(!isOrig && item.id === varPick));
+    const pic = el("div", "pic"); if (item.png) { const i = el("img"); i.alt = label; i.src = png(item.png); pic.appendChild(i); } b.appendChild(pic);
+    b.appendChild(el("span", "cap2", label)); b.title = label;
+    b.onclick = () => { varPick = isOrig ? null : item.id; renderVariants(); };
+    return b;
+  }
+  function renderVariants() {
+    const v = varData; $("varbox").hidden = false;
+    $("var-count").textContent = `${v.variants.length} variant${v.variants.length === 1 ? "" : "s"}`;
+    const strip = $("vstrip"); strip.textContent = "";
+    strip.appendChild(vthumb(v.original, `Original · slide ${v.original.index}`, true));
+    for (const x of v.variants) strip.appendChild(vthumb(x, x.name, false));
+    const pick = v.variants.find(x => x.id === varPick);
+    $("vcompare").hidden = !pick; $("v-use").disabled = !pick;
+    if (pick) {
+      $("v-before").src = v.original.png ? png(v.original.png) : ""; $("v-after").src = pick.png ? png(pick.png) : "";
+      $("v-after").alt = pick.name; $("v-tag").textContent = pick.name;
+    }
+    reportSize();
+  }
+  $("vcut").oninput = () => $("vstage").style.setProperty("--cut", $("vcut").value + "%");
+  $("v-use").onclick = () => confirm2($("v-use"), "Replace the original?", async () => {
+    const r = await act("powerpoint_choose_variant", { slide_id: varData.slide_id, variant_id: varPick });
+    if (r) { $("v-note").textContent = "Done - undo it in History."; varPick = null; varKey = null; setTimeout(() => $("v-note").textContent = "", 4000); }
+  });
+  $("v-discard").onclick = () => confirm2($("v-discard"), "Delete every variant?", async () => {
+    const r = await act("powerpoint_discard_variants", { slide_id: varData.slide_id });
+    if (r) { varPick = null; varKey = null; }
+  });
+
+  // ------------------------------------------------------------ design directions (Slide view)
+  let designOpen = false, designPage = 0, designAll = null, designKey = null;
+  function designNames() {
+    if (!designPage || !designAll) return [];
+    const ids = designAll.map(d => d.id), pages = Math.ceil(ids.length / 6);
+    const p = (designPage - 1) % pages; return ids.slice(p * 6, p * 6 + 6);
+  }
+  async function loadDesign(force) {
+    if (!designOpen || !state) return;
+    const names = designNames(), key = `${state.slide_id}|${state.signature}|${names.join(",")}`;
+    if (!force && key === designKey) return;
+    designKey = key;
+    const grid = $("dgrid"); grid.textContent = "";
+    for (let i = 0; i < (names.length || 6); i++) {
+      const c = el("div", "dcard card"); const p = el("div", "pic loading"); c.appendChild(p); c.appendChild(el("span", "mood", "Rendering…")); grid.appendChild(c);
+    }
+    $("d-sub").textContent = "Rendering this slide in each direction from a copy - the deck is not touched…"; reportSize();
+    try {
+      const r = await call("design_previews", { slide: state.slide, directions: names, width: 480 });
+      if (designKey !== key) return;
+      designAll = r.directions; renderDesign(r);
+    } catch (e) { designKey = null; showError(e); }
+  }
+  function renderDesign(r) {
+    const grid = $("dgrid"); grid.textContent = "";
+    $("d-sub").textContent = `Slide ${r.slide} in ${r.previews.length} directions. The deck is not touched until you apply one (click twice).`;
+    for (const d of r.previews) {
+      const b = el("button", "dcard"); b.title = `${d.direction}: ${d.mood}`;
+      const pic = el("div", "pic"); if (d.png) { const i = el("img"); i.alt = `Slide ${r.slide} in ${d.direction}`; i.src = png(d.png); pic.appendChild(i); } b.appendChild(pic);
+      const nm = el("span", "nm", d.direction); const dots = el("span", "dots");
+      for (const c of [d.background, d.text, d.accent]) { const i = el("i"); i.style.background = "#" + c; dots.appendChild(i); }
+      nm.appendChild(dots); b.appendChild(nm);
+      b.appendChild(el("span", "mood", `${d.heading} / ${d.body} · ${d.mood}`));
+      const actl = el("span", "act lbl", ""); b.appendChild(actl);
+      b.onclick = () => confirm2(b, "Click again to apply to the whole deck", async () => {
+        b.classList.remove("armed");
+        const res = await act("powerpoint_apply_direction", { direction: d.direction });
+        if (res) { $("d-note").textContent = `Applied ${d.direction} - undo it in History.`; setTimeout(() => $("d-note").textContent = "", 5000); }
+      });
+      grid.appendChild(b);
+    }
+    reportSize();
+  }
+  function setDesign(on) {
+    designOpen = on; press($("b-design"), on); $("designbox").hidden = !on; designKey = null;
+    if (on) loadDesign(true); reportSize();
+  }
+  $("b-design").onclick = () => setDesign(!designOpen);
+  $("d-close").onclick = () => setDesign(false);
+  $("d-more").onclick = () => { designPage++; loadDesign(true); };
+
+  // ------------------------------------------------------------ theme (Slide view)
+  const SLOTS = ["dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"];
+  const SLOT_NAMES = { dk1: "Text 1", lt1: "Background 1", dk2: "Text 2", lt2: "Background 2", hlink: "Link", folHlink: "Visited link" };
+  let themeOpen = false, theme = null, themeEdits = {};
+  const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const lum = h => 0.2126 * lin(parseInt(h.slice(0, 2), 16)) + 0.7152 * lin(parseInt(h.slice(2, 4), 16)) + 0.0722 * lin(parseInt(h.slice(4, 6), 16));
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const slotName = slot => SLOT_NAMES[slot] || slot.replace("accent", "Accent ");
+  const themeColour = slot => (themeEdits[slot] || theme.colors[slot] || "000000").toUpperCase();
+  async function loadTheme() {
+    try { theme = await call("theme_info"); themeEdits = {}; renderTheme(); } catch (e) { showError(e); }
+  }
+  function themeDirty() { return Object.keys(themeEdits).length || $("t-major").value.trim() !== (theme.major_font || "") || $("t-minor").value.trim() !== (theme.minor_font || ""); }
+  function renderTheme() {
+    const box = $("swatches"); box.textContent = "";
+    for (const slot of SLOTS.filter(x => theme.colors[x])) {
+      const lab = el("label", "sw" + (themeEdits[slot] ? " edited" : "")); lab.title = `${slot} - click to change`;
+      const c = el("span", "c"); c.style.background = "#" + themeColour(slot); lab.appendChild(c);
+      const t = el("span"); t.appendChild(el("span", "slot", slotName(slot))); t.appendChild(el("span", "hex", "#" + themeColour(slot))); lab.appendChild(t);
+      const inp = el("input"); inp.type = "color"; inp.value = "#" + themeColour(slot).toLowerCase(); inp.setAttribute("aria-label", `${slot} colour`);
+      inp.oninput = () => { const h = inp.value.slice(1).toUpperCase(); if (h === theme.colors[slot]) delete themeEdits[slot]; else themeEdits[slot] = h; renderTheme(); };
+      lab.appendChild(inp); box.appendChild(lab);
+    }
+    if (document.activeElement !== $("t-major")) $("t-major").value = $("t-major").dataset.touched ? $("t-major").value : (theme.major_font || "");
+    if (document.activeElement !== $("t-minor")) $("t-minor").value = $("t-minor").dataset.touched ? $("t-minor").value : (theme.minor_font || "");
+    renderPairs();
+    $("t-apply").disabled = $("t-reset").disabled = !themeDirty();
+    reportSize();
+  }
+  function renderPairs() {
+    const box = $("pairs"); box.textContent = "";
+    const pairs = theme.pairs.map(p => theme.colors[p.fg] && theme.colors[p.bg] ? { ...p, ratio: ratio(themeColour(p.fg), themeColour(p.bg)) } : p);
+    for (const p of pairs) {
+      const ok = p.ratio >= p.min, row = el("div", "pair");
+      const smp = el("span", "sample", "Aa"); smp.style.background = "#" + themeColour(p.bg); smp.style.color = "#" + themeColour(p.fg); row.appendChild(smp);
+      row.appendChild(el("span", "what", `${slotName(p.fg)} on ${slotName(p.bg)} · ${p.kind}, needs ${p.min}:1`));
+      row.appendChild(el("span", "ratio", `${p.ratio.toFixed(2)}:1`));
+      row.appendChild(el("span", "chip " + (ok ? "ok" : "error"), ok ? "Pass" : "Fail"));
+      box.appendChild(row);
+    }
+  }
+  for (const id of ["t-major", "t-minor"]) $(id).oninput = () => { $(id).dataset.touched = "1"; $("t-apply").disabled = $("t-reset").disabled = !themeDirty(); };
+  $("t-reset").onclick = () => { themeEdits = {}; delete $("t-major").dataset.touched; delete $("t-minor").dataset.touched; $("t-major").value = theme.major_font || ""; $("t-minor").value = theme.minor_font || ""; renderTheme(); };
+  $("t-apply").onclick = async () => {
+    const args = { colors: themeEdits }, mj = $("t-major").value.trim(), mn = $("t-minor").value.trim();
+    if (mj && mj !== theme.major_font) args.major_font = mj;
+    if (mn && mn !== theme.minor_font) args.minor_font = mn;
+    const r = await act("powerpoint_set_theme", args);
+    if (r) { delete $("t-major").dataset.touched; delete $("t-minor").dataset.touched; $("t-note").textContent = "Applied - undo it in History."; setTimeout(() => $("t-note").textContent = "", 5000); await loadTheme(); }
+  };
+  function setTheme(on) { themeOpen = on; press($("b-theme"), on); $("themebox").hidden = !on; if (on) loadTheme(); reportSize(); }
+  $("b-theme").onclick = () => setTheme(!themeOpen);
+  $("t-close").onclick = () => setTheme(false);
+
+  // ------------------------------------------------------------ rehearse (drives the real slide show)
+  const rh = { imgKey: null, nextKey: null, showStart: null, stopAt: null, slideStart: null, slideId: null, last: null };
+  const nowSec = (from, to) => from ? ((to || Date.now()) - from) / 1000 : 0;
+  function rhTimers() {
+    const s = rh.last; if (!s) return;
+    const E = nowSec(rh.showStart, rh.stopAt), S = nowSec(rh.slideStart, rh.stopAt);
+    $("rh-elapsed").textContent = fmt(E);
+    const sv = $("rh-slide"); sv.textContent = fmt(S);
+    if (s.planned_sec) { const sm = el("small", null, ` / ${fmt(s.planned_sec)}`); sv.appendChild(sm); }
+    sv.classList.toggle("over", !!s.planned_sec && S > s.planned_sec);
+    const pace = $("rh-pace"); pace.hidden = !rh.showStart;
+    if (rh.showStart) {
+      const lo = s.planned_before_sec || 0, hi = lo + (s.planned_sec || 0);
+      const st = E < lo - 10 ? { c: "ok", t: `Ahead ${fmt(lo - E)}` } : E > hi + 10 ? { c: "error", t: `Behind ${fmt(E - hi)}` } : { c: "info", t: "On time" };
+      pace.className = "chip " + st.c; pace.textContent = st.t;
+      pace.title = `Planned: slide ${s.slide} starts at ${fmt(lo)} and ends at ${fmt(hi)} (timing markers, else the talk estimate)`;
+    }
+  }
+  async function rhApply(s) {
+    if (!s) return;
+    const was = rh.last && rh.last.running;
+    rh.last = s; renderPos(s);
+    if (s.running && !rh.showStart) { rh.showStart = rh.slideStart = Date.now(); rh.stopAt = null; }
+    if (!s.running && was) rh.stopAt = Date.now();
+    if (s.slide_id !== rh.slideId) { rh.slideId = s.slide_id; if (s.running) rh.slideStart = Date.now(); }
+    const label = { running: "Showing", paused: "Paused", black: "Black screen", white: "White screen", done: "End of show", stopped: "Not running" }[s.state] || s.state;
+    $("rh-state").textContent = label; $("rh-state").className = "chip " + (s.state === "running" ? "ok" : s.state === "black" ? "warn" : "");
+    for (const id of ["rh-prev", "rh-nextb", "rh-black", "rh-end"]) $(id).disabled = !s.running;
+    $("rh-black").disabled = !s.running || s.state === "done";
+    $("rh-nextb").disabled = !s.running || s.state === "done";
+    press($("rh-black"), s.state === "black");
+    $("rh-start").querySelector("svg").nextSibling.textContent = s.running ? "Go to current" : "Start";
+    $("rh-plan").textContent = s.planned_total_sec ? `Planned ${fmt(s.planned_total_sec)} · target ${fmt(targetMin * 60)}` : "";
+    const nb = $("rh-notes"); nb.textContent = "";
+    const head = el("div", "head");
+    head.appendChild(el("b", null, s.slide ? `Slide ${s.slide}` : "No slide"));
+    if (s.marker_sec != null) { const c = el("span", "chip info", `Marker ${fmt(s.marker_sec)}`); c.title = "Timing marker at the top of the notes"; head.appendChild(c); }
+    if (s.estimate_sec != null) { const c = el("span", "chip", `≈ ${fmt(s.estimate_sec)} from ${s.estimate_from === "notes" ? "notes" : "slide text"}`); head.appendChild(c); }
+    nb.appendChild(head);
+    nb.appendChild(s.notes && s.notes.trim() ? document.createTextNode(s.notes) : el("span", "none", "No speaker notes on this slide."));
+    rhTimers();
+    const ik = `${s.slide_id}|${s.version}`;
+    if (s.slide_id && ik !== rh.imgKey) {
+      rh.imgKey = ik;
+      const width = Math.min(2560, Math.max(320, Math.round($("rh-stage").clientWidth * (window.devicePixelRatio || 1))));
+      const img = await call("slide_image", { slide: s.slide, width });
+      if (img && img.png) { $("rh-stage").querySelector(".placeholder").hidden = true; $("rh-img").src = png(img.png); $("rh-img").alt = `Slide ${img.slide}`; $("rh-img").hidden = false; }
+    }
+    const nk = `${s.next_slide_id}|${s.version}`;
+    if (nk !== rh.nextKey) {
+      rh.nextKey = nk; const pic = $("rh-next"); pic.textContent = "";
+      $("rh-next-n").textContent = s.next_slide ? `Slide ${s.next_slide}` : "";
+      if (s.next_slide_id) {
+        const r = await call("slide_thumbs", { slide_ids: [s.next_slide_id], width: 320 });
+        const t = r && r.thumbs && r.thumbs[0]; if (t) { const i = el("img"); i.alt = `Next: slide ${s.next_slide}`; i.src = png(t.png); pic.appendChild(i); }
+      } else pic.appendChild(el("div", "empty", "End of the show"));
+    }
+    reportSize();
+  }
+  async function refreshRehearse() {
+    const s = await call("powerpoint_slideshow", { action: "state" }); showError(null); await rhApply(s);
+  }
+  async function showAction(action) {
+    try {
+      if (action === "start" && !(rh.last && rh.last.running)) { rh.showStart = null; rh.stopAt = null; }
+      const s = await call("powerpoint_slideshow", { action }); showError(null); await rhApply(s);
+    } catch (e) { showError(e); }
+  }
+  $("rh-start").onclick = () => showAction("start");
+  $("rh-prev").onclick = () => showAction("previous");
+  $("rh-nextb").onclick = () => showAction("next");
+  $("rh-black").onclick = () => showAction("black");
+  $("rh-end").onclick = () => showAction("end");
+  document.addEventListener("keydown", ev => {
+    if (mode !== "rehearse" || !rh.last || !rh.last.running || /INPUT|TEXTAREA/.test(ev.target.tagName)) return;
+    if (ev.key === "ArrowRight" || ev.key === " " || ev.key === "PageDown") { ev.preventDefault(); showAction("next"); }
+    else if (ev.key === "ArrowLeft" || ev.key === "PageUp") { ev.preventDefault(); showAction("previous"); }
+    else if (ev.key === "b" || ev.key === "B" || ev.key === ".") showAction("black");
+  });
 
   // ------------------------------------------------------------ loop
   // ------------------------------------------------------------ error report consent (nothing is sent without Yes)
@@ -847,6 +1310,7 @@
       if (mode === "slide") await refreshSlide(force);
       else if (mode === "sorter") await refreshOutline(force, buildSorter);
       else if (mode === "story") await refreshOutline(force, buildStory);
+      else if (mode === "rehearse") await refreshRehearse(force);
       else await refreshHistory(force);
     } catch (e) { showError(e); }
     finally { busy = false; }
@@ -879,7 +1343,7 @@
     timer = setInterval(() => {
       tick++;
       if (document.hidden || asking && dragFrom) return;
-      if (mode === "slide" || tick % 2 === 0) refresh(false);
+      if (mode === "slide" || mode === "rehearse" || tick % 2 === 0) refresh(false);
       if (tick % 3 === 0 || !$("err").hidden) checkConsent();
     }, 1000);
   }).catch(showError);

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **PowerPoint Live, round 3:** a **Rehearse** view that drives the real slide show (`powerpoint_slideshow`:
+  start/next/previous/black/end/state) with notes, next slide, elapsed and per-slide timers and ahead/behind against
+  the timing markers; a **talk-length meter** (markers, else notes or visible words at 130 wpm; per slide and section
+  in the sorter, a bar against a remembered target in the Storyline; `deck_outline` gains `visible_words` and the
+  estimates); a **Design** gallery previewing the slide in six directions from a copy (`design_previews`) and
+  `powerpoint_apply_direction`; a **Theme** panel (`theme_info`, `powerpoint_set_theme`) with editable swatches,
+  fonts and contrast pass/fail; **layout variants** Claude makes as tagged hidden slides
+  (`powerpoint_layout_variants`), compared in a strip and kept with `powerpoint_choose_variant` or dropped with
+  `powerpoint_discard_variants`. Every change saves a version first.
+
 - PowerPoint Live: code run through `powerpoint_run` that closes the deck no longer halts
   the server - the result says `"deck_closed": true`; a Save As is followed to the new file name.
 - **One error-handling and code style for all Python** (`scripts/kShared.py`): every method guards on

@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- **One error-handling and code style for all Python** (`scripts/kShared.py`): every method guards on
+  `kS.ErrorMode`, wraps its body, reports to `kS.GlobalErrorHandler` and returns a safe default; the first error
+  halts the run (PowerPoint Live: Resume). Expected states raise `ToolInputException` / `ToolReportableException`.
+  k-prefixed classes, PascalCase, no lambdas or nested functions. `tools/check_kpattern.py` enforces it in the
+  self-test and CI. Reported errors can be offered to the support flow (`KPS_ERROR_WEBHOOK`).
+- **PowerPoint Live face-lift:** one design system across all four views (tokens, light/dark, icons, chips,
+  segmented tabs, switch, empty states), narrow-panel layout, keyboard and screen-reader labels.
+
+- **PowerPoint Live, round 2:** change highlights; lint findings drawn on the slide with live one-click fixes
+  (`powerpoint_fix`); before/after slider; point at a shape or area and ask Claude (`ui/message`); a version saved
+  before every change with a History view and `powerpoint_restore`; slide sorter multi-select, hide/unhide and
+  section add/rename/delete (`powerpoint_sections`, `powerpoint_hide`); a Storyline view of the titles; an
+  accurate (Save As) preview toggle.
+
+- **No third-party PowerPoint server any more:** Windows mode drives PowerPoint directly through COM
+  (`pywin32`) with the skill's own scripts. `powerpoint-mcp` and every reference to its tools are removed;
+  `reference/SETUP.md` is rewritten (install uv, verify with `selftest.py --com`).
+
+- **PowerPoint Live (`mcp-app/`):** the skill's own MCP server for Windows — open, run Python against and show
+  slides — with an MCP App view that shows the current slide live as Claude, a script or a person changes it.
+  A slide sorter view groups thumbnails by section and rearranges slides by drag and drop. Registered by the plugin.
+
 ## 2.0.0
 
 - **`scripts/fix_deck.py`:** repairs what `lint_deck.py` finds mechanically — empty placeholders, text below the

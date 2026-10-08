@@ -16,6 +16,7 @@ and writes to --out; it never overwrites the input.
 import argparse
 import io
 import json
+import os
 import re
 import sys
 from collections import Counter
@@ -24,11 +25,11 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.util import Emu
 
+from kShared import ToolReportableException, kRun, kS, kToolException
 from _rules import (CARTOON_HOSTS, DEFAULT_FACES, INSIGHT_WORDS, OFFICE_DEFAULT_SERIES, ORDINAL_RE,
-                    STOCK_HOSTS, STOP_WORDS, chars_per_line, contains, contrast_ratio, floor_for_room,
-                    has_emoji, is_large_text, looks_like_label, overlap_area)
-from _theme import Theme, hue, saturation
-from _measure import text_height
+                    STOCK_HOSTS, STOP_WORDS, kRules)
+from _theme import kTheme
+from _measure import kMeasure
 
 PT = 12700  # EMU per point
 NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main",
@@ -36,7 +37,7 @@ NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main",
       "a16": "http://schemas.microsoft.com/office/drawing/2014/main"}
 TITLE_TYPES = {PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE, PP_PLACEHOLDER.VERTICAL_TITLE}
 TEXT_PLACEHOLDERS = TITLE_TYPES | {PP_PLACEHOLDER.BODY, PP_PLACEHOLDER.SUBTITLE, PP_PLACEHOLDER.OBJECT}
-LABEL_MAX_PT = 12.0        # at or below: caption tier, never a body-floor finding
+LABEL_MAX_PT = 12.0        # at or below: caption tier, never a body-floor finding (scaled per deck: kLintDeck.LabelMaxPt)
 BODY_MIN_WORDS = 4         # a paragraph with fewer words is a label
 TITLE_MAX_CHARS = 55
 MAX_BULLETS = 7
@@ -45,639 +46,850 @@ OVERLAP_WARN_PT2 = 4.0     # PointClaw thresholds: >= 4 pt2 warn, >= 200 pt2 err
 OVERLAP_ERROR_PT2 = 200.0
 EDGE_TOLERANCE_PT = 2.0
 STRETCH_TOLERANCE = 0.03
-SCALE = 1.0                # slide width / 960 pt, set per deck in lint()
-
-
-# ---------------------------------------------------------------- helpers
+SCALE = 1.0                # slide width / 960 pt (set per deck: kLintDeck.Scale)
+IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".emf", ".wmf", ".svg", ".webp")
+C_NS = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+SEVERITY_ORDER = {"error": 0, "warn": 1, "info": 2}
+IDENTITY_TF = (1.0, 0.0, 1.0, 0.0)
 
 GROUP_TF = {}  # shape_id -> (sx, tx, sy, ty): child coordinates -> slide coordinates (pt)
 GROWN = {}     # shape_id -> estimated height (pt) of a "resize to fit text" box once its text is laid out
 
 
-def rect(sh):
-    """(left, top, width, height) in pt as drawn on the slide. Shapes inside groups are mapped out of
-    the group's child coordinate space; a box turned 90/270 degrees swaps width and height."""
-    l, t, w, h = (Emu(sh.left or 0).pt, Emu(sh.top or 0).pt, Emu(sh.width or 0).pt, Emu(sh.height or 0).pt)
-    sx, tx, sy, ty = GROUP_TF.get(sh.shape_id, (1.0, 0.0, 1.0, 0.0))
-    l, t, w, h = l * sx + tx, t * sy + ty, w * sx, h * sy
-    rot = round(getattr(sh, "rotation", 0) or 0) % 180
-    if sh.shape_id in GROWN and GROWN[sh.shape_id] > h:
-        h = GROWN[sh.shape_id]
-    if rot == 90:
-        cx, cy = l + w / 2, t + h / 2
-        l, t, w, h = cx - h / 2, cy - w / 2, h, w
-    return (l, t, w, h)
+class kFindings:
+    """The findings of one lint run, plus the body floor it used."""
 
-
-def walk(shapes, tf=(1.0, 0.0, 1.0, 0.0)):
-    """Every shape, descending into groups. python-pptx reports group children in the group's own
-    child coordinate space (a:chOff/a:chExt), so record how to map them back onto the slide."""
-    for sh in shapes:
-        if tf != (1.0, 0.0, 1.0, 0.0):
-            GROUP_TF[sh.shape_id] = tf
-        yield sh
-        if sh.shape_type == MSO_SHAPE_TYPE.GROUP:
-            xfrm = sh._element.find("p:grpSpPr/a:xfrm", NS)
-            inner = tf
-            if xfrm is not None:
-                off, ext = xfrm.find("a:off", NS), xfrm.find("a:ext", NS)
-                choff, chext = xfrm.find("a:chOff", NS), xfrm.find("a:chExt", NS)
-                if None not in (off, ext, choff, chext):
-                    v = lambda el, k: int(el.get(k)) / PT
-                    kx = v(ext, "cx") / v(chext, "cx") if v(chext, "cx") else 1.0
-                    ky = v(ext, "cy") / v(chext, "cy") if v(chext, "cy") else 1.0
-                    # local: x_parent = off + (x_child - chOff) * k ; then apply the outer transform
-                    sx, tx = kx, v(off, "x") - v(choff, "x") * kx
-                    sy, ty = ky, v(off, "y") - v(choff, "y") * ky
-                    inner = (tf[0] * sx, tf[0] * tx + tf[1], tf[2] * sy, tf[2] * ty + tf[3])
-            yield from walk(sh.shapes, inner)
-
-
-def ph_type(sh):
-    try:
-        return sh.placeholder_format.type if sh.is_placeholder else None
-    except ValueError:
-        return None
-
-
-def is_title(sh):
-    return ph_type(sh) in TITLE_TYPES
-
-
-def level_size(lst_style, level):
-    """Size from an <a:lstStyle>/<p:txStyles> list for paragraph level (1-based), or None."""
-    if lst_style is None:
-        return None
-    node = lst_style.find(f"a:lvl{level}pPr/a:defRPr", NS)
-    sz = node.get("sz") if node is not None else None
-    return int(sz) / 100 if sz else None
-
-
-def inherited_size(sh, para):
-    """Font size of a paragraph when its runs don't set one: shape lstStyle -> layout placeholder
-    -> master text style. Returns None when nothing in the chain sets a size."""
-    level = (para.level or 0) + 1
-    body = sh.text_frame._txBody
-    size = level_size(body.find("a:lstStyle", NS), level)
-    if size:
-        return size
-    pt = ph_type(sh)
-    if pt is not None:
-        try:
-            layout_ph = sh.part.slide.slide_layout.placeholders.get(idx=sh.placeholder_format.idx)
-        except (AttributeError, KeyError):
-            layout_ph = None
-        if layout_ph is not None and layout_ph.has_text_frame:
-            size = level_size(layout_ph.text_frame._txBody.find("a:lstStyle", NS), level)
-            if size:
-                return size
-    master = sh.part.slide.slide_layout.slide_master._element
-    style = "titleStyle" if pt in TITLE_TYPES else ("bodyStyle" if pt is not None else "otherStyle")
-    size = level_size(master.find(f"p:txStyles/p:{style}", NS), level)
-    return size or (18.0 if pt is None else None)  # PowerPoint's default text box size is 18 pt
-
-
-def para_size(sh, para):
-    sizes = [r.font.size.pt for r in para.runs if r.font.size is not None]
-    return min(sizes) if sizes else inherited_size(sh, para)
-
-
-def solid_rgb(fill):
-    try:
-        if fill.type == 1:  # MSO_FILL.SOLID
-            return str(fill.fore_color.rgb)
-    except (AttributeError, TypeError, ValueError):
-        pass
-    return None
-
-
-def run_rgb(run):
-    try:
-        return str(run.font.color.rgb) if run.font.color and run.font.color.type is not None else None
-    except (AttributeError, TypeError, ValueError):
-        return None
-
-
-IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".emf", ".wmf", ".svg", ".webp")
-
-
-def alt_text(sh):
-    """Alt text, treating a bare file name (python-pptx and some tools write one) as missing."""
-    nv = sh._element.find(".//p:cNvPr", NS)
-    text = (nv.get("descr") or nv.get("title") or "").strip() if nv is not None else ""
-    return "" if text.lower().endswith(IMAGE_EXT) and " " not in text else text
-
-
-def is_decorative(sh):
-    nv = sh._element.find(".//p:cNvPr", NS)
-    if nv is None:
-        return False
-    dec = nv.find(".//a16:decorative", NS)
-    return dec is not None and dec.get("val") in ("1", "true")
-
-
-def picture_stretch(sh):
-    """Relative difference between the picture's shown aspect and its cropped native aspect."""
-    try:
-        from PIL import Image
-        w_px, h_px = Image.open(io.BytesIO(sh.image.blob)).size
-    except Exception:  # unreadable or vector image (EMF/SVG): nothing to compare
-        return 0.0
-    cw = w_px * (1 - sh.crop_left - sh.crop_right)
-    ch = h_px * (1 - sh.crop_top - sh.crop_bottom)
-    if cw <= 0 or ch <= 0 or not sh.width or not sh.height:
-        return 0.0
-    return (sh.width / sh.height) / (cw / ch) - 1
-
-
-# ---------------------------------------------------------------- checks
-
-class Findings:
     def __init__(self):
-        self.items = []
+        try:
+            self.Items = []
+            self.Floor = None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kFindings.__init__")
 
-    def add(self, slide, severity, code, message, shape=None, shape_id=None):
-        self.items.append({"slide": slide, "severity": severity, "code": code,
-                           "shape": shape, "shape_id": shape_id, "message": message})
-
-
-def shape_fill(s, theme):
-    """Solid fill colour of a shape (theme-resolved), or None."""
-    sp = s._element.find(".//p:spPr", NS)
-    if sp is None:
-        return None
-    solid = sp.find("a:solidFill", NS)
-    if solid is not None:
-        return theme.colour_in(solid)
-    ref = s._element.find("p:style/a:fillRef", NS)  # shape style default fill (idx 0 = none)
-    if ref is not None and ref.get("idx", "0") != "0" and sp.find("a:noFill", NS) is None \
-            and sp.find("a:gradFill", NS) is None and sp.find("a:blipFill", NS) is None:
-        return theme.colour_in(ref)
-    return None
+    def Add(self, Slide, Severity, Code, Message, Shape=None, ShapeId=None):
+        """Record one finding."""
+        if kS.ErrorMode:
+            return None
+        try:
+            self.Items.append({"slide": Slide, "severity": Severity, "code": Code,
+                               "shape": Shape, "shape_id": ShapeId, "message": Message})
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kFindings.Add")
+            return None
 
 
-def has_other_fill(s):
-    sp = s._element.find(".//p:spPr", NS)
-    return sp is not None and (sp.find("a:gradFill", NS) is not None or sp.find("a:blipFill", NS) is not None
-                               or sp.find("a:pattFill", NS) is not None)
+class kLintDeck:
+    """Stateless lint checks over a python-pptx Presentation. The per-slide caches are shared module dicts."""
 
+    GroupTf = GROUP_TF
+    Grown = GROWN
+    LabelMaxPt = LABEL_MAX_PT
+    Scale = SCALE
 
-def run_colour(run, theme):
-    rpr = run._r.find("a:rPr", NS)
-    solid = rpr.find("a:solidFill", NS) if rpr is not None else None
-    return theme.colour_in(solid) if solid is not None else None
+    # ------------------------------------------------------------ helpers
 
+    @staticmethod
+    def Rect(Sh):
+        """(left, top, width, height) in pt as drawn on the slide. Shapes inside groups are mapped out of
+        the group's child coordinate space; a box turned 90/270 degrees swaps width and height."""
+        if kS.ErrorMode:
+            return None
+        try:
+            L, T, W, H = (Emu(Sh.left or 0).pt, Emu(Sh.top or 0).pt, Emu(Sh.width or 0).pt, Emu(Sh.height or 0).pt)
+            Sx, Tx, Sy, Ty = GROUP_TF.get(Sh.shape_id, IDENTITY_TF)
+            L, T, W, H = L * Sx + Tx, T * Sy + Ty, W * Sx, H * Sy
+            Rot = round(getattr(Sh, "rotation", 0) or 0) % 180
+            if Sh.shape_id in GROWN and GROWN[Sh.shape_id] > H:
+                H = GROWN[Sh.shape_id]
+            if Rot == 90:
+                Cx, Cy = L + W / 2, T + H / 2
+                L, T, W, H = Cx - H / 2, Cy - W / 2, H, W
+            return (L, T, W, H)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.Rect")
+            return None
 
-def lint_slide(n, slide, sw, sh_, floor, budget, f, theme):
-    GROUP_TF.clear()  # shape ids repeat across slides
-    GROWN.clear()
-    shapes = list(walk(slide.shapes))
-    titles = [s for s in shapes if is_title(s)]
-    title_text = titles[0].text_frame.text.strip() if titles and titles[0].has_text_frame else ""
-    slide_bg = theme.background(slide)
+    @staticmethod
+    def AttrPt(El, Key):
+        """An EMU attribute of an XML element, in pt."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            return int(El.get(Key)) / PT
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.AttrPt")
+            return 0.0
 
-    # titles
-    if not titles:
-        f.add(n, "warn", "missing_title", "No title placeholder. Every slide needs a title, even a hidden one, "
-              "for navigation and screen readers.")
-    elif not title_text:
-        f.add(n, "warn", "empty_title", "Title placeholder is empty.", titles[0].name)
-    else:
-        if len(title_text) > TITLE_MAX_CHARS:
-            f.add(n, "warn", "headline_too_long",
-                  f"Title is {len(title_text)} characters (> {TITLE_MAX_CHARS}); it will likely wrap.", titles[0].name)
-        if "\n" in title_text or "\v" in title_text:
-            f.add(n, "warn", "headline_two_line", "Title has a hard line break; make it one line or split "
-                  "headline and subhead.", titles[0].name)
-        if looks_like_label(title_text):
-            f.add(n, "info", "title_is_label", f"'{title_text}' reads as a topic label, not a claim "
-                  "(fine for dividers, agenda and Q&A).", titles[0].name)
+    @staticmethod
+    def Inset(Bp, Key, Default):
+        """A bodyPr inset (lIns, tIns ...) in pt, or Default when it is not set."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            return int(Bp.get(Key)) / PT if Bp is not None and Bp.get(Key) else Default
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.Inset")
+            return 0.0
 
-    content_all = [s for s in shapes if s.shape_type != MSO_SHAPE_TYPE.GROUP]
-    for s in content_all:  # first pass: estimate text layout, so later checks see grown boxes
-        if s.has_text_frame and s.text_frame.text.strip():
-            base = rect(s)
-            fit_check(n, s, theme, f)
-            if s.shape_id in GROWN:
-                grown = rect(s)
-                for o in content_all:
-                    if o is s or o.has_text_frame and o.text_frame.text.strip():
-                        continue
-                    if contains(rect(o), base, tol=2.0) and not contains(rect(o), grown, tol=2.0):
-                        f.add(n, "warn", "text_overflow", f"Text needs ~{grown[3]:.0f} pt and spills out of "
-                              f"'{o.name}' behind it; cut words or enlarge the card.", s.name)
-                        break
-    words, colours, raw_fills, shadows, accents = 0, set(), 0, 0, set()
-    sizes, big_tokens, contrast_done = [], Counter(), False
-    content = [s for s in shapes if not is_title(s) and s.shape_type != MSO_SHAPE_TYPE.GROUP]
-    text_shapes = [s for s in shapes if s.has_text_frame and s.text_frame.text.strip()]
-    for s in content:
-        fill = shape_fill(s, theme)
-        if fill:
-            colours.add(fill)
-        el = s._element
-        sp = el.find(".//p:spPr", NS)
-        if sp is not None:
-            srgb = sp.find("a:solidFill/a:srgbClr", NS)
-            if srgb is not None and not theme.is_theme_hex(srgb.get("val", "")):
-                raw_fills += 1
-            if sp.find("a:effectLst/a:outerShdw", NS) is not None:
-                shadows += 1
-            stops = sp.findall("a:gradFill/a:gsLst/a:gs/a:srgbClr", NS)
-            if stops and max(saturation(c.get("val", "000000")) for c in stops) > 0.45:
-                f.add(n, "warn", "gradient_high_chroma", "Saturated gradient that isn't built from theme colours "
-                      "(a common machine-made look); use a solid accent or a two-stop brand gradient.", s.name)
-        accents.update(c.get("val") for c in el.iter(f"{{{NS['a']}}}schemeClr") if c.get("val", "").startswith("accent"))
+    @staticmethod
+    def Walk(Shapes, Tf=IDENTITY_TF):
+        """Every shape (a list), descending into groups. python-pptx reports group children in the group's
+        own child coordinate space (a:chOff/a:chExt), so record how to map them back onto the slide."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Out = []
+            for Sh in Shapes:
+                if Tf != IDENTITY_TF:
+                    GROUP_TF[Sh.shape_id] = Tf
+                Out.append(Sh)
+                if Sh.shape_type == MSO_SHAPE_TYPE.GROUP:
+                    Xfrm = Sh._element.find("p:grpSpPr/a:xfrm", NS)
+                    Inner = Tf
+                    if Xfrm is not None:
+                        Off, Ext = Xfrm.find("a:off", NS), Xfrm.find("a:ext", NS)
+                        ChOff, ChExt = Xfrm.find("a:chOff", NS), Xfrm.find("a:chExt", NS)
+                        if None not in (Off, Ext, ChOff, ChExt):
+                            V = kLintDeck.AttrPt
+                            Kx = V(Ext, "cx") / V(ChExt, "cx") if V(ChExt, "cx") else 1.0
+                            Ky = V(Ext, "cy") / V(ChExt, "cy") if V(ChExt, "cy") else 1.0
+                            # local: x_parent = off + (x_child - chOff) * k ; then apply the outer transform
+                            Sx, Tx = Kx, V(Off, "x") - V(ChOff, "x") * Kx
+                            Sy, Ty = Ky, V(Off, "y") - V(ChOff, "y") * Ky
+                            Inner = (Tf[0] * Sx, Tf[0] * Tx + Tf[1], Tf[2] * Sy, Tf[2] * Ty + Tf[3])
+                    Out += kLintDeck.Walk(Sh.shapes, Inner)
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.Walk")
+            return []
 
-        # bounds
-        l, t, w, h = rect(s)
-        if l < -EDGE_TOLERANCE_PT or t < -EDGE_TOLERANCE_PT or l + w > sw + EDGE_TOLERANCE_PT or t + h > sh_ + EDGE_TOLERANCE_PT:
-            f.add(n, "warn", "offslide_shape", "Shape extends outside the slide.", s.name)
-        if el.find(".//a:hlinkClick", NS) is not None and el.find(".//p:cNvPr/a:hlinkClick", NS) is not None \
-                and (w < 32 or h < 32):
-            f.add(n, "warn", "tiny_click_target", f"Clickable shape is {w:.0f} × {h:.0f} pt; make it at least "
-                  "44 × 44 pt for touch.", s.name)
+    @staticmethod
+    def PhType(Sh):
+        """Placeholder type, or None for a plain shape."""
+        if kS.ErrorMode:
+            return None
+        try:
+            try:
+                return Sh.placeholder_format.type if Sh.is_placeholder else None
+            except ValueError:  # ERROR-SUPPRESSED-JUSTIFIED: python-pptx raises for a placeholder type it doesn't know; treat it as untyped
+                return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.PhType")
+            return None
 
-        # placeholders left empty
-        pt = ph_type(s)
-        if pt in TEXT_PLACEHOLDERS and s.has_text_frame and not s.text_frame.text.strip():
-            if any(o is not s and (o.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART, MSO_SHAPE_TYPE.TABLE)
-                                   or (o.has_text_frame and o.text_frame.text.strip() and not is_title(o)))
-                   for o in content):
-                f.add(n, "error", "unused_placeholder", "Empty placeholder next to real content shows "
-                      "'Click to add text' in edit view and confuses screen readers.", s.name, s.shape_id)
+    @staticmethod
+    def IsTitle(Sh):
+        """True for a title placeholder."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return kLintDeck.PhType(Sh) in TITLE_TYPES
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.IsTitle")
+            return False
 
-        # text
-        if s.has_text_frame and s.text_frame.text.strip():
-            paras = [p for p in s.text_frame.paragraphs if p.text.strip()]
-            words += sum(len(p.text.split()) for p in paras)
-            text = s.text_frame.text
-            if len(paras) > MAX_BULLETS:
-                f.add(n, "warn", "too_many_bullets", f"{len(paras)} paragraphs (> {MAX_BULLETS}); split the slide or "
-                      "reveal one at a time.", s.name)
-            if re.search(r"\blorem ipsum\b|\bdolor sit amet\b", text, re.I):
-                f.add(n, "error", "lorem_ipsum", "Placeholder 'lorem ipsum' text left in.", s.name)
-            for p in paras:
-                size = para_size(s, p)
-                if size and LABEL_MAX_PT < size < floor and len(p.text.split()) >= BODY_MIN_WORDS:
-                    f.add(n, "warn", "body_below_floor", f"{size:g} pt body text (floor {floor:g} pt): "
-                          f"'{p.text.strip()[:40]}'", s.name)
-                    break
-            for p in paras:
-                pt_text = p.text.strip()
-                size = para_size(s, p) or 18.0
-                sizes.append(size)
-                if len(pt_text) <= 24 and has_emoji(pt_text):
-                    f.add(n, "warn", "emoji_as_icon", f"Emoji used as an icon ('{pt_text}'); use a real icon "
-                          "with a text label.", s.name)
-                if len(pt_text) >= 8 and pt_text.endswith(("…", "...")):
-                    f.add(n, "warn", "truncated_text", f"Text ends in an ellipsis ('…{pt_text[-24:]}'); "
-                          "is something cut off?", s.name)
-                if len(pt_text) >= 80 and p.alignment == 2:  # PP_ALIGN.CENTER
-                    f.add(n, "warn", "centered_long_body", "Long centred text is hard to read; left-align body "
-                          "text and keep centring for one-line headlines and quotes.", s.name)
-                if len(pt_text) >= 90 and size <= 28 * SCALE:
-                    cpl = chars_per_line(Emu(s.width or 0).pt, size)
-                    if cpl > 75:
-                        f.add(n, "warn", "measure_too_wide", f"About {cpl:.0f} characters per line (comfortable: "
-                              "45–75); narrow the box or raise the size.", s.name)
-                if size >= 24 * SCALE:
-                    big_tokens.update(w.lower() for w in re.findall(r"[^\W\d_]{4,}", pt_text)
-                                      if w.lower() not in STOP_WORDS)
-            # contrast: run colour (or theme text colour) against shape fill (or slide background)
-            backing = fill
-            if backing is None and not has_other_fill(s):  # a card or band drawn behind the text box
-                for o in content:
-                    if o is s:
-                        break
-                    if contains(rect(o), rect(s), tol=2.0):
-                        if has_other_fill(o) or o.shape_type == MSO_SHAPE_TYPE.PICTURE:  # text on a photo
-                            backing = "?"
+    @staticmethod
+    def LevelSize(LstStyle, Level):
+        """Size from an <a:lstStyle>/<p:txStyles> list for paragraph level (1-based), or None."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if LstStyle is None:
+                return None
+            Node = LstStyle.find(f"a:lvl{Level}pPr/a:defRPr", NS)
+            Sz = Node.get("sz") if Node is not None else None
+            return int(Sz) / 100 if Sz else None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.LevelSize")
+            return None
+
+    @staticmethod
+    def InheritedSize(Sh, Para):
+        """Font size of a paragraph when its runs don't set one: shape lstStyle -> layout placeholder
+        -> master text style. Returns None when nothing in the chain sets a size."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Level = (Para.level or 0) + 1
+            Body = Sh.text_frame._txBody
+            Size = kLintDeck.LevelSize(Body.find("a:lstStyle", NS), Level)
+            if Size:
+                return Size
+            Pt = kLintDeck.PhType(Sh)
+            if Pt is not None:
+                try:
+                    LayoutPh = Sh.part.slide.slide_layout.placeholders.get(idx=Sh.placeholder_format.idx)
+                except (AttributeError, KeyError):  # ERROR-SUPPRESSED-JUSTIFIED: no layout placeholder to inherit from; fall through to the master
+                    LayoutPh = None
+                if LayoutPh is not None and LayoutPh.has_text_frame:
+                    Size = kLintDeck.LevelSize(LayoutPh.text_frame._txBody.find("a:lstStyle", NS), Level)
+                    if Size:
+                        return Size
+            Master = Sh.part.slide.slide_layout.slide_master._element
+            Style = "titleStyle" if Pt in TITLE_TYPES else ("bodyStyle" if Pt is not None else "otherStyle")
+            Size = kLintDeck.LevelSize(Master.find(f"p:txStyles/p:{Style}", NS), Level)
+            return Size or (18.0 if Pt is None else None)  # PowerPoint's default text box size is 18 pt
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.InheritedSize")
+            return None
+
+    @staticmethod
+    def ParaSize(Sh, Para):
+        """Smallest run size of a paragraph, or its inherited size."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Sizes = [R.font.size.pt for R in Para.runs if R.font.size is not None]
+            return min(Sizes) if Sizes else kLintDeck.InheritedSize(Sh, Para)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.ParaSize")
+            return None
+
+    @staticmethod
+    def SolidRgb(Fill):
+        """RRGGBB of a solid RGB fill, or None."""
+        if kS.ErrorMode:
+            return None
+        try:
+            try:
+                if Fill.type == 1:  # MSO_FILL.SOLID
+                    return str(Fill.fore_color.rgb)
+            except (AttributeError, TypeError, ValueError):  # ERROR-SUPPRESSED-JUSTIFIED: a theme/none colour has no rgb; None means "not a plain RGB fill"
+                pass
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.SolidRgb")
+            return None
+
+    @staticmethod
+    def RunRgb(Run):
+        """RRGGBB set directly on a run, or None."""
+        if kS.ErrorMode:
+            return None
+        try:
+            try:
+                return str(Run.font.color.rgb) if Run.font.color and Run.font.color.type is not None else None
+            except (AttributeError, TypeError, ValueError):  # ERROR-SUPPRESSED-JUSTIFIED: a theme colour has no rgb; None means "not a plain RGB colour"
+                return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.RunRgb")
+            return None
+
+    @staticmethod
+    def AltText(Sh):
+        """Alt text, treating a bare file name (python-pptx and some tools write one) as missing."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Nv = Sh._element.find(".//p:cNvPr", NS)
+            Text = (Nv.get("descr") or Nv.get("title") or "").strip() if Nv is not None else ""
+            return "" if Text.lower().endswith(IMAGE_EXT) and " " not in Text else Text
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.AltText")
+            return ""
+
+    @staticmethod
+    def IsDecorative(Sh):
+        """True when the shape is marked decorative."""
+        if kS.ErrorMode:
+            return False
+        try:
+            Nv = Sh._element.find(".//p:cNvPr", NS)
+            if Nv is None:
+                return False
+            Dec = Nv.find(".//a16:decorative", NS)
+            return Dec is not None and Dec.get("val") in ("1", "true")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.IsDecorative")
+            return False
+
+    @staticmethod
+    def PictureStretch(Sh):
+        """Relative difference between the picture's shown aspect and its cropped native aspect."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            try:
+                from PIL import Image
+                WPx, HPx = Image.open(io.BytesIO(Sh.image.blob)).size
+            except Exception:  # ERROR-SUPPRESSED-JUSTIFIED: unreadable or vector image (EMF/SVG): nothing to compare
+                return 0.0
+            Cw = WPx * (1 - Sh.crop_left - Sh.crop_right)
+            Ch = HPx * (1 - Sh.crop_top - Sh.crop_bottom)
+            if Cw <= 0 or Ch <= 0 or not Sh.width or not Sh.height:
+                return 0.0
+            return (Sh.width / Sh.height) / (Cw / Ch) - 1
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.PictureStretch")
+            return 0.0
+
+    @staticmethod
+    def ShapeFill(S, Theme):
+        """Solid fill colour of a shape (theme-resolved), or None."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Sp = S._element.find(".//p:spPr", NS)
+            if Sp is None:
+                return None
+            Solid = Sp.find("a:solidFill", NS)
+            if Solid is not None:
+                return Theme.ColourIn(Solid)
+            Ref = S._element.find("p:style/a:fillRef", NS)  # shape style default fill (idx 0 = none)
+            if Ref is not None and Ref.get("idx", "0") != "0" and Sp.find("a:noFill", NS) is None \
+                    and Sp.find("a:gradFill", NS) is None and Sp.find("a:blipFill", NS) is None:
+                return Theme.ColourIn(Ref)
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.ShapeFill")
+            return None
+
+    @staticmethod
+    def HasOtherFill(S):
+        """True for a gradient, picture or pattern fill."""
+        if kS.ErrorMode:
+            return False
+        try:
+            Sp = S._element.find(".//p:spPr", NS)
+            return Sp is not None and (Sp.find("a:gradFill", NS) is not None or Sp.find("a:blipFill", NS) is not None
+                                       or Sp.find("a:pattFill", NS) is not None)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.HasOtherFill")
+            return False
+
+    @staticmethod
+    def RunColour(Run, Theme):
+        """Theme-resolved colour set on a run, or None."""
+        if kS.ErrorMode:
+            return None
+        try:
+            RPr = Run._r.find("a:rPr", NS)
+            Solid = RPr.find("a:solidFill", NS) if RPr is not None else None
+            return Theme.ColourIn(Solid) if Solid is not None else None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.RunColour")
+            return None
+
+    @staticmethod
+    def SortKey(Item):
+        """Print order: by slide, then error, warn, info."""
+        if kS.ErrorMode:
+            return (0, 0)
+        try:
+            return (Item["slide"], SEVERITY_ORDER[Item["severity"]])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.SortKey")
+            return (0, 0)
+
+    # ------------------------------------------------------------ checks
+
+    @staticmethod
+    def LintSlide(N, Slide, Sw, Sh_, Floor, Budget, F, Theme):
+        """Every per-slide check. Returns the slide's title text."""
+        if kS.ErrorMode:
+            return None
+        try:
+            GROUP_TF.clear()  # shape ids repeat across slides
+            GROWN.clear()
+            Rect = kLintDeck.Rect
+            Shapes = kLintDeck.Walk(Slide.shapes)
+            Titles = [S for S in Shapes if kLintDeck.IsTitle(S)]
+            TitleText = Titles[0].text_frame.text.strip() if Titles and Titles[0].has_text_frame else ""
+            SlideBg = Theme.Background(Slide)
+
+            # titles
+            if not Titles:
+                F.Add(N, "warn", "missing_title", "No title placeholder. Every slide needs a title, even a hidden one, "
+                      "for navigation and screen readers.")
+            elif not TitleText:
+                F.Add(N, "warn", "empty_title", "Title placeholder is empty.", Titles[0].name)
+            else:
+                if len(TitleText) > TITLE_MAX_CHARS:
+                    F.Add(N, "warn", "headline_too_long",
+                          f"Title is {len(TitleText)} characters (> {TITLE_MAX_CHARS}); it will likely wrap.", Titles[0].name)
+                if "\n" in TitleText or "\v" in TitleText:
+                    F.Add(N, "warn", "headline_two_line", "Title has a hard line break; make it one line or split "
+                          "headline and subhead.", Titles[0].name)
+                if kRules.LooksLikeLabel(TitleText):
+                    F.Add(N, "info", "title_is_label", f"'{TitleText}' reads as a topic label, not a claim "
+                          "(fine for dividers, agenda and Q&A).", Titles[0].name)
+
+            ContentAll = [S for S in Shapes if S.shape_type != MSO_SHAPE_TYPE.GROUP]
+            for S in ContentAll:  # first pass: estimate text layout, so later checks see grown boxes
+                if S.has_text_frame and S.text_frame.text.strip():
+                    Base = Rect(S)
+                    kLintDeck.FitCheck(N, S, Theme, F)
+                    if S.shape_id in GROWN:
+                        Grown = Rect(S)
+                        for O in ContentAll:
+                            if O is S or O.has_text_frame and O.text_frame.text.strip():
+                                continue
+                            if kRules.Contains(Rect(O), Base, Tol=2.0) and not kRules.Contains(Rect(O), Grown, Tol=2.0):
+                                F.Add(N, "warn", "text_overflow", f"Text needs ~{Grown[3]:.0f} pt and spills out of "
+                                      f"'{O.name}' behind it; cut words or enlarge the card.", S.name)
+                                break
+            Words, Colours, RawFills, Shadows, Accents = 0, set(), 0, 0, set()
+            Sizes, BigTokens, ContrastDone = [], Counter(), False
+            Content = [S for S in Shapes if not kLintDeck.IsTitle(S) and S.shape_type != MSO_SHAPE_TYPE.GROUP]
+            TextShapes = [S for S in Shapes if S.has_text_frame and S.text_frame.text.strip()]
+            for S in Content:
+                Fill = kLintDeck.ShapeFill(S, Theme)
+                if Fill:
+                    Colours.add(Fill)
+                El = S._element
+                Sp = El.find(".//p:spPr", NS)
+                if Sp is not None:
+                    Srgb = Sp.find("a:solidFill/a:srgbClr", NS)
+                    if Srgb is not None and not Theme.IsThemeHex(Srgb.get("val", "")):
+                        RawFills += 1
+                    if Sp.find("a:effectLst/a:outerShdw", NS) is not None:
+                        Shadows += 1
+                    Stops = Sp.findall("a:gradFill/a:gsLst/a:gs/a:srgbClr", NS)
+                    if Stops and max(kTheme.Saturation(C.get("val", "000000")) for C in Stops) > 0.45:
+                        F.Add(N, "warn", "gradient_high_chroma", "Saturated gradient that isn't built from theme colours "
+                              "(a common machine-made look); use a solid accent or a two-stop brand gradient.", S.name)
+                Accents.update(C.get("val") for C in El.iter(f"{{{NS['a']}}}schemeClr")
+                               if C.get("val", "").startswith("accent"))
+
+                # bounds
+                L, T, W, H = Rect(S)
+                if L < -EDGE_TOLERANCE_PT or T < -EDGE_TOLERANCE_PT or L + W > Sw + EDGE_TOLERANCE_PT \
+                        or T + H > Sh_ + EDGE_TOLERANCE_PT:
+                    F.Add(N, "warn", "offslide_shape", "Shape extends outside the slide.", S.name)
+                if El.find(".//a:hlinkClick", NS) is not None and El.find(".//p:cNvPr/a:hlinkClick", NS) is not None \
+                        and (W < 32 or H < 32):
+                    F.Add(N, "warn", "tiny_click_target", f"Clickable shape is {W:.0f} × {H:.0f} pt; make it at least "
+                          "44 × 44 pt for touch.", S.name)
+
+                # placeholders left empty
+                Pt = kLintDeck.PhType(S)
+                if Pt in TEXT_PLACEHOLDERS and S.has_text_frame and not S.text_frame.text.strip():
+                    if any(O is not S and (O.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART,
+                                                            MSO_SHAPE_TYPE.TABLE)
+                                           or (O.has_text_frame and O.text_frame.text.strip()
+                                               and not kLintDeck.IsTitle(O)))
+                           for O in Content):
+                        F.Add(N, "error", "unused_placeholder", "Empty placeholder next to real content shows "
+                              "'Click to add text' in edit view and confuses screen readers.", S.name, S.shape_id)
+
+                # text
+                if S.has_text_frame and S.text_frame.text.strip():
+                    Paras = [P for P in S.text_frame.paragraphs if P.text.strip()]
+                    Words += sum(len(P.text.split()) for P in Paras)
+                    Text = S.text_frame.text
+                    if len(Paras) > MAX_BULLETS:
+                        F.Add(N, "warn", "too_many_bullets", f"{len(Paras)} paragraphs (> {MAX_BULLETS}); split the "
+                              "slide or reveal one at a time.", S.name)
+                    if re.search(r"\blorem ipsum\b|\bdolor sit amet\b", Text, re.I):
+                        F.Add(N, "error", "lorem_ipsum", "Placeholder 'lorem ipsum' text left in.", S.name)
+                    for P in Paras:
+                        Size = kLintDeck.ParaSize(S, P)
+                        if Size and kLintDeck.LabelMaxPt < Size < Floor and len(P.text.split()) >= BODY_MIN_WORDS:
+                            F.Add(N, "warn", "body_below_floor", f"{Size:g} pt body text (floor {Floor:g} pt): "
+                                  f"'{P.text.strip()[:40]}'", S.name)
+                            break
+                    for P in Paras:
+                        PtText = P.text.strip()
+                        Size = kLintDeck.ParaSize(S, P) or 18.0
+                        Sizes.append(Size)
+                        if len(PtText) <= 24 and kRules.HasEmoji(PtText):
+                            F.Add(N, "warn", "emoji_as_icon", f"Emoji used as an icon ('{PtText}'); use a real icon "
+                                  "with a text label.", S.name)
+                        if len(PtText) >= 8 and PtText.endswith(("…", "...")):
+                            F.Add(N, "warn", "truncated_text", f"Text ends in an ellipsis ('…{PtText[-24:]}'); "
+                                  "is something cut off?", S.name)
+                        if len(PtText) >= 80 and P.alignment == 2:  # PP_ALIGN.CENTER
+                            F.Add(N, "warn", "centered_long_body", "Long centred text is hard to read; left-align body "
+                                  "text and keep centring for one-line headlines and quotes.", S.name)
+                        if len(PtText) >= 90 and Size <= 28 * kLintDeck.Scale:
+                            Cpl = kRules.CharsPerLine(Emu(S.width or 0).pt, Size)
+                            if Cpl > 75:
+                                F.Add(N, "warn", "measure_too_wide", f"About {Cpl:.0f} characters per line "
+                                      "(comfortable: 45–75); narrow the box or raise the size.", S.name)
+                        if Size >= 24 * kLintDeck.Scale:
+                            BigTokens.update(Wd.lower() for Wd in re.findall(r"[^\W\d_]{4,}", PtText)
+                                             if Wd.lower() not in STOP_WORDS)
+                    # contrast: run colour (or theme text colour) against shape fill (or slide background)
+                    Backing = Fill
+                    if Backing is None and not kLintDeck.HasOtherFill(S):  # a card or band drawn behind the text box
+                        for O in Content:
+                            if O is S:
+                                break
+                            if kRules.Contains(Rect(O), Rect(S), Tol=2.0):
+                                if kLintDeck.HasOtherFill(O) or O.shape_type == MSO_SHAPE_TYPE.PICTURE:  # text on a photo
+                                    Backing = "?"
+                                else:
+                                    Backing = kLintDeck.ShapeFill(O, Theme) or Backing
+                    if not ContrastDone and not kLintDeck.HasOtherFill(S) and Backing != "?":
+                        Bg = Backing or SlideBg
+                        Fill = Backing
+                        DefaultFg = Theme.Colours.get(Theme.Map.get("tx1", "dk1"))
+                        for P in Paras:
+                            Size = kLintDeck.ParaSize(S, P) or 18.0
+                            for R in P.runs:
+                                if not R.text.strip():
+                                    continue
+                                Fg = kLintDeck.RunColour(R, Theme) or (DefaultFg if Fill else None)
+                                if not Fg or not Bg:
+                                    continue
+                                Need = 3.0 if kRules.IsLargeText(Size / kLintDeck.Scale, bool(R.font.bold)) else 4.5
+                                Ratio = kRules.ContrastRatio(Fg, Bg)
+                                if Ratio < Need:
+                                    F.Add(N, "error" if Ratio < 3.0 else "warn", "a11y_low_text_contrast",
+                                          f"Text #{Fg} on #{Bg} is {Ratio:.1f}:1 (needs {Need}:1).", S.name)
+                                    ContrastDone = True
+                                    break
+                            if ContrastDone:
+                                break
+
+                # pictures and charts
+                if S.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART) or getattr(S, "has_chart", False):
+                    if not kLintDeck.AltText(S) and not kLintDeck.IsDecorative(S):
+                        F.Add(N, "warn", "a11y_missing_alt_text", "No alt text (and not marked decorative).", S.name)
+                if getattr(S, "has_table", False) and S.has_table:
+                    for Cell in S.table.iter_cells():
+                        Tc = Cell._tc
+                        Solid = Tc.find("a:tcPr/a:solidFill", NS)
+                        Cbg = Theme.ColourIn(Solid) if Solid is not None else SlideBg
+                        for P in Cell.text_frame.paragraphs:
+                            for R in P.runs:
+                                Fg = kLintDeck.RunColour(R, Theme)
+                                if not R.text.strip() or not Fg or not Cbg:
+                                    continue
+                                Size = (R.font.size.pt if R.font.size else 18.0)
+                                Need = 3.0 if kRules.IsLargeText(Size / kLintDeck.Scale, bool(R.font.bold)) else 4.5
+                                Ratio = kRules.ContrastRatio(Fg, Cbg)
+                                if Ratio < Need:
+                                    F.Add(N, "error" if Ratio < 3.0 else "warn", "a11y_low_text_contrast",
+                                          f"Table cell text #{Fg} on #{Cbg} is {Ratio:.1f}:1 (needs {Need}:1).", S.name)
+                                    break
+                            else:
+                                continue
+                            break
                         else:
-                            backing = shape_fill(o, theme) or backing
-            if not contrast_done and not has_other_fill(s) and backing != "?":
-                bg = backing or slide_bg
-                fill = backing
-                default_fg = theme.colours.get(theme.map.get("tx1", "dk1"))
-                for p in paras:
-                    size = para_size(s, p) or 18.0
-                    for r in p.runs:
-                        if not r.text.strip():
                             continue
-                        fg = run_colour(r, theme) or (default_fg if fill else None)
-                        if not fg or not bg:
-                            continue
-                        need = 3.0 if is_large_text(size / SCALE, bool(r.font.bold)) else 4.5
-                        ratio = contrast_ratio(fg, bg)
-                        if ratio < need:
-                            f.add(n, "error" if ratio < 3.0 else "warn", "a11y_low_text_contrast",
-                                  f"Text #{fg} on #{bg} is {ratio:.1f}:1 (needs {need}:1).", s.name)
-                            contrast_done = True
-                            break
-                    if contrast_done:
                         break
+                if S.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                    Stretch = kLintDeck.PictureStretch(S)
+                    if abs(Stretch) > STRETCH_TOLERANCE:
+                        F.Add(N, "error" if abs(Stretch) > 0.15 else "warn", "picture_stretched",
+                              f"Picture is {Stretch:+.0%} {'wider' if Stretch > 0 else 'narrower'} than its source; "
+                              "crop instead (scripts/cover_crop.py).", S.name)
+                    Hay = (kLintDeck.AltText(S) + " " + S.name + " " + " ".join(
+                        Rel.target_ref for Rel in S.part.rels.values() if Rel.is_external)).lower()
+                    if any(Host in Hay for Host in STOCK_HOSTS + CARTOON_HOSTS):
+                        F.Add(N, "info", "stock_or_cartoon_image", "Looks like a stock photo or generic illustration; "
+                              "real product, team or customer images carry more weight.", S.name)
+                if getattr(S, "has_chart", False):
+                    kLintDeck.LintChart(N, S, F, Theme)
 
-        # pictures and charts
-        if s.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART) or getattr(s, "has_chart", False):
-            if not alt_text(s) and not is_decorative(s):
-                f.add(n, "warn", "a11y_missing_alt_text", "No alt text (and not marked decorative).", s.name)
-        if getattr(s, "has_table", False) and s.has_table:
-            for cell in s.table.iter_cells():
-                tc = cell._tc
-                solid = tc.find("a:tcPr/a:solidFill", NS)
-                cbg = theme.colour_in(solid) if solid is not None else slide_bg
-                for p in cell.text_frame.paragraphs:
-                    for r in p.runs:
-                        fg = run_colour(r, theme)
-                        if not r.text.strip() or not fg or not cbg:
-                            continue
-                        size = (r.font.size.pt if r.font.size else 18.0)
-                        need = 3.0 if is_large_text(size / SCALE, bool(r.font.bold)) else 4.5
-                        ratio = contrast_ratio(fg, cbg)
-                        if ratio < need:
-                            f.add(n, "error" if ratio < 3.0 else "warn", "a11y_low_text_contrast",
-                                  f"Table cell text #{fg} on #{cbg} is {ratio:.1f}:1 (needs {need}:1).", s.name)
-                            break
-                    else:
-                        continue
+            if Words > Budget:
+                F.Add(N, "info", "word_budget", f"{Words} visible words (budget {Budget}). Fine for gallery, matrix, "
+                      "chart, quote and reference slides; otherwise cut or move to the notes.")
+            if len(Colours) > MAX_COLOURS:
+                F.Add(N, "warn", "palette_too_many_colours", f"{len(Colours)} distinct fill colours (> {MAX_COLOURS}).")
+            if RawFills >= 3:
+                F.Add(N, "warn", "off_palette_fill", f"{RawFills} shapes use hard-coded colours outside the theme; "
+                      "use theme colours so the deck re-themes cleanly.")
+            if Shadows > 3:
+                F.Add(N, "warn", "shadow_overuse", f"{Shadows} shapes have drop shadows; reserve elevation for one or two.")
+            if len(Accents) >= 4:
+                F.Add(N, "warn", "accent_overload", f"{len(Accents)} accent colours on one slide "
+                      f"({', '.join(sorted(Accents))}); keep to 3 or fewer, ideally one highlight.")
+            for Tok, C in BigTokens.items():
+                if C >= 3:
+                    F.Add(N, "warn", "repeated_word", f"'{Tok}' appears {C} times in large type; demote the repeats.")
                     break
+            Big = sorted(set(Sizes), reverse=True)
+            if len(Big) >= 2 and 1.08 < Big[0] / Big[1] < 1.6:
+                F.Add(N, "info", "weak_focal_hierarchy", f"Largest text sizes {Big[0]:g} and {Big[1]:g} pt are too "
+                      "close; make one element clearly dominant (≥ 1.6×) or equal.")
+
+            # grid monotony: 4+ body boxes, 3+ of them the same width and top as the first
+            Area = Sw * Sh_
+            Body = [Rect(S) for S in TextShapes if not kLintDeck.IsTitle(S) and Rect(S)[2] > 1 and Rect(S)[3] > 1
+                    and Rect(S)[2] * Rect(S)[3] < 0.92 * Area]
+            if len(Body) >= 4:
+                Same = sum(1 for Rc in Body[1:] if abs(Rc[2] - Body[0][2]) <= 4 and abs(Rc[1] - Body[0][1]) <= 4)
+                if Same >= 3:
+                    F.Add(N, "info", "grid_monotony", f"{Same + 1} identical boxes in a row; vary size or emphasis so "
+                          "one item leads.")
+
+            # overlaps between text-bearing shapes and pictures (containment = a card/backing, not a defect)
+            Boxes = [(S.name, Rect(S)) for S in Content
+                     if (S.has_text_frame and S.text_frame.text.strip())
+                     or S.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART)]
+            for I, (Na, Ra) in enumerate(Boxes):
+                for Nb, Rb in Boxes[I + 1:]:
+                    Ov = kRules.OverlapArea(Ra, Rb)
+                    if Ov >= OVERLAP_WARN_PT2 and not kRules.Contains(Ra, Rb) and not kRules.Contains(Rb, Ra):
+                        F.Add(N, "error" if Ov >= OVERLAP_ERROR_PT2 else "warn", "shape_overlap",
+                              f"'{Na}' and '{Nb}' overlap by {Ov:.0f} pt².", Na)
+
+            Notes = Slide.notes_slide.notes_text_frame.text if Slide.has_notes_slide else ""
+            if not Notes.strip():
+                F.Add(N, "info", "missing_notes", "No speaker notes.")
+            Shown = " ".join(X.text_frame.text for X in Shapes if X.has_text_frame) + " " + " ".join(
+                C.text for X in Shapes if getattr(X, "has_table", False) and X.has_table for C in X.table.iter_cells())
+            HasChart = any(getattr(X, "has_chart", False) and X.has_chart for X in Shapes)
+            HasFigure = HasChart or re.search(r"\d+(?:[.,]\d+)?\s*(?:%|percent|pt\b|[kKmMbB]n?\b|x\b)|[$€£¥]\s?\d",
+                                              Shown)
+            if HasFigure and Notes.strip() and not re.search(
+                    r"source|doi|https?://|www\.|according to|\(\d{4}\)|©|källa|quelle", Notes, re.I):
+                F.Add(N, "info", "figure_without_source", "The slide shows figures but the notes name no source; add "
+                      "where the numbers come from (SOURCES: …).")
+            return TitleText
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.LintSlide(slide={N})")
+            return None
+
+    @staticmethod
+    def FitCheck(N, S, Theme, F):
+        """Estimate wrapped text height from font metrics and flag text that won't fit its box."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Tf = S.text_frame
+            Body = Tf._txBody
+            Bp = Body.find("a:bodyPr", NS)
+            if Bp is not None and Bp.get("wrap") == "none":
+                return None
+            Grows = Bp is not None and Bp.find("a:spAutoFit", NS) is not None
+            if round(getattr(S, "rotation", 0) or 0) % 180 == 90:
+                return None
+            Ins = kLintDeck.Inset
+            L, T, W, H = kLintDeck.Rect(S)
+            Width = W - Ins(Bp, "lIns", 7.2) - Ins(Bp, "rIns", 7.2)
+            Height = H - Ins(Bp, "tIns", 3.6) - Ins(Bp, "bIns", 3.6)
+            if Width <= 0 or Height <= 0:
+                return None
+            Heading = kLintDeck.IsTitle(S)
+            Paras = []
+            for P in Tf.paragraphs:
+                Size = kLintDeck.ParaSize(S, P) or 18.0
+                Run = next((R for R in P.runs if R.text.strip()), None)
+                Name = Run.font.name if Run is not None and Run.font.name else None
+                Family = Theme.Font(Name) if Name else (Theme.Major if Heading else Theme.Minor)
+                Bold = bool(Run.font.bold) if Run is not None and Run.font.bold is not None else Heading
+                Before = P.space_before.pt if P.space_before is not None else 0
+                Paras.append((P.text, Family, Size, Bold, Before))
+            Need, Widest, Lines = kMeasure.TextHeight(Paras, Width)
+            if Grows:  # "resize shape to fit text": the box will be as tall as its text; overlap/off-slide use that
+                Grown = Need + Ins(Bp, "tIns", 3.6) + Ins(Bp, "bIns", 3.6)
+                if Grown > H:
+                    GROWN[S.shape_id] = Grown
+                if Widest > Width + 1:
+                    F.Add(N, "warn", "word_breaks", f"A word is wider than its box ({Widest:.0f} pt in {Width:.0f} pt) "
+                          "and will break mid-word.", S.name)
+                return None
+            if Widest > Width + 1:
+                F.Add(N, "warn", "word_breaks", f"A word is wider than its box ({Widest:.0f} pt in {Width:.0f} pt) and "
+                      "will break mid-word; shorten it, widen the box or lower the size.", S.name)
+            Shrink = Bp is not None and Bp.find("a:normAutofit", NS) is not None
+            if Need > Height * 1.08:
+                if Shrink:
+                    F.Add(N, "info", "text_shrinks", f"Text needs ~{Need:.0f} pt in a {Height:.0f} pt box; PowerPoint "
+                          "will shrink it to fit — check it stays above the floor.", S.name)
                 else:
+                    F.Add(N, "warn" if Need < Height * 1.5 else "error", "text_overflow",
+                          f"Text needs ~{Need:.0f} pt ({Lines} lines) but the box is {Height:.0f} pt tall; it will "
+                          "spill out. Cut words, widen or heighten the box, or split the slide.", S.name)
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.FitCheck(slide={N})")
+            return None
+
+    @staticmethod
+    def LintChart(N, S, F, Theme):
+        """Chart checks: palette, title, labels, legend, order, number format."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Chart = S.chart
+            Cx = Chart._chartSpace
+            C = {"c": C_NS, "a": NS["a"]}
+            Series = Cx.findall(".//c:ser", C)
+            Colours = []
+            for Ser in Series[:6]:
+                Colours.append(Theme.ColourIn(Ser.find("c:spPr/a:solidFill", C)))
+            if sum(1 for Col in Colours if Col in OFFICE_DEFAULT_SERIES) >= 2:
+                F.Add(N, "warn", "chart_default_palette", "Series use Office default colours; bind them to the "
+                      "theme, or highlight only the finding.", S.name)
+
+            if Chart.has_title and Chart.chart_title.has_text_frame:
+                T = Chart.chart_title.text_frame.text.strip()
+                if T and not any(W in f" {T.lower()} " for W in INSIGHT_WORDS):
+                    F.Add(N, "info", "chart_descriptive_title", f"Chart title '{T}' names the data; headline the "
+                          "finding instead (e.g. 'East leads Q1, up 8 %').", S.name)
+
+            LabelsOn = any(D.find("c:showVal", C) is not None and D.find("c:showVal", C).get("val") in ("1", "true")
+                           for D in Cx.findall(".//c:dLbls", C))
+            Gridlines = Cx.find(".//c:valAx/c:majorGridlines", C) is not None
+            ValDeleted = Cx.find(".//c:valAx/c:delete", C)
+            if LabelsOn and Gridlines and not (ValDeleted is not None and ValDeleted.get("val") in ("1", "true")):
+                F.Add(N, "info", "chart_redundant_labels", "Data labels and a gridlined value axis say the same "
+                      "thing; keep one.", S.name)
+
+            Legend = Cx.find(".//c:legend", C)
+            if Legend is not None:
+                Pos = Legend.find("c:legendPos", C)
+                Overlay = Legend.find("c:overlay", C)
+                if Pos is not None and Pos.get("val") in ("t", "b") \
+                        and (Overlay is None or Overlay.get("val") in ("0", "false")):
+                    F.Add(N, "warn", "chart_legend_steals_plot", "Legend at the top/bottom takes height from the "
+                          "plot; move it to the right, or drop it and colour-code the title.", S.name)
+
+            Names = [(Ser.findtext(".//c:tx//c:v", namespaces=C) or "").strip().lower() for Ser in Series]
+            Real = [Col for Col in Colours if Col]
+            if len(Names) >= 3 and all(re.match(ORDINAL_RE, Nm) for Nm in Names if Nm) and all(Names) \
+                    and len(Real) >= 2 and len({round(kTheme.Hue(Col), 2) for Col in Real}) >= 2:
+                F.Add(N, "info", "chart_ordinal_categorical_color", "Ordered series (months, quarters, years) in "
+                      "unrelated hues; use one hue from light to dark so the order reads at a glance.", S.name)
+
+            for Fmt in Cx.findall(".//c:valAx/c:numFmt", C):
+                Code = Fmt.get("formatCode", "")
+                if "_(" in Code or ('"-"' in Code and "*" in Code):
+                    F.Add(N, "warn", "chart_accounting_zero_dash", "Accounting number format shows zero as '$-' on "
+                          "the axis; use a currency or number format.", S.name)
+                    break
+
+            Points = max((len(Ser.findall(".//c:val//c:pt", C)) for Ser in Series), default=0)
+            if LabelsOn and (Points > 12 or len(Series) > 1):
+                F.Add(N, "info", "chart_label_collision", f"Data labels on {len(Series)} series × {Points} points "
+                      "will likely collide; label only the key points or rely on the axis. Check the render.", S.name)
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.LintChart(slide={N})")
+            return None
+
+    @staticmethod
+    def Lint(Path, Floor, Budget):
+        """Lint a deck file. Returns (Presentation, kFindings).
+        Sizes are judged relative to a standard 960-pt-wide slide: on a 1440-pt (Full HD) slide an
+        18 pt floor becomes 27 pt, because the same text is two-thirds as big on screen."""
+        if kS.ErrorMode:
+            return None, None
+        try:
+            GROUP_TF.clear()
+            Prs = Presentation(Path)
+            F = kFindings()
+            Theme = kTheme(Prs.slide_master)
+            Sw, Sh_ = Emu(Prs.slide_width).pt, Emu(Prs.slide_height).pt
+            Scale = kLintDeck.Scale = max(1.0, Sw / 960)
+            Floor, kLintDeck.LabelMaxPt = round(Floor * Scale, 1), round(12.0 * Scale, 1)
+            if (round(Sw), round(Sh_)) != (1440, 810):
+                Ratio = Sw / Sh_
+                F.Add(0, "warn" if abs(Ratio - 16 / 9) > 0.01 else "info", "slide_size",
+                      f"Slide size {Sw:g} x {Sh_:g} pt; Full HD is 1440 x 810 pt.")
+            Titles = Counter()
+            Fonts = Counter()
+            Resolved = Counter()
+            for N, Slide in enumerate(Prs.slides, 1):
+                if Slide._element.get("show") == "0":
                     continue
-                break
-        if s.shape_type == MSO_SHAPE_TYPE.PICTURE:
-            stretch = picture_stretch(s)
-            if abs(stretch) > STRETCH_TOLERANCE:
-                f.add(n, "error" if abs(stretch) > 0.15 else "warn", "picture_stretched",
-                      f"Picture is {stretch:+.0%} {'wider' if stretch > 0 else 'narrower'} than its source; "
-                      "crop instead (scripts/cover_crop.py).", s.name)
-            hay = (alt_text(s) + " " + s.name + " " + " ".join(
-                r.target_ref for r in s.part.rels.values() if r.is_external)).lower()
-            if any(h in hay for h in STOCK_HOSTS + CARTOON_HOSTS):
-                f.add(n, "info", "stock_or_cartoon_image", "Looks like a stock photo or generic illustration; "
-                      "real product, team or customer images carry more weight.", s.name)
-        if getattr(s, "has_chart", False):
-            lint_chart(n, s, f, theme)
+                Title = kLintDeck.LintSlide(N, Slide, Sw, Sh_, Floor, Budget, F, Theme)
+                if Title:
+                    Titles[Title.lower()] += 1
+                for S in kLintDeck.Walk(Slide.shapes):
+                    if S.has_text_frame:
+                        for P in S.text_frame.paragraphs:
+                            for R in P.runs:
+                                if not R.text.strip():
+                                    continue
+                                Name = R.font.name
+                                if Name and not Name.startswith("+"):
+                                    Fonts[Name] += 1
+                                Face = Theme.Font(Name) if Name else (Theme.Major if kLintDeck.IsTitle(S)
+                                                                      else Theme.Minor)
+                                if Face:
+                                    Resolved[Face.lower()] += 1
+            for T, C in Titles.items():
+                if C > 1:
+                    F.Add(0, "warn", "duplicate_titles", f"{C} slides share the title '{T}'; screen-reader and "
+                          "outline navigation can't tell them apart.")
+            if len(Fonts) > 3:
+                F.Add(0, "warn", "mixed_font_families", f"{len(Fonts)} font families set directly on text: "
+                      f"{', '.join(sorted(Fonts))}. Use the theme fonts (display + body).")
+            if Resolved and len(Resolved) <= 1 and set(Resolved) <= DEFAULT_FACES:
+                F.Add(0, "info", "default_font_only", f"Only {next(iter(Resolved)).title()} is used. Fine for a "
+                      "quick internal deck; for anything branded, pair a distinctive heading face with the body font.")
+            F.Floor = Floor
+            return Prs, F
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.Lint(file={Path})")
+            return None, None
 
-    if words > budget:
-        f.add(n, "info", "word_budget", f"{words} visible words (budget {budget}). Fine for gallery, matrix, "
-              "chart, quote and reference slides; otherwise cut or move to the notes.")
-    if len(colours) > MAX_COLOURS:
-        f.add(n, "warn", "palette_too_many_colours", f"{len(colours)} distinct fill colours (> {MAX_COLOURS}).")
-    if raw_fills >= 3:
-        f.add(n, "warn", "off_palette_fill", f"{raw_fills} shapes use hard-coded colours outside the theme; "
-              "use theme colours so the deck re-themes cleanly.")
-    if shadows > 3:
-        f.add(n, "warn", "shadow_overuse", f"{shadows} shapes have drop shadows; reserve elevation for one or two.")
-    if len(accents) >= 4:
-        f.add(n, "warn", "accent_overload", f"{len(accents)} accent colours on one slide ({', '.join(sorted(accents))}); "
-              "keep to 3 or fewer, ideally one highlight.")
-    for tok, c in big_tokens.items():
-        if c >= 3:
-            f.add(n, "warn", "repeated_word", f"'{tok}' appears {c} times in large type; demote the repeats.")
-            break
-    big = sorted(set(sizes), reverse=True)
-    if len(big) >= 2 and 1.08 < big[0] / big[1] < 1.6:
-        f.add(n, "info", "weak_focal_hierarchy", f"Largest text sizes {big[0]:g} and {big[1]:g} pt are too close; "
-              "make one element clearly dominant (≥ 1.6×) or equal.")
-
-    # grid monotony: 4+ body boxes, 3+ of them the same width and top as the first
-    area = sw * sh_
-    body = [rect(s) for s in text_shapes if not is_title(s) and rect(s)[2] > 1 and rect(s)[3] > 1
-            and rect(s)[2] * rect(s)[3] < 0.92 * area]
-    if len(body) >= 4:
-        same = sum(1 for r in body[1:] if abs(r[2] - body[0][2]) <= 4 and abs(r[1] - body[0][1]) <= 4)
-        if same >= 3:
-            f.add(n, "info", "grid_monotony", f"{same + 1} identical boxes in a row; vary size or emphasis so "
-                  "one item leads.")
-
-    # overlaps between text-bearing shapes and pictures (containment = a card/backing, not a defect)
-    boxes = [(s.name, rect(s)) for s in content
-             if (s.has_text_frame and s.text_frame.text.strip()) or s.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART)]
-    for i, (na, ra) in enumerate(boxes):
-        for nb, rb in boxes[i + 1:]:
-            ov = overlap_area(ra, rb)
-            if ov >= OVERLAP_WARN_PT2 and not contains(ra, rb) and not contains(rb, ra):
-                f.add(n, "error" if ov >= OVERLAP_ERROR_PT2 else "warn", "shape_overlap",
-                      f"'{na}' and '{nb}' overlap by {ov:.0f} pt².", na)
-
-    notes = slide.notes_slide.notes_text_frame.text if slide.has_notes_slide else ""
-    if not notes.strip():
-        f.add(n, "info", "missing_notes", "No speaker notes.")
-    shown = " ".join(x.text_frame.text for x in shapes if x.has_text_frame) + " " + " ".join(
-        c.text for x in shapes if getattr(x, "has_table", False) and x.has_table for c in x.table.iter_cells())
-    has_chart = any(getattr(x, "has_chart", False) and x.has_chart for x in shapes)
-    has_figure = has_chart or re.search(r"\d+(?:[.,]\d+)?\s*(?:%|percent|pt\b|[kKmMbB]n?\b|x\b)|[$€£¥]\s?\d", shown)
-    if has_figure and notes.strip() and not re.search(r"source|doi|https?://|www\.|according to|\(\d{4}\)|©|källa|quelle",
-                                                       notes, re.I):
-        f.add(n, "info", "figure_without_source", "The slide shows figures but the notes name no source; add where "
-              "the numbers come from (SOURCES: …).")
-    return title_text
+    @staticmethod
+    def Fix(Prs, Findings):
+        """Safe fixes only: delete empty placeholders flagged as unused. Returns how many, or -1."""
+        if kS.ErrorMode:
+            return -1
+        try:
+            Done = 0
+            Targets = {(I["slide"], I["shape_id"]) for I in Findings.Items if I["code"] == "unused_placeholder"}
+            for N, Slide in enumerate(Prs.slides, 1):
+                for S in list(Slide.shapes):
+                    if (N, S.shape_id) in Targets and S.is_placeholder and not S.text_frame.text.strip():
+                        S._element.getparent().remove(S._element)
+                        Done += 1
+            return Done
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.Fix")
+            return -1
 
 
-C_NS = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+class kLintDeckApp:
+    """Command line."""
 
+    def Run(self):
+        if kS.ErrorMode:
+            return 1
+        try:
+            Ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+            Ap.add_argument("file")
+            Ap.add_argument("--floor", type=float, help="body font floor in pt (default 18, or from --room-depth)")
+            Ap.add_argument("--room-depth", type=float,
+                            help="viewing distance in feet; sets the floor (20->14, 30->18, 50->24, more->28)")
+            Ap.add_argument("--budget", type=int, default=12,
+                            help="visible words per slide before an info finding (default 12)")
+            Ap.add_argument("--json", action="store_true")
+            Ap.add_argument("--fail-on", choices=["error", "warn"], default="error")
+            Ap.add_argument("--fix", action="store_true", help="apply safe fixes; needs --out")
+            Ap.add_argument("--out")
+            A = Ap.parse_args()
+            if A.fix and not A.out:
+                Ap.error("--fix needs --out (the input is never overwritten)")
+            if not os.path.isfile(A.file):
+                raise ToolReportableException(f"file not found: {A.file}")
+            Floor = A.floor or (kRules.FloorForRoom(A.room_depth) if A.room_depth else 18.0)
 
-def fit_check(n, s, theme, f):
-    """Estimate wrapped text height from font metrics and flag text that won't fit its box."""
-    tf = s.text_frame
-    body = tf._txBody
-    bp = body.find("a:bodyPr", NS)
-    if bp is not None and bp.get("wrap") == "none":
-        return
-    grows = bp is not None and bp.find("a:spAutoFit", NS) is not None
-    if round(getattr(s, "rotation", 0) or 0) % 180 == 90:
-        return
-    ins = lambda k, d: (int(bp.get(k)) / PT if bp is not None and bp.get(k) else d)
-    l, t, w, h = rect(s)
-    width = w - ins("lIns", 7.2) - ins("rIns", 7.2)
-    height = h - ins("tIns", 3.6) - ins("bIns", 3.6)
-    if width <= 0 or height <= 0:
-        return
-    heading = is_title(s)
-    paras = []
-    for p in tf.paragraphs:
-        size = para_size(s, p) or 18.0
-        run = next((r for r in p.runs if r.text.strip()), None)
-        name = run.font.name if run is not None and run.font.name else None
-        family = theme.font(name) if name else (theme.major if heading else theme.minor)
-        bold = bool(run.font.bold) if run is not None and run.font.bold is not None else heading
-        before = p.space_before.pt if p.space_before is not None else 0
-        paras.append((p.text, family, size, bold, before))
-    need, widest, lines = text_height(paras, width)
-    if grows:  # "resize shape to fit text": the box will be as tall as its text; overlap/off-slide use that
-        grown = need + ins("tIns", 3.6) + ins("bIns", 3.6)
-        if grown > h:
-            GROWN[s.shape_id] = grown
-        if widest > width + 1:
-            f.add(n, "warn", "word_breaks", f"A word is wider than its box ({widest:.0f} pt in {width:.0f} pt) and "
-                  "will break mid-word.", s.name)
-        return
-    if widest > width + 1:
-        f.add(n, "warn", "word_breaks", f"A word is wider than its box ({widest:.0f} pt in {width:.0f} pt) and will "
-              "break mid-word; shorten it, widen the box or lower the size.", s.name)
-    shrink = bp is not None and bp.find("a:normAutofit", NS) is not None
-    if need > height * 1.08:
-        if shrink:
-            f.add(n, "info", "text_shrinks", f"Text needs ~{need:.0f} pt in a {height:.0f} pt box; PowerPoint will "
-                  "shrink it to fit — check it stays above the floor.", s.name)
-        else:
-            f.add(n, "warn" if need < height * 1.5 else "error", "text_overflow",
-                  f"Text needs ~{need:.0f} pt ({lines} lines) but the box is {height:.0f} pt tall; it will spill "
-                  "out. Cut words, widen or heighten the box, or split the slide.", s.name)
-
-
-def lint_chart(n, s, f, theme):
-    chart = s.chart
-    cx = chart._chartSpace
-    c = {"c": C_NS, "a": NS["a"]}
-    series = cx.findall(".//c:ser", c)
-    colours = []
-    for ser in series[:6]:
-        colours.append(theme.colour_in(ser.find("c:spPr/a:solidFill", c)))
-    if sum(1 for col in colours if col in OFFICE_DEFAULT_SERIES) >= 2:
-        f.add(n, "warn", "chart_default_palette", "Series use Office default colours; bind them to the "
-              "theme, or highlight only the finding.", s.name)
-
-    if chart.has_title and chart.chart_title.has_text_frame:
-        t = chart.chart_title.text_frame.text.strip()
-        if t and not any(w in f" {t.lower()} " for w in INSIGHT_WORDS):
-            f.add(n, "info", "chart_descriptive_title", f"Chart title '{t}' names the data; headline the finding "
-                  "instead (e.g. 'East leads Q1, up 8 %').", s.name)
-
-    labels_on = any(d.find("c:showVal", c) is not None and d.find("c:showVal", c).get("val") in ("1", "true")
-                    for d in cx.findall(".//c:dLbls", c))
-    gridlines = cx.find(".//c:valAx/c:majorGridlines", c) is not None
-    val_deleted = cx.find(".//c:valAx/c:delete", c)
-    if labels_on and gridlines and not (val_deleted is not None and val_deleted.get("val") in ("1", "true")):
-        f.add(n, "info", "chart_redundant_labels", "Data labels and a gridlined value axis say the same thing; "
-              "keep one.", s.name)
-
-    legend = cx.find(".//c:legend", c)
-    if legend is not None:
-        pos = legend.find("c:legendPos", c)
-        overlay = legend.find("c:overlay", c)
-        if pos is not None and pos.get("val") in ("t", "b") and (overlay is None or overlay.get("val") in ("0", "false")):
-            f.add(n, "warn", "chart_legend_steals_plot", "Legend at the top/bottom takes height from the plot; move "
-                  "it to the right, or drop it and colour-code the title.", s.name)
-
-    names = [(ser.findtext(".//c:tx//c:v", namespaces=c) or "").strip().lower() for ser in series]
-    real = [col for col in colours if col]
-    if len(names) >= 3 and all(re.match(ORDINAL_RE, nm) for nm in names if nm) and all(names) \
-            and len(real) >= 2 and len({round(hue(col), 2) for col in real}) >= 2:
-        f.add(n, "info", "chart_ordinal_categorical_color", "Ordered series (months, quarters, years) in unrelated "
-              "hues; use one hue from light to dark so the order reads at a glance.", s.name)
-
-    for fmt in cx.findall(".//c:valAx/c:numFmt", c):
-        code = fmt.get("formatCode", "")
-        if "_(" in code or ('"-"' in code and "*" in code):
-            f.add(n, "warn", "chart_accounting_zero_dash", "Accounting number format shows zero as '$-' on the "
-                  "axis; use a currency or number format.", s.name)
-            break
-
-    points = max((len(ser.findall(".//c:val//c:pt", c)) for ser in series), default=0)
-    if labels_on and (points > 12 or len(series) > 1):
-        f.add(n, "info", "chart_label_collision", f"Data labels on {len(series)} series × {points} points will "
-              "likely collide; label only the key points or rely on the axis. Check the render.", s.name)
-
-
-def lint(path, floor, budget):
-    GROUP_TF.clear()
-    """Sizes are judged relative to a standard 960-pt-wide slide: on a 1440-pt (Full HD) slide an
-    18 pt floor becomes 27 pt, because the same text is two-thirds as big on screen."""
-    global LABEL_MAX_PT, SCALE
-    prs = Presentation(path)
-    f = Findings()
-    theme = Theme(prs.slide_master)
-    sw, sh_ = Emu(prs.slide_width).pt, Emu(prs.slide_height).pt
-    scale = SCALE = max(1.0, sw / 960)
-    floor, LABEL_MAX_PT = round(floor * scale, 1), round(12.0 * scale, 1)
-    if (round(sw), round(sh_)) != (1440, 810):
-        ratio = sw / sh_
-        f.add(0, "warn" if abs(ratio - 16 / 9) > 0.01 else "info", "slide_size",
-              f"Slide size {sw:g} x {sh_:g} pt; Full HD is 1440 x 810 pt.")
-    titles = Counter()
-    fonts = Counter()
-    resolved = Counter()
-    for n, slide in enumerate(prs.slides, 1):
-        if slide._element.get("show") == "0":
-            continue
-        title = lint_slide(n, slide, sw, sh_, floor, budget, f, theme)
-        if title:
-            titles[title.lower()] += 1
-        for s in walk(slide.shapes):
-            if s.has_text_frame:
-                for p in s.text_frame.paragraphs:
-                    for r in p.runs:
-                        if not r.text.strip():
-                            continue
-                        name = r.font.name
-                        if name and not name.startswith("+"):
-                            fonts[name] += 1
-                        face = theme.font(name) if name else (theme.major if is_title(s) else theme.minor)
-                        if face:
-                            resolved[face.lower()] += 1
-    for t, c in titles.items():
-        if c > 1:
-            f.add(0, "warn", "duplicate_titles", f"{c} slides share the title '{t}'; screen-reader and "
-                  "outline navigation can't tell them apart.")
-    if len(fonts) > 3:
-        f.add(0, "warn", "mixed_font_families", f"{len(fonts)} font families set directly on text: "
-              f"{', '.join(sorted(fonts))}. Use the theme fonts (display + body).")
-    if resolved and len(resolved) <= 1 and set(resolved) <= DEFAULT_FACES:
-        f.add(0, "info", "default_font_only", f"Only {next(iter(resolved)).title()} is used. Fine for a quick "
-              "internal deck; for anything branded, pair a distinctive heading face with the body font.")
-    f.floor = floor
-    return prs, f
-
-
-def fix(prs, findings):
-    """Safe fixes only: delete empty placeholders flagged as unused."""
-    done = 0
-    targets = {(i["slide"], i["shape_id"]) for i in findings.items if i["code"] == "unused_placeholder"}
-    for n, slide in enumerate(prs.slides, 1):
-        for s in list(slide.shapes):
-            if (n, s.shape_id) in targets and s.is_placeholder and not s.text_frame.text.strip():
-                s._element.getparent().remove(s._element)
-                done += 1
-    return done
-
-
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("file")
-    ap.add_argument("--floor", type=float, help="body font floor in pt (default 18, or from --room-depth)")
-    ap.add_argument("--room-depth", type=float, help="viewing distance in feet; sets the floor (20->14, 30->18, 50->24, more->28)")
-    ap.add_argument("--budget", type=int, default=12, help="visible words per slide before an info finding (default 12)")
-    ap.add_argument("--json", action="store_true")
-    ap.add_argument("--fail-on", choices=["error", "warn"], default="error")
-    ap.add_argument("--fix", action="store_true", help="apply safe fixes; needs --out")
-    ap.add_argument("--out")
-    a = ap.parse_args()
-    if a.fix and not a.out:
-        ap.error("--fix needs --out (the input is never overwritten)")
-    floor = a.floor or (floor_for_room(a.room_depth) if a.room_depth else 18.0)
-
-    prs, f = lint(a.file, floor, a.budget)
-    sev = Counter(i["severity"] for i in f.items)
-    if a.json:
-        print(json.dumps({"file": a.file, "floor_pt": f.floor, "counts": dict(sev), "findings": f.items},
-                         ensure_ascii=False, indent=2))
-    else:
-        if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(encoding="utf-8")
-        for i in sorted(f.items, key=lambda x: (x["slide"], {"error": 0, "warn": 1, "info": 2}[x["severity"]])):
-            where = f"slide {i['slide']}" if i["slide"] else "deck"
-            shape = f" [{i['shape']}]" if i["shape"] else ""
-            print(f"{i['severity']:<5}  {where:<9} {i['code']:<24}{shape} {i['message']}")
-        print(f"\n{sev.get('error', 0)} error(s), {sev.get('warn', 0)} warning(s), {sev.get('info', 0)} info  "
-              f"(body floor {f.floor:g} pt)")
-    if a.fix:
-        done = fix(prs, f)
-        prs.save(a.out)
-        print(f"fixed {done} issue(s) -> {a.out}", file=sys.stderr)
-    failing = {"error"} if a.fail_on == "error" else {"error", "warn"}
-    sys.exit(1 if any(i["severity"] in failing for i in f.items) else 0)
+            Prs, F = kLintDeck.Lint(A.file, Floor, A.budget)
+            if F is None:
+                return 1
+            Sev = Counter(I["severity"] for I in F.Items)
+            if A.json:
+                print(json.dumps({"file": A.file, "floor_pt": F.Floor, "counts": dict(Sev), "findings": F.Items},
+                                 ensure_ascii=False, indent=2))
+            else:
+                for I in sorted(F.Items, key=kLintDeck.SortKey):
+                    Where = f"slide {I['slide']}" if I["slide"] else "deck"
+                    Shape = f" [{I['shape']}]" if I["shape"] else ""
+                    print(f"{I['severity']:<5}  {Where:<9} {I['code']:<24}{Shape} {I['message']}")
+                print(f"\n{Sev.get('error', 0)} error(s), {Sev.get('warn', 0)} warning(s), {Sev.get('info', 0)} info  "
+                      f"(body floor {F.Floor:g} pt)")
+            if A.fix:
+                Done = kLintDeck.Fix(Prs, F)
+                Prs.save(A.out)
+                print(f"fixed {Done} issue(s) -> {A.out}", file=sys.stderr)
+            Failing = {"error"} if A.fail_on == "error" else {"error", "warn"}
+            return 1 if any(I["severity"] in Failing for I in F.Items) else 0
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeckApp.Run")
+            return 1
 
 
 if __name__ == "__main__":
-    main()
+    kRun.Main(kLintDeckApp)

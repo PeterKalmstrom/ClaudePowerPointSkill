@@ -41,10 +41,10 @@ changes, which a file copy does not.)
 
 ### Multi-presentation safety — never trust `ActivePresentation`
 
-**Rule:** When more than one presentation is open in PowerPoint, `app.ActivePresentation` and the MCP tools that depend on it (`slide_snapshot`, `add_speaker_notes`, etc.) can silently target the wrong file. Other windows (a separate deck, a template, a reviewer's copy) can grab focus and flip the active selection without warning.
+**Rule:** When more than one presentation is open in PowerPoint, `app.ActivePresentation` and any code that depends on it can silently target the wrong file. Other windows (a separate deck, a template, a reviewer's copy) can grab focus and flip the active selection without warning.
 
 **Why this happens:**
-- The MCP server resolves the active presentation at the moment each call is made.
+- Code using `ActivePresentation` resolves it at the moment each call is made.
 - A user clicking another PowerPoint window — or even the OS focus changing — can move the active selection.
 - COM operations on the wrong presentation will succeed (no error) and corrupt the wrong deck.
 
@@ -61,7 +61,7 @@ slide = target.Slides(34)        # use `target`, never `app.ActivePresentation`
 target.Save()
 ```
 
-When using MCP tools (which target ActivePresentation), close all other PowerPoint windows first, or activate the right window with `target.Windows(1).Activate()` before the call. Verify with `slide_snapshot` after activation.
+If some code must use `ActivePresentation`, close all other PowerPoint windows first, or activate the right window with `target.Windows(1).Activate()` before the call.
 
 **Multiple matching presentations open.** `next((p for p in app.Presentations if "MyDeck" in p.Name), None)` returns the *first* match. If both `MyDeck.pptx` and `MyDeck-conflict-...pptx` (or `MyDeck2.pptx`) are open and either could match the substring, prefer **exact name first, then fall back to substring**:
 

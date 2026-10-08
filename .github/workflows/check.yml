@@ -15,7 +15,9 @@ jobs:
       - name: Install dependencies
         run: pip install python-pptx pillow numpy jsonschema
       - name: Compile scripts
-        run: python -m py_compile scripts/*.py tools/*.py
+        run: python -m py_compile scripts/*.py tools/*.py mcp-app/*.py
+      - name: Every function follows the kShared error pattern
+        run: python tools/check_kpattern.py
       - name: Docs links, anchors and SKILL.md budget
         run: python tools/check_docs.py
       - name: Self-test (scripts that need no PowerPoint)

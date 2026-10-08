@@ -70,7 +70,7 @@ the shapes, rendering and looking, putting the citation in the notes.
 | Mode | Needs | You get |
 |---|---|---|
 | **Any OS** (Linux, macOS, Windows, CI) | Python + [`python-pptx`](https://python-pptx.readthedocs.io/) (via `uvx`); LibreOffice optional for rough renders | **`build_deck.py`** (spec → deck: 14 slide patterns, 20 design directions or your template, native charts), editing .pptx files, all the content and layout rules, **`lint_deck.py`** (text overflow, overlaps, stretched pictures, small text, missing alt text, contrast, empty placeholders…), **`fix_deck.py`** (safe automatic fixes), **`read_deck.py`** (whole deck to JSON), **`harvest_edits.py`** (keep people's edits across rebuilds), theme and template extraction, approximate LibreOffice renders, before/after render diffs |
-| **Windows power mode** | Desktop PowerPoint + the [`powerpoint-mcp`](https://pypi.org/project/powerpoint-mcp/) server | Live editing of the open deck, pixel-exact renders (including embedded fonts), word-break checks, contact sheets, notes/handout PDFs |
+| **Windows power mode** | Desktop PowerPoint (driven through COM with `pywin32`) | Live editing of the open deck with a live slide view ([PowerPoint Live](mcp-app/README.md)), pixel-exact renders (including embedded fonts), word-break checks, contact sheets, notes/handout PDFs |
 
 Optional media: [Remotion](https://www.remotion.dev/) for animated video, Google
 [Veo](https://ai.google.dev/gemini-api/docs/video-generation) and Gemini image models for AI video and images
@@ -80,13 +80,10 @@ Optional media: [Remotion](https://www.remotion.dev/) for animated video, Google
 <summary><b>Windows power mode setup</b></summary>
 
 1. Install [uv](https://docs.astral.sh/uv/): `irm https://astral.sh/uv/install.ps1 | iex`
-2. Register the PowerPoint MCP server at user scope:
+2. Check it works (opens and closes PowerPoint):
    ```powershell
-   claude mcp add --scope user powerpoint -- uvx --with "mcp<2" powerpoint-mcp
+   uvx --with python-pptx --with pillow --with numpy --with pywin32 python scripts/selftest.py --com
    ```
-   If Claude Code can't find `uvx`, use its full path (`C:\Users\<you>\.local\bin\uvx.exe`).
-   The `mcp<2` pin works around an upstream incompatibility (as of 2026-10).
-3. Restart Claude Code; `claude mcp list` should show `powerpoint: … ✓ Connected`.
 
 Troubleshooting: [`reference/SETUP.md`](reference/SETUP.md).
 </details>
@@ -109,7 +106,7 @@ Troubleshooting: [`reference/SETUP.md`](reference/SETUP.md).
 | File | Covers | Runs on |
 |---|---|---|
 | [`SKILL.md`](SKILL.md) | Start here, core rules, build loop, version-specific facts, anti-patterns | — |
-| [`reference/SETUP.md`](reference/SETUP.md) | Installing `powerpoint-mcp`, troubleshooting, MCP tool list | Windows |
+| [`reference/SETUP.md`](reference/SETUP.md) | Windows setup, driving PowerPoint from Python, troubleshooting | Windows |
 | [`reference/COM.md`](reference/COM.md) | Snapshots, multi-deck safety, idempotent builds, keeping hand edits, shape filtering | Windows |
 | [`reference/LAYOUT.md`](reference/LAYOUT.md) | Slide size, cropping, text wrap, embedded fonts, word budgets, layout patterns | Mostly any OS |
 | [`reference/BUILDER.md`](reference/BUILDER.md) | Spec format, the 14 patterns and their limits, what the builder decides | Any OS |

@@ -8,120 +8,205 @@ dk1/lt1...) and fonts from the major (headings) / minor (body) pair, and pick sl
 their placeholders instead of drawing boxes on blank slides. A .potx is read like a .pptx.
 """
 import argparse
+import io
 import json
-import sys
+import os
+import zipfile
 
+from lxml import etree
 from pptx import Presentation
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.util import Emu
-from lxml import etree
+
+from kShared import ToolReportableException, kRun, kS, kToolException
 
 NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
 SLOTS = ["dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
          "hlink", "folHlink"]
+SLOT_USE = {"dk1": "main text", "lt1": "main background", "dk2": "secondary dark", "lt2": "secondary light",
+            "accent1": "primary accent — the one highlight per slide", "hlink": "links", "folHlink": "visited links"}
 
 
-def open_any(path):
-    """python-pptx refuses the .potx content type; copy to a .pptx name and patch the type."""
-    if not path.lower().endswith((".potx", ".potm")):
-        return Presentation(path)
-    import io
-    import zipfile
-    tmp = io.BytesIO()  # in memory: no temp file to clean up
-    with zipfile.ZipFile(path) as src, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as dst:
-        for item in src.infolist():
-            data = src.read(item.filename)
-            if item.filename == "[Content_Types].xml":
-                data = data.replace(b"presentationml.template.main+xml", b"presentationml.presentation.main+xml")
-            dst.writestr(item, data)
-    tmp.seek(0)
-    return Presentation(tmp)
+class kThemeReader:
+    """Reads theme colours, fonts and layouts from a .pptx/.potx."""
+
+    @staticmethod
+    def OpenAny(Path):
+        """python-pptx refuses the .potx content type; copy to a .pptx in memory and patch the type."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if not Path.lower().endswith((".potx", ".potm")):
+                return Presentation(Path)
+            Buffer = io.BytesIO()  # in memory: no temp file to clean up
+            with zipfile.ZipFile(Path) as Source, zipfile.ZipFile(Buffer, "w", zipfile.ZIP_DEFLATED) as Target:
+                for Item in Source.infolist():
+                    Data = Source.read(Item.filename)
+                    if Item.filename == "[Content_Types].xml":
+                        Data = Data.replace(b"presentationml.template.main+xml",
+                                            b"presentationml.presentation.main+xml")
+                    Target.writestr(Item, Data)
+            Buffer.seek(0)
+            return Presentation(Buffer)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kThemeReader.OpenAny(file={Path})")
+            return None
+
+    @staticmethod
+    def Colour(Node):
+        """The hex of an a:srgbClr or a:sysClr child, or None."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if Node is None:
+                return None
+            Srgb = Node.find("a:srgbClr", NS)
+            if Srgb is not None:
+                return Srgb.get("val")
+            System = Node.find("a:sysClr", NS)
+            return System.get("lastClr") if System is not None else None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeReader.Colour")
+            return None
+
+    @staticmethod
+    def ThemeOf(Master):
+        """The parsed theme XML of a slide master."""
+        if kS.ErrorMode:
+            return None
+        try:
+            return etree.fromstring(Master.part.part_related_by(RT.THEME).blob)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeReader.ThemeOf")
+            return None
+
+    @staticmethod
+    def Colours(Scheme):
+        """Every slot's colour of a colour scheme ({} when there is none)."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            if Scheme is None:
+                return {}
+            return {Slot: kThemeReader.Colour(Scheme.find(f"a:{Slot}", NS)) for Slot in SLOTS}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeReader.Colours")
+            return {}
+
+    @staticmethod
+    def Fonts(FontScheme):
+        """The major/minor latin typefaces of a font scheme."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            if FontScheme is None:
+                return {"major_latin": None, "minor_latin": None}
+            return {"major_latin": FontScheme.find("a:majorFont/a:latin", NS).get("typeface"),
+                    "minor_latin": FontScheme.find("a:minorFont/a:latin", NS).get("typeface")}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeReader.Fonts")
+            return {}
+
+    @staticmethod
+    def Extract(Path):
+        """The theme as a JSON-ready dict."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if not os.path.isfile(Path):
+                raise ToolReportableException(f"not found: {Path}")
+            Deck = kThemeReader.OpenAny(Path)
+            Master = Deck.slide_master
+            Theme = kThemeReader.ThemeOf(Master)
+            Scheme = Theme.find(".//a:clrScheme", NS)
+            Result = {
+                "file": Path,
+                "slide_size_pt": [round(Emu(Deck.slide_width).pt, 1), round(Emu(Deck.slide_height).pt, 1)],
+                "theme_name": Theme.get("name"),
+                "colour_scheme": Scheme.get("name") if Scheme is not None else None,
+                "colours": kThemeReader.Colours(Scheme),
+                "fonts": kThemeReader.Fonts(Theme.find(".//a:fontScheme", NS)),
+                "layouts": [],
+            }
+            for Extra in list(Deck.slide_masters)[1:]:  # templates can carry several masters, each with its own theme
+                ExtraTheme = kThemeReader.ThemeOf(Extra)
+                Result.setdefault("additional_themes", []).append({
+                    "theme_name": ExtraTheme.get("name"),
+                    "colours": kThemeReader.Colours(ExtraTheme.find(".//a:clrScheme", NS)),
+                    "fonts": kThemeReader.Fonts(ExtraTheme.find(".//a:fontScheme", NS)),
+                    "layouts": [Layout.name for Layout in Extra.slide_layouts]})
+            for Index, Layout in enumerate(Master.slide_layouts):
+                Placeholders = []
+                for Placeholder in Layout.placeholders:
+                    Format = Placeholder.placeholder_format
+                    Placeholders.append({
+                        "idx": Format.idx, "type": str(Format.type).split(".")[-1].split(" ")[0],
+                        "name": Placeholder.name,
+                        "box_pt": [round(Emu(Value or 0).pt) for Value in
+                                   (Placeholder.left, Placeholder.top, Placeholder.width, Placeholder.height)]})
+                Result["layouts"].append({"index": Index, "name": Layout.name, "placeholders": Placeholders})
+            return Result
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kThemeReader.Extract(file={Path})")
+            return None
+
+    @staticmethod
+    def Markdown(Theme):
+        """A brand-spec.md skeleton from an Extract() result."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Colours = Theme["colours"]
+            Lines = [f"# Brand spec — {Theme['theme_name'] or 'theme'}", "",
+                     f"Extracted from `{Theme['file']}` by scripts/extract_theme.py. Slide size: "
+                     f"{Theme['slide_size_pt'][0]:g} × {Theme['slide_size_pt'][1]:g} pt.", "",
+                     "## Fonts", "", f"- Headings (major): **{Theme['fonts']['major_latin']}**",
+                     f"- Body (minor): **{Theme['fonts']['minor_latin']}**", "",
+                     "## Colours", "", "| Slot | Hex | Use |", "|---|---|---|"]
+            for Slot in SLOTS:
+                Lines.append(f"| {Slot} | `#{Colours.get(Slot)}` | {SLOT_USE.get(Slot, 'chart series / secondary accent')} |")
+            Lines += ["", "## Layouts", "", "| # | Layout | Placeholders |", "|---|---|---|"]
+            for Layout in Theme["layouts"]:
+                Types = ", ".join(Placeholder["type"] for Placeholder in Layout["placeholders"]) or "—"
+                Lines.append(f"| {Layout['index']} | {Layout['name']} | {Types} |")
+            for Extra in Theme.get("additional_themes", []):
+                Accents = ", ".join(f"`#{Extra['colours'].get(f'accent{Number}')}`" for Number in range(1, 7))
+                Lines += ["", f"## Additional theme — {Extra['theme_name']}", "",
+                          f"Fonts: {Extra['fonts']['major_latin']} / {Extra['fonts']['minor_latin']}. "
+                          "Accents: " + Accents + ".",
+                          f"Layouts: {', '.join(Extra['layouts'])}."]
+            Lines += ["", "## Fill in by hand", "", "- Logo file and where it goes:", "- Imagery style:",
+                      "- Voice and tone:", "- Words to avoid:", ""]
+            return "\n".join(Lines)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kThemeReader.Markdown")
+            return ""
 
 
-def colour(node):
-    if node is None:
-        return None
-    srgb = node.find("a:srgbClr", NS)
-    if srgb is not None:
-        return srgb.get("val")
-    sys_ = node.find("a:sysClr", NS)
-    return sys_.get("lastClr") if sys_ is not None else None
+class kExtractThemeApp:
+    """Command line."""
 
-
-def theme_of(master):
-    part = master.part.part_related_by(RT.THEME)
-    return etree.fromstring(part.blob)
-
-
-def extract(path):
-    prs = open_any(path)
-    master = prs.slide_master
-    theme = theme_of(master)
-    scheme = theme.find(".//a:clrScheme", NS)
-    fonts = theme.find(".//a:fontScheme", NS)
-    out = {
-        "file": path,
-        "slide_size_pt": [round(Emu(prs.slide_width).pt, 1), round(Emu(prs.slide_height).pt, 1)],
-        "theme_name": theme.get("name"),
-        "colour_scheme": scheme.get("name") if scheme is not None else None,
-        "colours": {s: colour(scheme.find(f"a:{s}", NS)) for s in SLOTS} if scheme is not None else {},
-        "fonts": {
-            "major_latin": fonts.find("a:majorFont/a:latin", NS).get("typeface") if fonts is not None else None,
-            "minor_latin": fonts.find("a:minorFont/a:latin", NS).get("typeface") if fonts is not None else None,
-        },
-        "layouts": [],
-    }
-    for extra in list(prs.slide_masters)[1:]:  # templates can carry several masters, each with its own theme
-        th = theme_of(extra)
-        sc = th.find(".//a:clrScheme", NS)
-        fs = th.find(".//a:fontScheme", NS)
-        out.setdefault("additional_themes", []).append({
-            "theme_name": th.get("name"),
-            "colours": {s_: colour(sc.find(f"a:{s_}", NS)) for s_ in SLOTS} if sc is not None else {},
-            "fonts": {"major_latin": fs.find("a:majorFont/a:latin", NS).get("typeface") if fs is not None else None,
-                      "minor_latin": fs.find("a:minorFont/a:latin", NS).get("typeface") if fs is not None else None},
-            "layouts": [l.name for l in extra.slide_layouts]})
-    for i, layout in enumerate(master.slide_layouts):
-        phs = []
-        for ph in layout.placeholders:
-            pf = ph.placeholder_format
-            phs.append({"idx": pf.idx, "type": str(pf.type).split(".")[-1].split(" ")[0], "name": ph.name,
-                        "box_pt": [round(Emu(v or 0).pt) for v in (ph.left, ph.top, ph.width, ph.height)]})
-        out["layouts"].append({"index": i, "name": layout.name, "placeholders": phs})
-    return out
-
-
-def markdown(t):
-    c = t["colours"]
-    lines = [f"# Brand spec — {t['theme_name'] or 'theme'}", "",
-             f"Extracted from `{t['file']}` by scripts/extract_theme.py. Slide size: "
-             f"{t['slide_size_pt'][0]:g} × {t['slide_size_pt'][1]:g} pt.", "",
-             "## Fonts", "", f"- Headings (major): **{t['fonts']['major_latin']}**",
-             f"- Body (minor): **{t['fonts']['minor_latin']}**", "",
-             "## Colours", "", "| Slot | Hex | Use |", "|---|---|---|"]
-    use = {"dk1": "main text", "lt1": "main background", "dk2": "secondary dark", "lt2": "secondary light",
-           "accent1": "primary accent — the one highlight per slide", "hlink": "links", "folHlink": "visited links"}
-    for s in SLOTS:
-        lines.append(f"| {s} | `#{c.get(s)}` | {use.get(s, 'chart series / secondary accent')} |")
-    lines += ["", "## Layouts", "", "| # | Layout | Placeholders |", "|---|---|---|"]
-    for l in t["layouts"]:
-        lines.append(f"| {l['index']} | {l['name']} | {', '.join(p['type'] for p in l['placeholders']) or '—'} |")
-    for extra in t.get("additional_themes", []):
-        lines += ["", f"## Additional theme — {extra['theme_name']}", "",
-                  f"Fonts: {extra['fonts']['major_latin']} / {extra['fonts']['minor_latin']}. "
-                  "Accents: " + ", ".join(f"`#{extra['colours'].get(f'accent{i}')}`" for i in range(1, 7)) + ".",
-                  f"Layouts: {', '.join(extra['layouts'])}."]
-    lines += ["", "## Fill in by hand", "", "- Logo file and where it goes:", "- Imagery style:",
-              "- Voice and tone:", "- Words to avoid:", ""]
-    return "\n".join(lines)
+    def Run(self):
+        if kS.ErrorMode:
+            return 1
+        try:
+            Parser = argparse.ArgumentParser()
+            Parser.add_argument("file")
+            Parser.add_argument("--markdown", action="store_true", help="write a brand-spec.md skeleton instead of JSON")
+            Args = Parser.parse_args()
+            Theme = kThemeReader.Extract(Args.file)
+            if Theme is None:
+                return 1
+            print(kThemeReader.Markdown(Theme) if Args.markdown else json.dumps(Theme, indent=2, ensure_ascii=False))
+            return 0
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kExtractThemeApp.Run")
+            return 1
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("file")
-    ap.add_argument("--markdown", action="store_true", help="write a brand-spec.md skeleton instead of JSON")
-    a = ap.parse_args()
-    t = extract(a.file)
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-    print(markdown(t) if a.markdown else json.dumps(t, indent=2, ensure_ascii=False))
+    kRun.Main(kExtractThemeApp)

@@ -10,57 +10,105 @@ Needs `soffice` (LibreOffice) and `pdftoppm` (poppler-utils) on PATH.
 """
 import argparse
 import glob
+import importlib.util
 import os
 import pathlib
 import shutil
 import subprocess
-import sys
 import tempfile
 
-
-def visible_slides(path):
-    """1-based numbers of the slides LibreOffice will export (it skips hidden ones)."""
-    try:
-        from pptx import Presentation
-    except ImportError:
-        return None
-    return [n for n, s in enumerate(Presentation(path).slides, 1) if s._element.get("show") != "0"]
+from kShared import ToolReportableException, kRun, kS, kToolException
 
 
-def render(path, out_dir, width=1280):
-    for tool in ("soffice", "pdftoppm"):
-        if not shutil.which(tool):
-            sys.exit(f"{tool} not found on PATH (install LibreOffice / poppler-utils)")
-    os.makedirs(out_dir, exist_ok=True)
-    tmp = tempfile.mkdtemp(prefix="lorender-")
-    # a private profile dir avoids clashing with a running LibreOffice
-    profile = pathlib.Path(tmp, "profile").as_uri()  # file:///C:/... on Windows, file:///tmp/... elsewhere
-    subprocess.run(["soffice", f"-env:UserInstallation={profile}", "--headless",
-                    "--convert-to", "pdf", "--outdir", tmp, os.path.abspath(path)],
-                   check=True, capture_output=True, timeout=300)
-    pdf = os.path.join(tmp, os.path.splitext(os.path.basename(path))[0] + ".pdf")
-    if not os.path.exists(pdf):
-        sys.exit("LibreOffice produced no PDF")
-    subprocess.run(["pdftoppm", "-png", "-scale-to-x", str(width), "-scale-to-y", "-1", pdf,
-                    os.path.join(tmp, "page")], check=True, timeout=300)
-    pages = sorted(glob.glob(os.path.join(tmp, "page-*.png")), key=lambda p: int(p.rsplit("-", 1)[1][:-4]))
-    numbers = visible_slides(path) or list(range(1, len(pages) + 1))
-    if len(numbers) != len(pages):  # unexpected: fall back to page order rather than mislabel
-        numbers = list(range(1, len(pages) + 1))
-    files = []
-    for i, page in zip(numbers, pages):
-        dst = os.path.join(out_dir, f"s{i:03d}.png")
-        shutil.move(page, dst)
-        files.append(dst)
-    shutil.rmtree(tmp, ignore_errors=True)
-    return files
+class kLoRenderer:
+    """LibreOffice -> PDF -> pdftoppm -> one PNG per visible slide."""
+
+    @staticmethod
+    def VisibleSlides(Path):
+        """1-based numbers of the slides LibreOffice will export (it skips hidden ones); None without python-pptx."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if importlib.util.find_spec("pptx") is None:
+                return None
+            from pptx import Presentation
+            return [Number for Number, Slide in enumerate(Presentation(Path).slides, 1)
+                    if Slide._element.get("show") != "0"]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLoRenderer.VisibleSlides(file={Path})")
+            return None
+
+    @staticmethod
+    def PageNumber(PagePath):
+        """The page number in pdftoppm's page-N.png name (sort key)."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            return int(PagePath.rsplit("-", 1)[1][:-4])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLoRenderer.PageNumber")
+            return 0
+
+    @staticmethod
+    def Render(Path, OutDir, Width=1280):
+        """Render Path into OutDir; returns the PNG paths."""
+        if kS.ErrorMode:
+            return []
+        try:
+            for Tool in ("soffice", "pdftoppm"):
+                if not shutil.which(Tool):
+                    raise ToolReportableException(f"{Tool} not found on PATH (install LibreOffice / poppler-utils)")
+            os.makedirs(OutDir, exist_ok=True)
+            Temp = tempfile.mkdtemp(prefix="lorender-")
+            # a private profile dir avoids clashing with a running LibreOffice
+            Profile = pathlib.Path(Temp, "profile").as_uri()  # file:///C:/... on Windows, file:///tmp/... elsewhere
+            subprocess.run(["soffice", f"-env:UserInstallation={Profile}", "--headless",
+                            "--convert-to", "pdf", "--outdir", Temp, os.path.abspath(Path)],
+                           check=True, capture_output=True, timeout=300)
+            Pdf = os.path.join(Temp, os.path.splitext(os.path.basename(Path))[0] + ".pdf")
+            if not os.path.exists(Pdf):
+                raise ToolReportableException("LibreOffice produced no PDF")
+            subprocess.run(["pdftoppm", "-png", "-scale-to-x", str(Width), "-scale-to-y", "-1", Pdf,
+                            os.path.join(Temp, "page")], check=True, timeout=300)
+            Pages = sorted(glob.glob(os.path.join(Temp, "page-*.png")), key=kLoRenderer.PageNumber)
+            Numbers = kLoRenderer.VisibleSlides(Path) or list(range(1, len(Pages) + 1))
+            if len(Numbers) != len(Pages):  # unexpected: fall back to page order rather than mislabel
+                Numbers = list(range(1, len(Pages) + 1))
+            Files = []
+            for Number, Page in zip(Numbers, Pages):
+                Destination = os.path.join(OutDir, f"s{Number:03d}.png")
+                shutil.move(Page, Destination)
+                Files.append(Destination)
+            shutil.rmtree(Temp, ignore_errors=True)  # a leftover temp folder is harmless
+            return Files
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLoRenderer.Render(file={Path})")
+            return []
+
+
+class kRenderLoApp:
+    """Command line."""
+
+    def Run(self):
+        if kS.ErrorMode:
+            return 1
+        try:
+            Parser = argparse.ArgumentParser()
+            Parser.add_argument("file")
+            Parser.add_argument("--out", default="renders")
+            Parser.add_argument("--width", type=int, default=1280)
+            Args = Parser.parse_args()
+            for File in kLoRenderer.Render(Args.file, Args.out, Args.width):
+                print(File)
+            return 0
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kRenderLoApp.Run")
+            return 1
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("file")
-    ap.add_argument("--out", default="renders")
-    ap.add_argument("--width", type=int, default=1280)
-    a = ap.parse_args()
-    for f in render(a.file, a.out, a.width):
-        print(f)
+    kRun.Main(kRenderLoApp)

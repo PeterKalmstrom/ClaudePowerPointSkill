@@ -104,7 +104,7 @@ uvx --with python-pptx python scripts/read_deck.py deck.pptx --text          # o
 ```
 
 **When to use it vs a screenshot:** `read_deck.py` for anything about 5+ slides or cross-slide reasoning; a render
-or `slide_snapshot` when you need to *see* one slide. Then run `lint_deck.py` (above) for the automatic checks and
+or `scripts/render_slides.py` when you need to *see* one slide. Then run `lint_deck.py` (above) for the automatic checks and
 `check_word_breaks.py` on Windows for exact line breaks.
 
 ---

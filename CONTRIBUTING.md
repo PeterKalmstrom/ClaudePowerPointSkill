@@ -33,13 +33,44 @@ If you hit a defect and figured out the fix, send a PR with:
 - **Rules over options.** The skill is most useful when it tells Claude what to *do*, not when it enumerates every possible approach. If two patterns work, pick the one you'd want Claude to use by default.
 - **State the why.** A rule without a reason becomes cargo-cult behavior; one with a reason can be applied to edge cases. The "why" line is where the value lives.
 - **Cite the incident.** "We hit this in November 2025 when the auto-export silently used the cached image" is more useful than "the cache can be stale." Specifics earn trust.
-- **Avoid abstraction creep.** If a rule only applies to one specific anchor type or one specific MCP tool, name it. Don't generalize until you've seen the same failure mode three different ways.
+- **Avoid abstraction creep.** If a rule only applies to one specific anchor type or one specific COM call, name it. Don't generalize until you've seen the same failure mode three different ways.
 - **No nested headings deeper than three.** Skills are read top-to-bottom by an LLM; deep hierarchies hurt retrieval.
 - **Keep `SKILL.md` short.** It is loaded every time the skill triggers; CI fails it above 500 lines. New detail
   goes in `reference/`. Only a rule that applies to *every* deck belongs in *Core rules*.
 - **Date version-specific facts** ("as of 2026-10") — model ids, package versions, upstream bugs — and list them
   under *Version-specific facts* in `SKILL.md`.
 - **Say what it runs on.** Mark COM-only material; Linux, macOS and CI users skip it.
+
+## Code conventions
+
+Every Python file follows the error pattern in `scripts/kShared.py`, the same as the author's C#, TypeScript and
+PowerShell code. `tools/check_kpattern.py` enforces it (CI and the self-test run it).
+
+- **Four parts per function.** (1) First statement after the docstring: `if kS.ErrorMode: return <safe default>`
+  (not in `__init__`). (2) The whole rest of the body in one `try`. (3) `except kToolException: raise` where
+  expected states pass through, then a last `except Exception as e: kS.GlobalErrorHandler(e, "kClass.Method")` -
+  a literal location starting with the class and method name. (4) The handler ends in `return <safe default>`
+  or `raise`.
+- **Expected states are not errors.** A missing file, a spec mistake or no deck open is found by an explicit
+  check that raises `ToolInputException` (exit 2) or `ToolReportableException` (exit 1 or a given code) - never
+  by catching.
+- **The first error halts.** The handler sets `kS.ErrorMode`; every later method returns its default and the run
+  exits 1. Only a fresh run or a person's Resume (`kS.Reset()`) re-arms it - never a `catch`.
+- **Never hide an error.** A catch that only logs or returns a default needs an inline
+  `ERROR-SUPPRESSED-JUSTIFIED: <why>` comment. A function that cannot follow the pattern says why in a
+  `DOCUMENTED EXCEPTION: <why>` comment on or above its `def`.
+- **Naming and shape.** Classes start with `k` (`kDeckReader`); methods, properties, locals and parameters are
+  PascalCase; private fields `_camelCase`. No module-level functions, no lambdas, no nested functions - use a
+  named method. A script starts with `kRun.Main(kXxxApp)`.
+
+**Error reports.** A reported error can be sent to the support flow. The address is `KPS_ERROR_WEBHOOK` (or
+`scripts/kErrorWebhook.url`, kept out of the repository); without one nothing is sent. **Nothing is ever sent without a
+person's yes:** the report is shown and the person is asked "Do you want to send this error message? (yes/no)";
+no means nothing is sent. Without a terminal the report is saved and Claude asks the user, sending it with
+`scripts/send_error_report.py <file> --yes` only on yes; the script exits **4** and prints
+`ERROR-REPORT-PENDING: <file>` so Claude knows. Errors that escape every guarded method (uncaught, other threads,
+asyncio) are captured by `kS.InstallUnhandledExceptionCapture()` (installed by `kRun.Main` and PowerPoint Live). PowerPoint Live asks with Yes/No buttons in its view.
+`KPS_ERROR_REPORT=0` switches reporting off (the self-test sets it).
 
 ## Sanity check before opening a PR
 

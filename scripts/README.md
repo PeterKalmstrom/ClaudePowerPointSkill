@@ -26,6 +26,10 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 path, never `ActivePresentation`), otherwise opens it read-only and windowless, and quits
 PowerPoint only if it started it.
 
+Every script follows the error pattern in `kShared.py`: an unexpected error is reported once (`ERROR in
+Class.Method`), halts the run and exits 1; expected states exit 2 (bad input) or 1 with a plain message. See
+[Code conventions](../CONTRIBUTING.md#code-conventions); `tools/check_kpattern.py` enforces it.
+
 Run from this folder (or pass the full path) so `_ppt.py` is importable:
 
 ```bash

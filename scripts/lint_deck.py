@@ -42,7 +42,7 @@ BODY_MIN_WORDS = 4         # a paragraph with fewer words is a label
 TITLE_MAX_CHARS = 55
 MAX_BULLETS = 7
 MAX_COLOURS = 5
-OVERLAP_WARN_PT2 = 4.0     # PointClaw thresholds: >= 4 pt2 warn, >= 200 pt2 error
+OVERLAP_WARN_PT2 = 4.0     # thresholds of the author's PowerPoint add-in: >= 4 pt2 warn, >= 200 pt2 error
 OVERLAP_ERROR_PT2 = 200.0
 EDGE_TOLERANCE_PT = 2.0
 STRETCH_TOLERANCE = 0.03

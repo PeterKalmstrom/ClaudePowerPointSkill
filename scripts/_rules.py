@@ -11,7 +11,7 @@ comes goes stays decides""".split())
 # means nobody chose the colours.
 OFFICE_DEFAULT_SERIES = {"4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47"}
 
-# ---- taste / accessibility data (thresholds partly follow PointClaw and Impeccable; see NOTICE)
+# ---- taste / accessibility data (thresholds partly follow the author's PowerPoint add-in and Impeccable; see NOTICE)
 
 # Faces that read as "nobody chose a font" when they are the only family in a deck.
 DEFAULT_FACES = {"inter", "roboto", "arial", "helvetica", "calibri", "calibri light", "aptos",

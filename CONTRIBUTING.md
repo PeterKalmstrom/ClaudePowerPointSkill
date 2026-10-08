@@ -1,5 +1,9 @@
 # Contributing
 
+> **How this repository is maintained.** The skill is developed in the author's skills collection and published
+> here automatically on every change. Issues and pull requests are welcome: accepted changes are applied at the
+> source and arrive here with the next publish (a pull request merged only here would be overwritten).
+
 The skill grows by accretion: every silent failure that costs an hour of debugging belongs in the *Anti-patterns* table at the bottom of `SKILL.md`. The goal is that Claude never re-learns the same lesson twice.
 
 ## Reporting a defect

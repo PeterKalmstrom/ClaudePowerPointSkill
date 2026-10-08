@@ -76,7 +76,7 @@
   long body, wide measure, tiny click targets, shadow overuse, off-palette fills, accent overload, saturated
   gradients, repeated words, weak focal hierarchy, grid monotony, stock imagery, default-font-only, and chart
   legend/ordinal-colour/accounting-format/label-collision checks. `extract_theme.py` reads every master's theme.
-- Self-test grows to 34 checks without PowerPoint (36 with `--com`). Rule thresholds partly follow PointClaw.
+- Self-test grows to 34 checks without PowerPoint (36 with `--com`). Rule thresholds partly follow the author's PowerPoint add-in.
 - Before/after example now uses a real title placeholder and chart alt text (lint-clean).
 
 ## v1.0.0 — 2026-10-07

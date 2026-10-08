@@ -63,7 +63,7 @@ stand-ins when the real font isn't installed); it can't judge what is behind tex
 it can't tell how the slide *looks*. Those need a render — `render_slides.py` (Windows,
 exact) or `render_lo.py` (any OS, approximate) — and your eyes. An `info` finding is a prompt to check,
 not a defect. Thresholds follow the skill's rules; the overlap areas and 55-character title limit
-match the ones PointClaw (the author's PowerPoint add-in) uses.
+match the ones the author's PowerPoint add-in uses.
 
 ## Fixing what lint finds — `scripts/fix_deck.py` (any OS)
 

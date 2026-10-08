@@ -1,0 +1,12 @@
+{"X":{
+ "qbr":{"message":7,"design":5,"legibility":5,"layout":6,"data":6,"notes":6,"comment":"Strong claim titles and clear ask, but sparse slides with tiny labels and big empty areas (s6 risks, s7 chevrons), and the ask slide (s8) gives no rationale or cost."},
+ "phishing":{"message":6,"design":4,"legibility":5,"layout":6,"data":5,"notes":5,"comment":"Correct coverage but plain bullets (s3, s7) and a three-line 'example email' (s4) that is not realistic; the report timeline (s6) is invented (15/30 min, ext. 4400)."},
+ "fourday":{"message":7,"design":5,"legibility":5,"layout":6,"data":5,"notes":4,"comment":"Good claim titles and a correct cost table, but the table (s7) has tiny text and huge whitespace, risks (s6) are thin, and notes are often one line."}},
+"Y":{
+ "qbr":{"message":9,"design":8,"legibility":7,"layout":8,"data":8,"notes":6,"comment":"Exec summary with the ask on s2, labelled charts and KPI panels, risks with mitigations and a next-steps plan; some invented detail (multi-region failover, agency partner) and s8 has no notes."},
+ "phishing":{"message":9,"design":8,"legibility":7,"layout":8,"data":7,"notes":6,"comment":"Practical and friendly: a realistic mocked email with callouts (s4), STOP/REPORT/CALL (s5) and a quiz with answers in the notes; the '9 out of 10 attacks' statistic is unsourced and the card text is small."},
+ "fourday":{"message":9,"design":8,"legibility":7,"layout":8,"data":8,"notes":5,"comment":"Board-ready: metrics table with baselines and a stop rule (s5), cost table with purpose (s7) and a crisp ask (s8); risks slide has no notes and the UK/Iceland claim is unsupported."}},
+"Z":{
+ "qbr":{"message":8,"design":8,"legibility":7,"layout":8,"data":8,"notes":2,"comment":"Real axis charts, a hiring donut (s7) and a framed ask (s8), but the two-point churn line (s4) is thin, it invents 'root cause fixed', and s2-s9 have no notes."},
+ "phishing":{"message":8,"design":8,"legibility":7,"layout":8,"data":7,"notes":2,"comment":"Clear structure, a good example email (s4) and a quiz with answers shown on the slide (s7), but only s1 and s7 have notes."},
+ "fourday":{"message":8,"design":8,"legibility":7,"layout":8,"data":8,"notes":1,"comment":"Burnout donut, table plus cost bar chart (s7) and an orange-checkpoint timeline (s4) are strong, but there are no speaker notes at all and some targets are invented (SLA 100 %)."}}}

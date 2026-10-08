@@ -65,6 +65,17 @@ the shapes, rendering and looking, putting the citation in the notes.
 
 ---
 
+## Benchmark
+
+Blind-judged against plain Claude and Anthropic's pptx skill on three briefs (details, method and the round this
+skill lost: [evals/benchmark](evals/benchmark/README.md)):
+
+| Maker | Overall (1-10) | Speaker notes | Lint errors / warnings (3 decks) |
+|---|---|---|---|
+| **This skill** | **7.94** | **8.7** | **0 / 0** |
+| Plain Claude | 7.72 | 5.3 | 30 / 135 |
+| Anthropic pptx skill | 6.78 | 2.0 | 15 / 81 |
+
 ## What runs where
 
 | Mode | Needs | You get |

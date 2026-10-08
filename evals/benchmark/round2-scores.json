@@ -1,0 +1,89 @@
+{
+ "P": {
+  "qbr": {
+   "message": 9,
+   "design": 7,
+   "legibility": 8,
+   "layout": 9,
+   "data": 8,
+   "notes": 9,
+   "comment": "Tight claim-title story with consistent bars/table/risk matrix and rich notes that flag assumptions; plain grey-box look, no footers/page numbers, and a sparse duplicate closing slide."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 6,
+   "legibility": 7,
+   "layout": 8,
+   "data": 6,
+   "notes": 8,
+   "comment": "Clear habit-based story with quiz plus reveal slide; red-flag strip has small text in tall boxes and slide 2 is mostly empty."
+  },
+  "fourday": {
+   "message": 9,
+   "design": 7,
+   "legibility": 8,
+   "layout": 9,
+   "data": 8,
+   "notes": 9,
+   "comment": "Clean claim titles, proper cost table, timeline and flagged-assumption notes; definition slide is bullet-heavy and metrics tiles are vague ('Retention' without target)."
+  }
+ },
+ "Q": {
+  "qbr": {
+   "message": 8,
+   "design": 8,
+   "legibility": 7,
+   "layout": 8,
+   "data": 8,
+   "notes": 2,
+   "comment": "Polished teal deck with real charts (bars, churn line, hiring donut) and exec summary, but almost no speaker notes and small body text in cards."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 8,
+   "legibility": 7,
+   "layout": 8,
+   "data": 6,
+   "notes": 3,
+   "comment": "Friendly, colourful, well structured; quiz prints answers on the slide (spoils the reveal) and notes are nearly empty."
+  },
+  "fourday": {
+   "message": 8,
+   "design": 8,
+   "legibility": 7,
+   "layout": 8,
+   "data": 9,
+   "notes": 1,
+   "comment": "Strong content (100-80-100, metrics table with targets, cost table+bar) but invented details unflagged and zero speaker notes."
+  }
+ },
+ "R": {
+  "qbr": {
+   "message": 9,
+   "design": 9,
+   "legibility": 8,
+   "layout": 8,
+   "data": 8,
+   "notes": 5,
+   "comment": "Most executive-ready: kicker labels, exec summary with ask, next-steps slide; but invents facts (agency partner, multi-region failover, 'accelerating in H2') unflagged, and notes are one-liners."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 9,
+   "legibility": 8,
+   "layout": 9,
+   "data": 6,
+   "notes": 6,
+   "comment": "Best-looking phishing deck (STOP/REPORT/CALL, realistic email); unsourced '9 out of 10 attacks' stat and no answer reveal slide."
+  },
+  "fourday": {
+   "message": 8,
+   "design": 8,
+   "legibility": 8,
+   "layout": 8,
+   "data": 9,
+   "notes": 5,
+   "comment": "Thorough metrics table and budget with per-head perspective; title claim 'we are losing them' and Iceland/UK pilots not in brief, notes thin."
+  }
+ }
+}

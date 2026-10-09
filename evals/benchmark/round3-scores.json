@@ -1,0 +1,89 @@
+{
+ "K": {
+  "qbr": {
+   "message": 8,
+   "design": 7,
+   "legibility": 6,
+   "layout": 8,
+   "data": 8,
+   "notes": 2,
+   "comment": "Clean claim-led deck with real charts (s3,s5,s7) but small body text, 'root cause fixed' invented unflagged, and only 1 of 9 slides with notes."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 7,
+   "legibility": 5,
+   "layout": 7,
+   "data": 6,
+   "notes": 2,
+   "comment": "Covers every brief item incl. good annotated email (s4), but card text is tiny with large empty card bottoms (s3,s5) and quiz answers printed on the slide (s7)."
+  },
+  "fourday": {
+   "message": 8,
+   "design": 7,
+   "legibility": 6,
+   "layout": 8,
+   "data": 8,
+   "notes": 1,
+   "comment": "Strong structure with metrics table, cost table+bar (s7) and timeline; small text, generic topic titles (s5,s6), zero speaker notes."
+  }
+ },
+ "L": {
+  "qbr": {
+   "message": 9,
+   "design": 8,
+   "legibility": 7,
+   "layout": 8,
+   "data": 8,
+   "notes": 7,
+   "comment": "Best exec summary (s2) and next steps (s8); highlighted-Q4 bar and line charts, but invents failover project, agency, Jan 2027 date unflagged; s2 title wraps awkwardly."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 8,
+   "legibility": 7,
+   "layout": 8,
+   "data": 7,
+   "notes": 7,
+   "comment": "Warm, practical deck with strong STOP/REPORT/CALL slide (s5) and quiz keyed in notes, but '9 out of 10 attacks' stat (s2) is invented and unflagged."
+  },
+  "fourday": {
+   "message": 9,
+   "design": 8,
+   "legibility": 7,
+   "layout": 8,
+   "data": 8,
+   "notes": 6,
+   "comment": "Complete board case with purpose column in cost table (s7) and Time-boxed/Measured/Reversible close (s8); cites UK/Iceland pilots and 'external evaluator' without flagging."
+  }
+ },
+ "M": {
+  "qbr": {
+   "message": 9,
+   "design": 8,
+   "legibility": 9,
+   "layout": 7,
+   "data": 6,
+   "notes": 9,
+   "comment": "Largest, most legible type and thorough notes flagging every assumption, but s4 retention has no chart, s2 mini-sparkline glyphs are unlabelled noise, and s8 is text-only."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 7,
+   "legibility": 9,
+   "layout": 8,
+   "data": 6,
+   "notes": 9,
+   "comment": "Very legible, honest notes marking fictional content and assumptions; s2 and s9 are sparse/plain, email example (s4) shows only four flags, quiz is one question over two slides."
+  },
+  "fourday": {
+   "message": 9,
+   "design": 8,
+   "legibility": 9,
+   "layout": 8,
+   "data": 7,
+   "notes": 9,
+   "comment": "Claim titles throughout, readable tables (s5,s7) and explicit assumption flags in notes; metric targets are vague ('Clearly lower') and burnout slide (s2) has no breakdown."
+  }
+ }
+}

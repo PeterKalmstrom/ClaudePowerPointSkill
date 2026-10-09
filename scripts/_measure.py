@@ -9,6 +9,8 @@ Treat results as estimates: they are typically within one line of PowerPoint's l
 import glob
 import os
 import re
+import shutil
+import subprocess
 from functools import lru_cache
 
 from PIL import ImageFont
@@ -28,15 +30,71 @@ WIDTH_FACTOR = {       # average width relative to Arial, for fonts we can't fin
     "palatino linotype": 0.98, "book antiqua": 0.98, "garamond": 0.9, "arial black": 1.27, "gill sans": 0.93,
     "century gothic": 1.1, "franklin gothic": 0.95, "lato": 0.98, "open sans": 1.04, "source sans pro": 0.93,
 }
-FONT_DIRS = [os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),
+FONT_DIRS = [D for D in os.environ.get("PPTSKILL_FONT_DIRS", "").split(os.pathsep) if D] or [
+    os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),
              os.path.expanduser(r"~\AppData\Local\Microsoft\Windows\Fonts"),
              "/usr/share/fonts", "/usr/local/share/fonts", os.path.expanduser("~/.fonts"),
              os.path.expanduser("~/.local/share/fonts"), "/Library/Fonts", "/System/Library/Fonts",
              os.path.expanduser("~/Library/Fonts")]
+# PPTSKILL_FONT_DIRS (os.pathsep-separated) replaces the scan list - e.g. to measure as a CI runner with fewer fonts
+# would (pair it with FONTCONFIG_FILE so fc-match picks substitutes from the same set; selftest.py --ci-fonts)
 
 
 class kMeasure:
     """Stateless text measurement from real font metrics."""
+
+    Substitutes = {}  # family (lower case) -> the face LibreOffice draws it with here ("" = itself); filled lazily
+
+    @staticmethod
+    def Installed(Family):
+        """True when Family (or its metric twin) is installed, so every renderer here draws it with its own widths."""
+        if kS.ErrorMode:
+            return True
+        try:
+            Fam = (Family or "").lower().strip()
+            Idx = kMeasure.Index()
+            return Fam in Idx or METRIC_TWINS.get(Fam, "") in Idx
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.Installed")
+            return True
+
+    @staticmethod
+    def Substitute(Family):
+        """The installed family LibreOffice draws Family with when Family is not installed (fontconfig's choice,
+        e.g. DejaVu Serif for Georgia on Linux) - "" when Family is installed or no substitute can be named.
+        Its widths differ, so a title that is one line in PowerPoint can be two in a LibreOffice render."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Fam = (Family or "").lower().strip()
+            if Fam in kMeasure.Substitutes:
+                return kMeasure.Substitutes[Fam]
+            Sub = ""
+            if Fam and not kMeasure.Installed(Fam) and shutil.which("fc-match"):
+                Run = subprocess.run(["fc-match", "-f", "%{family[0]}", Family], capture_output=True, text=True,
+                                     timeout=10)
+                Name = Run.stdout.strip().lower() if Run.returncode == 0 else ""
+                Sub = Name if Name in kMeasure.Index() and Name != Fam else ""
+            kMeasure.Substitutes[Fam] = Sub
+            return Sub
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.Substitute")
+            return ""
+
+    @staticmethod
+    def LooseLines(Text, Family, SizePt, WidthPt, Bold=False):
+        """Lines a paragraph takes in the widest renderer: the most of its own font's wrap and the wrap of the
+        face LibreOffice substitutes for it (kMeasure.Substitute)."""
+        if kS.ErrorMode:
+            return 1
+        try:
+            Own = len(kMeasure.LineWords(Text, Family, SizePt, WidthPt, Bold))
+            Sub = kMeasure.Substitute(Family)
+            Other = len(kMeasure.LineWords(Text, Sub, SizePt, WidthPt, Bold)) if Sub else 0
+            return max(1, Own, Other)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.LooseLines")
+            return 1
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -107,7 +165,7 @@ class kMeasure:
             Lines, Widest = 0, 0.0
             Space = kMeasure.TextWidth(" ", Family, SizePt, Bold)
             for Para in re.split(r"[\r\n\v]+", Text) or [""]:
-                Words = Para.split()
+                Words = [X for X in re.split(r"[ \t]+", Para) if X]  # a no-break space keeps '112 %' together
                 if not Words:
                     Lines += 1
                     continue
@@ -128,6 +186,40 @@ class kMeasure:
         except Exception as e:
             kS.GlobalErrorHandler(e, "kMeasure.Wrap")
             return 0, 0.0
+
+    @staticmethod
+    def SafeWidth(Text, Family, SizePt, Bold=False):
+        """TextWidth with room for renderers: 4 % overall, plus a fifth of an em for each glyph outside Latin
+        (a Unicode minus, arrows, symbols) that another renderer may take from a wider fallback font."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            Wide = sum(1 for Ch in Text if ord(Ch) > 0x24F and Ch not in "\u00a0\u202f\u2009")
+            return kMeasure.TextWidth(Text, Family, SizePt, Bold) * 1.04 + Wide * SizePt * 0.2
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.SafeWidth")
+            return 0.0
+
+    @staticmethod
+    def LineWords(Text, Family, SizePt, WidthPt, Bold=False):
+        """Greedy word wrap of one paragraph: the words on each line, as a list of lists."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Space = kMeasure.TextWidth(" ", Family, SizePt, Bold)
+            Out, Cur = [], 0.0
+            for Wd in [X for X in re.split(r"[ \t]+", Text.strip()) if X]:
+                Ww = kMeasure.TextWidth(Wd, Family, SizePt, Bold)
+                if Out and Cur and Cur + Space + Ww <= WidthPt:
+                    Out[-1].append(Wd)
+                    Cur += Space + Ww
+                else:
+                    Out.append([Wd])
+                    Cur = Ww
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.LineWords")
+            return []
 
     @staticmethod
     def TextHeight(Paras, Width):

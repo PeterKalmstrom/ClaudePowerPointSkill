@@ -13,8 +13,13 @@ and speaker notes — and refuses specs that break a pattern's limits. Then lint
 ```bash
 uvx --with python-pptx --with pillow python scripts/build_deck.py spec.json --out deck.pptx --lint
 uvx --with python-pptx --with pillow --with pyyaml python scripts/build_deck.py spec.yaml --out deck.pptx
+uvx --with python-pptx --with pillow python scripts/build_deck.py spec.json --out showcase.pptx --slides 1,3
 python scripts/build_deck.py --list-directions
 ```
+
+`--slides 1,3` (or `2-4`, `1,5-7`; spec slide numbers) builds only those slides, with the theme, page numbers and
+section kickers they have in the whole deck, and reports spec mistakes only for them — the cheap way to do the
+showcase-first step before the rest of the spec is final.
 
 Every pattern lays its content out over the whole body area and grows text up to a ceiling per role (below),
 then steps it down (never below the 27 pt floor for sentences) until it fits its box; exit code 3 means something still didn't fit — each case is printed as `fit: slide N …` — so cut words
@@ -42,12 +47,22 @@ fact — without building it: show that to the user first, then build.
   "slides": [
     {"id": "growth", "pattern": "big_number", "title": "East grew faster than any region",
      "number": "+8", "unit": "%", "caption": "East revenue vs Q4.",
-     "notes": {"key_fact": "...", "facts": ["..."], "qa": [{"q": "...", "a": "..."}],
+     "notes": {"key_fact": "...", "facts": ["..."], "assumptions": ["..."], "qa": [{"q": "...", "a": "..."}],
                "pitfalls": ["..."], "sources": ["..."]}}
   ]
 }
 ```
 
+- **`footer`** (deck level) — footer text on every content slide, with the page number on the right
+  (`"page_numbers": false` drops the numbers). Title and section slides get neither.
+- **`facts`** (deck level) — named numbers from the brief: `{"revenue_q": [4.1, 4.6, 5.2, 5.9], "roles_planned":
+  20}`. Derived figures anywhere in the deck are checked against them (and against every chart series, metric
+  trend and cost or table column), and figure tokens compute from them — see *Computed figures* below.
+- **`sources`** (deck level) — a string or list (`["the brief"]`) written as `SOURCES:` into the notes of every
+  content slide whose own notes name none; it satisfies lint's `figure_without_source`. A slide's own
+  `"sources": ["brief"]` works too.
+- **`kicker`** — a small tracked-caps label above the title (at most three words). It defaults to the current
+  section's `eyebrow` (`"kickers": false` at deck level turns them all off; `"kicker": ""` on one slide).
 - **`direction`** — one of the 20 looks in [DESIGN.md](DESIGN.md); written into the deck's *theme*, so the
   deck re-themes cleanly. Ignored when `template` is set.
 - **`template`** — a .pptx/.potx to build on: its masters, layouts, colours and fonts are kept, its slides
@@ -55,7 +70,8 @@ fact — without building it: show that to the user first, then build.
   `scripts/extract_theme.py` on it first.
 - **`id`** — stable slide id; keep it when content changes, so diffs and hand-edit harvesting can match slides.
 - **`title`** — required on every content slide; write it as a claim ([CONTENT.md](CONTENT.md#titles-make-a-claim-not-a-topic)).
-- **`notes`** — a string, or the fixed structure (key fact, facts, Q&A, pitfalls, sources).
+- **`notes`** — a string, or the fixed structure: `key_fact`, `facts`, `assumptions` (what you added beyond the
+  brief — written as `ASSUMPTIONS:`, shown by `--plan`), `pitfalls`, `sources`, `qa`.
 - **`highlight`** — on most patterns: the one item that gets the accent colour. Everything else stays quiet.
 - Image paths and `template` are relative to the spec file.
 
@@ -65,27 +81,57 @@ fact — without building it: show that to the user first, then build.
 |---|---|---|---|
 | `title` | `title`, `subtitle` | 70 / 120 chars | Cover |
 | `section` | `title`, `eyebrow` | 60 / 30 | Chapter break every 7–10 slides |
-| `statement` | `title`, `support` | 90 / 140 | One big claim or the close |
-| `big_number` | `title`, `number`, `unit`, `caption` | number ≤ 12, unit ≤ 10, caption ≤ 90 | One figure that is the point |
-| `kpi` | `title`, `metrics[{value, label, note}]`, `highlight` | 3–6 metrics; value ≤ 12, label ≤ 28, note ≤ 50 | A few headline numbers |
+| `statement` | `title`, `support`, `points[]`, `decision`, `decision_label`, `owner`, `date`, `figure{value, label, note, trend, trend_labels}` | 90 / 140; 1–3 points ≤ 60; decision ≤ 140 | One big claim; `points` become numbered cards beside it; with `decision` the designed close: the ask in a box, the `figure` it moves beside it, owner and date, then the reasons |
+| `big_number` | `title`, `number`, `unit`, `caption`, `points[]`, `visual` | number ≤ 12, unit ≤ 10, caption ≤ 90, 1–3 points ≤ 70; `visual` `auto` / `dots` / `bar` / `none` | One figure that is the point; a share (`41` + `%`, `14/20`) gets a dot grid beside it |
+| `kpi` | `title`, `metrics[{value, label, note, trend, trend_labels}]`, `highlight`, `decision`, `trend_chart` | 2–6 metrics; value ≤ 12, label ≤ 28, note ≤ 50, trend 2–12 numbers, trend_labels 2 or one per value (≤ 16) | A few headline numbers; with `decision`, an executive summary with the ask below; a metric with a trend on a slide of up to four becomes a chart |
 | `bullets` | `title`, `items[]` | 1–7 items, ≤ 100 chars | Asks, agendas, short lists |
 | `compare` | `title`, `columns[{heading, points[]}]`, `highlight` | 2–3 columns, heading ≤ 40 (≤ 24 with 3 columns), 1–4 points ≤ 70 | Before/after, us/them, options |
 | `process` | `title`, `steps[{label, detail}]`, `highlight` | 3–8 steps; label ≤ 30, detail ≤ 60 | Ordered steps (chevrons up to 5) |
-| `timeline` | `title`, `events[{date, label}]`, `highlight` | 3–7 events; date ≤ 16, label ≤ 40 | Dates and milestones |
+| `timeline` | `title`, `events[{date, label}]`, `highlight` | 3–7 events; date ≤ 16, label ≤ 40; `date` on every event or on none | Dates and milestones; without dates, undated stages in order (numbered on the rail) |
 | `quote` | `quote`, `attribution`, `role`, `title` | quote ≤ 240 | A real person's words (credit in notes) |
 | `chart` | `title`, `type`, `categories[]`, `series[{name, values}]`, `highlight`, `number_format`, `caption`, `alt` | 2–24 categories, 1–6 series | Native, editable chart (`column`, `bar`, `line`, `pie`) |
 | `table` | `title`, `header[]`, `rows[[]]`, `highlight_row` | 2–6 columns, 1–8 rows | Numbers people will read |
 | `image` | `title`, `image`, `caption`, `alt`, `focus_x`, `focus_y` | caption ≤ 120 | A photo, cover-cropped to the body box |
 | `matrix` | `title`, `quadrants[{heading, text}]`, `x_axis`, `y_axis`, `highlight` | 4 quadrants; heading ≤ 30, text ≤ 90 | 2 × 2 prioritisation |
 | `email` | `title`, `from`, `to`, `subject`, `body[]`, `attachment`, `callouts[{target, line, note}]` | from/to ≤ 70, subject ≤ 90, 1–6 body paragraphs ≤ 160, 0–5 callouts, note ≤ 70 | A realistic mocked message (phishing, support, a template to copy) with numbered markers |
-| `kpi_chart` | `title`, `metrics[{value, label, note}]`, `highlight_metric`, and the `chart` fields | 2–4 metrics; 2–12 categories, 1–4 series | Two to four headline numbers beside the chart that proves them |
+| `kpi_chart` | `title`, `metrics[{value, label, note, trend, trend_labels}]`, `highlight_metric`, and the `chart` fields (optional when a metric has a `trend`) | 1–4 metrics; 2–12 categories, 1–4 series | One to four headline numbers beside the chart that proves them |
 | `cost_table` | `title`, `rows[{item, amount, detail}]`, `unit`, `total_label`, `note`, `highlight` | 1–7 rows; item ≤ 40, detail ≤ 70, note ≤ 140; `amount` a number | Costs with an automatic total row and the total, large, beside the table |
 | `quiz` | `title` (the question), `options[{text, correct}]`, `explain`, `reveal`, `answer_title` | 2–4 options ≤ 80, at least one `correct` | A question for the room; the answer goes in the notes, or with `"reveal": "slide"` on an extra answer slide |
 | `risks` | `title`, `risks[{risk, likelihood, impact, mitigation}]`, `highlight` | 2–4 risks; risk ≤ 50, mitigation ≤ 120; levels `low` / `medium` / `high` | Risk cards, each with a likelihood and an impact chip and its mitigation |
+| `metrics` | `title`, `rows[{metric, baseline, target, owner, date}]`, `rule`, `highlight` | 1–6 rows; metric ≤ 40, baseline/target/owner ≤ 24, date ≤ 16, rule ≤ 140; owner and date optional | Success metrics: each with its baseline and target (in the accent), a stop/go rule below |
+| `next_steps` | `title`, `steps[{action, owner, date}]`, `decision`, `decision_label` | 2–6 steps; action ≤ 80, owner ≤ 30, date ≤ 20 | Numbered actions with a date and an owner; an optional decision box above |
 
+- **A count outside a pattern's range is a spec error that names the pattern that fits** — one metric on a
+  `kpi` is a `big_number`; two are two wide tiles; seven are a `table`.
 - **`compare` headings** fit their column: up to 40 characters with two columns, 24 with three.
-- **`process`** shows up to five steps as arrows with the number inside (clear of the notch) above a card each;
-  six to eight steps become numbered cards in two rows.
+- **`process`** shows three or four steps as arrows with the number inside (clear of the notch) above a card each;
+  five steps become numbered full-width rows (label, then its detail), so the text stays large; six to eight
+  steps become numbered cards in two rows.
+- **`trend`** on a metric draws its series as labelled bars in the tile: the first and last value above their
+  bars, the first and last period from `trend_labels` (`["Q1", "Q4"]`, or one per value) below, zero-based, the
+  latest bar in the accent, every figure at the 24 pt label floor or above. A before/after such as churn
+  1.8 → 1.2 % is a two-value trend — never two unrelated tiles. Bars are never tiny: when the tile has no room
+  for bars at least 72 pt tall (a `decision` below the tiles, many metrics), the trend becomes the tile's note
+  (`Q1 4.1 → Q4 5.9`, when it has none) and a `TREND (…)` line in the speaker notes. To show the series, give the
+  slide room — no decision, up to four metrics, so the trend becomes a chart (below) — or use `kpi_chart`.
+- **A metric with a series becomes a chart.** On a `kpi` slide of up to four metrics without a `decision`, the
+  highlighted metric's trend (else the first one with a trend) is drawn as a native column chart in that metric's
+  own card — value, label and note as its header, `trend_labels` as the categories (default *Start* / *Now* for
+  two values), data labels on the bars — beside the other metrics as tiles. `"trend_chart": false` keeps tiles
+  only. `kpi_chart` without `categories` / `series` charts a metric's trend the same way.
+- **`figure`** on a `statement` with `decision`: the number the ask moves, or what it costs, in a tile beside the
+  decision box (with its `trend` as labelled bars); owner and date then sit inside the box.
+- **`points`** on a `statement` (without `decision`): two or three short facts, steps or reasons as numbered cards
+  in a column beside the claim. Without points the claim and its support are anchored by an accent bar. The
+  kicker sits above the claim on every statement, as on every other content slide.
+- **`timeline` without dates** — `events` with a `label` only — draws undated sequential stages: a numbered badge
+  on the rail for each, the labels alternating above and below. Use it for "what happens next" sequences; do not
+  invent "Step 1 / Step 2" dates (they repeat in large type).
+- **`big_number`** with a share — `number` `"41"` and `unit` `"%"`, or `"14/20"` — draws a dot grid beside the
+  number (`visual`: `dots`, `bar` for a filled bar, `none`); `points` add two or three supporting facts under
+  the caption, so the slide is not one line of support.
+- **`decision`** on `kpi`, `statement` and `next_steps` draws the ask in a box in the text colour with an accent
+  edge and a label (`decision_label`, default *Decision requested*); `statement` adds an owner/date line.
 - **`bullets`** with up to four short items (≤ 80 characters) become full-width bands; longer lists stay a list.
 - **`email` callouts** point at `from`, `to`, `subject`, `attachment` or a `body` paragraph (`line`, 0-based); the
   builder draws a numbered marker at that line and the numbered note beside the message, and adds the callouts to
@@ -93,17 +139,61 @@ fact — without building it: show that to the user first, then build.
 - **`quiz`** always writes `ANSWER:` (and `WHY:` from `explain`) into the notes; `"reveal": "slide"` adds a slide
   `<id>-answer` with the right options in the accent.
 
+### Computed figures
+
+Never compute a derived figure by hand. Write a token and the builder computes it from the deck's own numbers:
+
+| Token | Becomes | From |
+|---|---|---|
+| `{sum}` / `{total}` | 19.8 | the metric's `trend`, else the slide's first chart series, else its cost rows |
+| `{average}` | 4.95 | the same (one decimal more than the data when it does not come out even) |
+| `{change}` | +44 % | first to last value of the same, rounded to a whole percent |
+| `{first}`, `{last}`, `{count}` | 4.1, 5.9, 4 | the same |
+| `{share}` | 70 % | a `big_number` that is a share (`14/20`, `41` + `%`) |
+| `{sum:revenue_q}` (any op) | 19.8 | the deck-level `facts` list `revenue_q` |
+| `{roles_planned}` | 20 | a deck-level fact that is one number |
+
+Tokens work in any text — a metric's `value` (`"{sum} MUSD"`), a caption, a point, the notes. A token with
+nothing to compute from is a spec error (exit 2). `cost_table` totals are always computed.
+
+Figures written by hand are checked: a number that reads as a **total** (next to *sum*, *total*, *combined*, or an
+addition written out, `38 + 41 + 52 + 60`), an **average**, a **change** (`+44 %`, `up 44 %`, beside `4.1 to 5.9`)
+or a **share** (`70 % of …` on a slide with `14/20`), and every equation (`44 % = 5.9 / 4.1 - 1`), is compared
+with what the deck's chart series, metric trends, cost and table columns and `facts` give. A figure that matches
+none of them but is close to one — a slip, not a different quantity — is a `spec warning: figure: …` (exit code
+unchanged), and `lint_deck.py` reports the same on the built deck as `figure_mismatch` from the charts' data and
+the text. A total row in a `table` (first cell *Total*) is checked against its column.
+
 ### Filling the slide
 
 Content is laid out from the title's foot to the bottom margin and from margin to margin: cards and tiles take the
 full body height, sibling boxes share one text size (the largest that fits all of them), and short text grows. The
 ceilings, on the 1440-pt grid: bullets 44 pt, points in cards 40, details and mitigations 36, headings in cards 44,
-KPI values 120 (kept on one line). Nothing with four or more words is set below 27 pt — a smaller role size is
+step labels 44, statements 88, KPI values 120 (kept on one line). A short statement sits in the optical middle of
+the slide, and step cards are only as tall as their text with the text block centred. Nothing with four or more words is set below 27 pt — a smaller role size is
 raised to the floor first. If a slide still looks empty in the render, it is short of content, not of layout: add
 the evidence (a chart beside the numbers, the mitigation beside the risk) rather than enlarging what is there.
 
 ## What the builder decides for you
 
+- **The visual system:** every content slide has the same furniture — a kicker above the title, the title,
+  the body, a footer and the page number. Cards share one language: a tint of the theme (the background with a
+  breath of the accent), an accent edge on top or left, square corners, the same gaps; the highlighted card is
+  filled with the accent and its text set in the background colour (4.5:1 checked for every direction).
+  Covers and section dividers are full panels in the text colour, so the deck opens, breaks and closes with weight.
+- **Kicker and title as one block:** the kicker is placed above the title's ink as the loosest renderer sets it —
+  its line height, and its line count: LibreOffice draws a theme font that is not installed (Georgia, Segoe UI on
+  Linux) with a wider substitute (fontconfig's choice, e.g. DejaVu Serif), so a title on one line in PowerPoint
+  can take two there. The builder makes both wrap alike (up to 4 pt smaller, or a narrower box), else reserves
+  room for the longer one; a two-line title's box reaches 16 pt lower, and the title shrinks until it clears the
+  kicker. `lint_deck.py`
+  reports `kicker_title_overlap`, and `headline_too_long` only when the measured title takes more than two lines
+  (three for display-size titles).
+- **No unwanted wraps:** a number and its unit are joined by a no-break space (`112 %`, `5.9 M`, `44 %` in a
+  title, `200 kSEK`) and measured as one word; values,
+  chips and dates are measured with a safety margin for wide glyphs (a Unicode minus, arrows); chips are as
+  wide as their longest word. Titles and decisions that would leave one word alone on the last line are set in a
+  narrower, balanced box. `lint_deck.py` reports what still slips through as `unwanted_wrap` and `title_widow`.
 - **Charts:** no legend for one series, legend on the right otherwise (never top/bottom); data labels on pies
   and single-series bars/columns, never on lines; when labels are on, the value axis and gridlines go;
   0.5 pt gridlines otherwise; 75 % bar gap; 2.25 pt lines; the `highlight` category in the accent and
@@ -112,21 +202,38 @@ the evidence (a chart beside the numbers, the mitigation beside the risk) rather
 - **Type:** sizes for a 1440-pt slide (body 34 growing to 44, captions 28, labels 24 for one-to-three-word
   labels only); any text of four or more words is at or above the 27 pt Full HD floor; headings use the theme's
   heading font, everything else the body font.
-- **Notes:** the spec's notes, plus what the pattern adds (email callouts, the quiz answer). A slide whose spec has
+- **Unfit text is never silent:** a box whose text does not fit at the floor, tiles that do not fit at the label
+  floor, and every `text_overflow`, `kicker_title_overlap` or `tile_text_below_floor` that `lint_deck.py` finds in
+  the built deck (text running past its card or the email frame) is printed as `fit: …` and the build exits **3**.
+- **Spec warnings** (`spec warning: …`, exit code unchanged): a derived figure the deck's data contradicts
+  (`spec warning: figure: …`, see *Computed figures*); a `metrics` target with no number, percent, date or
+  comparison; a monthly timeline that skips one month; a `statement` with nothing but a support line, or a
+  `big_number` with one caption — add `points`.
+- **Email body:** each paragraph's box is as tall as its wrapped text (in the wider of the body font and its
+  LibreOffice substitute), so cutting words from an overflowing paragraph shows up at the next build.
+- **Notes:** the spec's notes (with `ASSUMPTIONS:`), plus what the pattern adds (email callouts, the quiz answer, a
+  tile trend that had no room),
+  plus the deck-level `sources` where a slide names none. A slide whose spec has
   no notes is listed as `notes: slide N (id) has no speaker notes` — write them; see
   [CONTENT.md](CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief).
 - **Colour:** text, muted text, accent, background and a quiet neutral, all as theme colours.
 
 The builder estimates line breaks from font metrics; the real ones need a render. Always finish with
 `lint_deck.py`, a render, and a look at every slide — `render_lo.py deck.pptx --out renders/ --sheet` writes
-every slide plus one contact sheet (`renders/contact.png`) on any OS.
+every slide plus one contact sheet (`renders/contact.png`) on any OS. For the mechanical fixes lint suggests, run
+`fix_deck.py deck.pptx --out fixed.pptx` — or `--in-place` (keeps `deck.pptx.bak`) or `--dry-run` (lists the
+fixes); one of the three is required, and a call without them prints that usage line and exits 2. Prefer fixing the
+spec and rebuilding a generated deck.
 
 ## Content the builder cannot supply
 
 - **The ask** states what is asked, why (two or three reasons) and what it costs or changes; a bare statement is a
   slogan ([CONTENT.md](CONTENT.md#the-ask-states-its-reasons-and-its-cost)). `compare` with *Why now* / *Cost and
   impact* is the usual shape.
-- **No invented facts.** Ratings, targets, dates, times and mitigations the brief does not give are marked
-  `Assumption: …` in the notes' pitfalls; a worked example (an email, a price) is labelled as made up.
+- **No invented facts.** Ratings, targets, dates, times and mitigations the brief does not give go in the notes'
+  `assumptions`; a worked example (an email, a price) is labelled as made up. Targets are measurable
+  ([CONTENT.md](CONTENT.md#success-has-a-number)).
 - **Pick the pattern that shows the thing:** a mocked `email` for phishing or support, `kpi_chart` for numbers with
-  their trend, `risks` for risks, `cost_table` for a budget, `quiz` for checking understanding — not bullets.
+  their trend, `risks` for risks, `cost_table` for a budget, `quiz` for checking understanding, `metrics` for how
+  success is judged (every metric with a baseline and a target — never a bare "Retention" tile), `next_steps` for
+  who does what by when, a `statement` with `decision` for the close — not bullets.

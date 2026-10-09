@@ -1,5 +1,118 @@
 # Changelog
 
+## Unreleased
+
+- **Titles measured right under any font set** (the self-test passed locally but failed 6 checks on the CI runner,
+  where fontconfig substitutes the wide DejaVu Sans for Aptos instead of Inter): a content title whose own font and
+  LibreOffice's substitute wrap differently is no longer narrowed to two lines that overflow its box - every
+  candidate size/width is measured against the title's height, and failing all, the title shrinks until the loose
+  wrap fits. A widow is checked in the substitute too. A statement claim no longer shrinks below the display size
+  while taking three lines. `PPTSKILL_FONT_DIRS` overrides the scanned font folders; `selftest.py --ci-fonts`
+  reproduces the runner's fonts; the balanced-title check measures with the deck's theme font and its substitute.
+
+- **Computed figures** (blind benchmark round 4 ranked the skill first, 8.50, but its QBR said 2026 revenue was
+  "21.8 MUSD" - "sum of quarters" - for quarters of 4.1 + 4.6 + 5.2 + 5.9 = 19.8; nothing checked computed figures):
+  - New `scripts/_figures.py`: every text value is scanned for figures that read as derived - a total (*sum*,
+    *total*, *combined*, an addition written out), an average, a change (`+44 %`, *up 44 %*, beside `4.1 to 5.9`),
+    a share (`70 % of …` beside `14/20`) and equations (`44 % = 5.9 / 4.1 - 1`) - and each is compared with what the
+    deck's chart series, metric trends, cost and table columns and `facts` give. A figure that matches none but is
+    close to one (a slip, not another quantity) is a `spec warning: figure: …` (exit code unchanged); `lint_deck.py`
+    reports `figure_mismatch` on the built deck from the charts' data and the text (a tile's card is one context).
+    A table's *Total* row is checked against its column.
+  - Deck-level `facts` (named numbers from the brief) and figure tokens: `{sum}`, `{total}`, `{average}`,
+    `{change}`, `{share}`, `{first}`, `{last}`, `{count}` compute from the metric's trend, the slide's chart series
+    or cost rows, or the big number's share; `{sum:revenue_q}` from a fact list, `{name}` a single-number fact. A
+    token with nothing to compute from is a spec error. `--plan` lists the facts.
+  - `CONTENT.md` *Compute derived figures, never by hand*; `BUILDER.md` *Computed figures*; `SKILL.md` start-here
+    and anti-pattern rows.
+- **Rough edges from round 4:**
+  - `kicker_title_overlap` in the LibreOffice render: LibreOffice draws a theme font that is not installed
+    (Georgia, Segoe UI on Linux) with a wider substitute, so a title measured as one line took two and grew up into
+    its kicker while lint and the build passed. `kMeasure.Substitute` asks fontconfig which face that is;
+    `LooseLines` counts lines in the wider of the two. The builder makes both renderers wrap a title alike (up to
+    4 pt smaller, or a narrower balanced box) or reserves room for the longer one; lint's kicker check uses the
+    same count; a statement's claim box is sized for it too. Checked by rendering 240 two-line titles in 3
+    directions with `render_lo.py`: no kicker within 8 pt of a title (13 of 20 collided before in Georgia decks).
+  - `kpi` takes 2-6 metrics (two wide tiles), `kpi_chart` 1-4. A count outside a pattern's range is a spec error
+    that names the pattern that fits ("one number is a 'big_number' slide …").
+  - The email body is measured by each paragraph's real wrapped height (in the wider of the body font and its
+    substitute), not a fixed slack per paragraph, so shortening a paragraph clears the overflow report.
+  - Tile trends are never tiny: with no room for bars at least 72 pt tall (a `decision` below the tiles), the
+    trend becomes the tile's note (`Q1 4.1 → Q4 5.9`) and a `TREND (…)` line in the speaker notes.
+  - `timeline` without dates draws undated sequential stages (numbered badges on the rail), so "what happens next"
+    needs no invented "Step 1 / Step 2" dates; a timeline with some dates missing is a spec error.
+  - A `statement` with `points` has its kicker (above the claim, as wide as the claim's column).
+  - `build_deck.py --slides 1,3-4` builds only those spec slides, with the deck's theme, page numbers and section
+    kickers, reporting spec mistakes only for them - the showcase-first step from the full spec; documented in
+    `SKILL.md`'s unattended rule and `CONTENT.md`.
+- Schema regenerated (`facts`, optional timeline `date`, new metric counts); self-test 153 checks.
+
+- **Data shown as data** (blind benchmark round 3 ranked the skill first overall, but its weakest criterion was
+  data presentation, 6.3 vs 7.7: "retention slide has no chart, tiny unlabelled bar glyphs, the ask slide is
+  text-only, sparse slides, vague targets"):
+  - A `kpi` metric with a `trend` (on a slide of up to four metrics, no decision) becomes a native column chart in
+    the metric's own card, with data labels and `trend_labels` as categories; a before/after (churn 1.8 → 1.2) is
+    a two-value trend. `kpi_chart` without `categories`/`series` charts a metric's trend. `"trend_chart": false`
+    opts out.
+  - Tile trends are labelled bars: first and last value above, first and last period (`trend_labels`) below, at
+    the 24 pt label floor; the trend takes the tile's spare height.
+  - `figure` on a closing `statement` with `decision`: the number the ask moves (or its cost) in a tile beside
+    the decision box; owner and date move into the box.
+  - `big_number`: a share (`41` + `%`, `14/20`) gets a dot grid beside it (`visual`: `dots` / `bar` / `none`);
+    `points` add supporting facts under the caption.
+  - `statement`: `points` (1–3) become numbered cards beside the claim; without them an accent bar anchors the
+    claim and its support, centred on the slide.
+  - Spec warnings (exit code unchanged) for a `metrics` target with no number, percent, date or comparison, a
+    monthly timeline that skips one month, and a statement or big number with only one line of support;
+    `lint_deck.py` adds `target_not_measurable`.
+- **Rough edges from round 3:**
+  - Kicker and title are one measured block: a two-line title's box grows down and the title shrinks until its
+    ink (at the loosest renderer's line height) clears the kicker; lint `kicker_title_overlap`.
+    `headline_too_long` now measures the title in its box (more than two lines; three for display titles)
+    instead of counting 55 characters. Balanced titles also check the renderer's width (no widow at the edge).
+  - Number + unit is glued in titles too (`44 %` on the cover), for `%`, `pt`, `k`/`M`/`B`, `kSEK`, `USD` …
+  - No silent overflow: lint `text_overflow` now also fires when a text box that starts on a card or frame runs
+    past its bottom (the email body, a risk card); the builder lints its own output and reports every
+    `text_overflow`, `kicker_title_overlap` and `tile_text_below_floor` as `fit:` (exit 3).
+  - `fix_deck.py` without `--out` / `--in-place` / `--dry-run` (or with no file) prints a one-line usage hint and
+    exits 2; the call is documented in `SKILL.md` and `BUILDER.md`.
+  - Deck-level `"sources"` fills the notes of every content slide without its own (`["the brief"]` is fine), so
+    `figure_without_source` does not fire when the brief is the only source.
+  - Tile labels, notes and trend figures never go below the 24 pt label floor (they used to shrink silently);
+    what does not fit is reported; lint `tile_text_below_floor`. The decision box is measured once, so an
+    executive summary no longer reserves room for a second line it does not need.
+  - Notes `assumptions` (written as `ASSUMPTIONS:`, shown by `--plan`); `CONTENT.md` points the no-invented-facts
+    rule at it and adds *Success has a number*.
+- Schema regenerated; `--plan` shows assumptions, the deck's sources and spec warnings; `BUILDER.md`,
+  `DESIGN.md`, `CONTENT.md`, `AUDIT.md`, `SKILL.md`, the sample spec and `sample-deck.png` updated; self-test
+  136 checks.
+- **A designed visual system in `build_deck.py`** (a blind benchmark ranked the skill first overall but last on
+  design: "grey boxes everywhere, no footers or page numbers, sparse closers"). Every content slide now has a
+  kicker label above the title (`kicker`, default from the section's eyebrow; `"kickers": false` deck-wide), a
+  footer and page number (`footer`, `page_numbers` deck fields; not on title or section slides). Cards share one
+  language in all 20 directions: a tint of the theme with an accent edge, the highlight filled with the accent;
+  KPI values and targets in the accent. Covers and section dividers are full panels in the text colour.
+- **Decisions and closers:** `decision` (+ `decision_label`) on `kpi` (an executive summary), `statement` (the
+  designed close, with `owner` and `date`) and the new `next_steps`.
+- **New patterns:** `metrics` (metric, baseline, target in the accent, optional owner and date, a stop/go `rule`)
+  and `next_steps` (numbered actions with a date and an owner). The sample spec shows all 21 patterns.
+- **Trends in tiles:** `trend` on a `kpi` / `kpi_chart` metric draws its series as small bars, so a before/after
+  reads as a trend.
+- **Wasted space:** short statements are larger (up to 88 pt) and sit in the optical middle; five-step processes
+  are numbered full-width rows; step cards are as tall as their text, the text centred.
+- **No unwanted wraps:** numbers and units joined by a no-break space (also in body text: `41 %`); values, chips
+  and dates measured with a margin for wide glyphs (`kMeasure.SafeWidth`; a Unicode minus no longer wraps);
+  risk chips as wide as their longest word; titles and decisions balanced so no lone word sits on the last line
+  (`kMeasure.LineWords`). `kMeasure.Wrap` no longer breaks at a no-break space.
+- **`lint_deck.py`:** new `unwanted_wrap` (a short single-line role - value, chip, label, number - that wraps in
+  its box) and `title_widow` warnings; `weak_focal_hierarchy` no longer fires on the builder's own layouts; the
+  footer, page number and kicker do not count toward the word budget; `metrics`, `next_steps` and decision slides
+  get their own budgets.
+- **`SKILL.md`:** showcase-first says what to do on an unattended run (build the opener and one detail slide,
+  look at the renders yourself, proceed, say so in the summary).
+- Schema, `--plan` (shows kickers, the footer and decisions), `BUILDER.md`, `DESIGN.md` and the self-test
+  (113 checks) cover all of it. Existing specs build unchanged apart from the new look.
+
 ## 2.1.0
 
 - **`build_deck.py` fills the slide.** Every pattern lays its content out over the whole body area: KPI tiles,

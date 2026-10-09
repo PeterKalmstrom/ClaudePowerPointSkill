@@ -11,7 +11,36 @@ All 27 slides per maker were rendered with LibreOffice and scored **blind** by a
 only anonymous labels (keys: `round*-key.json`), on six criteria from 1 to 10: message, visual design, legibility,
 layout correctness, data presentation, presenter support (speaker notes).
 
-## Round 2 - after the builder quality round (current)
+## Round 4 - after the data-presentation round (current)
+
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
+|---|---|---|---|---|---|---|---|
+| **This skill** | 8.7 | 8.3 | 9.0 | 8.7 | 7.7 | 8.7 | **8.50** |
+| Plain Claude | 8.0 | 7.7 | 6.0 | 7.7 | 8.0 | 5.0 | 7.06 |
+| Anthropic pptx skill | 7.3 | 7.0 | 6.0 | 7.3 | 7.3 | 1.7 | 6.11 |
+
+Judge, in short: this skill - claim titles, every deck ends on a decision with owner and deadline, the largest text
+and most consistent visual system, structured notes with every invention flagged. **But one factual error**: the QBR
+gave 2026 revenue as 21.8 MUSD where the quarters sum to 19.8 (the maker's spec said "sum of quarters" and added
+wrong) - the skill does not yet check computed figures. Plain Claude - the best charts and closing structure, but
+small grey text, unflagged inventions and thin notes. pptx skill - real charts with axes, but almost no notes, small
+text and the quiz answers printed on the slide.
+
+## Round 3 - after the design round
+
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
+|---|---|---|---|---|---|---|---|
+| **This skill** | 8.7 | 7.7 | 9.0 | 7.7 | 6.3 | 9.0 | **8.06** |
+| Plain Claude | 8.7 | 8.0 | 7.0 | 8.0 | 7.7 | 6.7 | 7.67 |
+| Anthropic pptx skill | 8.0 | 7.0 | 5.7 | 7.7 | 7.3 | 1.7 | 6.22 |
+
+Judge, in short: this skill - the most legible decks (big type, clearest contrast), honest notes on every slide
+with every assumption flagged, claim titles throughout; weakest on data presentation (a retention slide without a
+chart, tiny trend glyphs, a text-only ask) and a few sparse slides. Plain Claude - best story structure and
+polished colour-coded design, but the most invented content, none of it flagged. pptx skill - right chart types and
+a clean card system, but almost no speaker notes and small body text.
+
+## Round 2 - after the builder quality round
 
 | Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
 |---|---|---|---|---|---|---|---|
@@ -51,5 +80,6 @@ and missing alt text.
 ## Limits
 
 Three briefs, one judge model, LibreOffice renders (fonts substitute), a single run per maker. Treat it as a
-signal, not a leaderboard. Next for this skill: design polish (the judge's main criticism) and the rough edges the
-round-2 maker reported (wrapping inside small boxes that lint does not see yet).
+signal, not a leaderboard. The other two makers' decks are identical in all three rounds; their overall scores moved by up to 0.56 between
+judges, so differences under about half a point are noise. Next for this skill: checking computed figures
+against the brief (round 4's error) and the rough edges the round-4 maker reported.

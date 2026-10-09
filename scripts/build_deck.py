@@ -12,7 +12,7 @@ Inputs are checked against each pattern's limits first; nothing is written if a 
 (--force builds anyway). The spec format is in reference/BUILDER.md.
 
 Patterns: title, section, statement, big_number, kpi, bullets, compare, process, timeline, quote,
-chart, table, image, matrix, email, kpi_chart, cost_table, quiz, risks. Every pattern lays its content out over
+chart, table, image, matrix, email, kpi_chart, cost_table, quiz, risks, metrics, next_steps. Every pattern lays its content out over
 the whole body area and grows text up to a ceiling per role (never below the 27 pt floor for sentences).
 """
 import argparse
@@ -20,6 +20,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -33,13 +34,14 @@ from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.util import Pt
 
-from kShared import ToolReportableException, kRun, kS, kToolException
+from kShared import ToolInputException, ToolReportableException, kRun, kS, kToolException
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from _measure import kMeasure  # noqa: E402  (the skill's own helpers sit beside this script)
+from _figures import kFigures  # noqa: E402
+from _measure import LINE_HEIGHT, kMeasure  # noqa: E402  (the skill's own helpers sit beside this script)
 from _rules import kRules  # noqa: E402
 from _theme import kTheme  # noqa: E402
 
@@ -55,18 +57,31 @@ SIZE = {"title": 54, "section": 84, "statement": 72, "hero": 220, "kpi": 84, "h2
         "small": 30, "caption": 28, "label": 24}  # 1.5x a 960-pt slide: body 34 ~ 23 pt, floor 27 ~ 18 pt
 GROW = {"body": 44, "point": 40, "detail": 36, "heading": 44, "value": 120, "note": 32}  # ceilings text grows to
 GAP = 24
+EDGE = 8                        # the accent edge every card carries (card language: tint + edge, highlight = accent fill)
+FOOTER_TOP, FOOTER_H, FOOTER_SIZE = 760, 30, 18  # deck footer and page number, below BODY_BOTTOM (caption tier)
+KICKER_SIZE, KICKER_H = 24, 34  # the small accent label above a title
+KICKER_TOP, KICKER_GAP = 14, 6  # the kicker never starts above this; the gap between it and the title's ink
+TITLE_DROP = 16                 # a two-line title's box reaches this much lower (the body starts at BODY_TOP)
+LOOSE_LINE = 1.28               # line height of the loosest renderer (LibreOffice, serif faces) for title ink
+NBSP = "\u00a0"
 
 TITLE_TYPES = {PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE}
 FOOTER_TYPES = {PP_PLACEHOLDER.DATE, PP_PLACEHOLDER.FOOTER, PP_PLACEHOLDER.SLIDE_NUMBER}
 TEXT, MUTED, ACCENT, BG, QUIET = (MSO_THEME_COLOR.TEXT_1, MSO_THEME_COLOR.TEXT_2, MSO_THEME_COLOR.ACCENT_1,
                                   MSO_THEME_COLOR.BACKGROUND_1, MSO_THEME_COLOR.BACKGROUND_2)
+SOFT = MSO_THEME_COLOR.ACCENT_2  # the accent mixed towards the background: card edges that are not the highlight
+FAINT = MSO_THEME_COLOR.ACCENT_6  # the accent most of the way to the background: the empty part of a share
 
 LIMITS = {  # pattern: {field: max characters} plus list-length ranges, checked before building
     "title": {"title": 70, "subtitle": 120},
     "section": {"title": 60, "eyebrow": 30},
-    "statement": {"title": 90, "support": 140},
-    "big_number": {"title": 70, "number": 12, "unit": 10, "caption": 90},
-    "kpi": {"title": 70, "metrics": (3, 6), "metrics.value": 12, "metrics.label": 28, "metrics.note": 50},
+    "statement": {"title": 90, "support": 140, "decision": 140, "decision_label": 30, "owner": 40, "date": 30,
+                  "points": (1, 3), "points.*": 60, "figure.value": 12, "figure.label": 28, "figure.note": 50,
+                  "figure.trend": (2, 12), "figure.trend_labels": (2, 12), "figure.trend_labels.*": 16},
+    "big_number": {"title": 70, "number": 12, "unit": 10, "caption": 90, "points": (1, 3), "points.*": 70},
+    "kpi": {"title": 70, "metrics": (2, 6), "metrics.value": 12, "metrics.label": 28, "metrics.note": 50,
+            "metrics.trend": (2, 12), "metrics.trend_labels": (2, 12), "metrics.trend_labels.*": 16,
+            "decision": 140, "decision_label": 30},
     "bullets": {"title": 70, "items": (1, 7), "items.*": 100},
     "compare": {"title": 70, "columns": (2, 3), "columns.heading": 40, "columns.points": (1, 4),
                 "columns.points.*": 70},
@@ -80,12 +95,32 @@ LIMITS = {  # pattern: {field: max characters} plus list-length ranges, checked 
                "x_axis": 30, "y_axis": 30},
     "email": {"title": 70, "from": 70, "to": 70, "subject": 90, "body": (1, 6), "body.*": 160, "attachment": 40,
               "callouts": (0, 5), "callouts.note": 70},
-    "kpi_chart": {"title": 70, "metrics": (2, 4), "metrics.value": 12, "metrics.label": 28, "metrics.note": 40,
+    "kpi_chart": {"title": 70, "metrics": (1, 4), "metrics.value": 12, "metrics.label": 28, "metrics.note": 40,
+                  "metrics.trend": (2, 12), "metrics.trend_labels": (2, 12), "metrics.trend_labels.*": 16,
                   "categories": (2, 12), "series": (1, 4), "caption": 90},
     "cost_table": {"title": 70, "rows": (1, 7), "rows.item": 40, "rows.detail": 70, "unit": 12, "total_label": 20,
                    "note": 140},
     "quiz": {"title": 90, "options": (2, 4), "options.text": 80, "explain": 160, "answer_title": 55},
     "risks": {"title": 70, "risks": (2, 4), "risks.risk": 50, "risks.mitigation": 120},
+    "metrics": {"title": 70, "rows": (1, 6), "rows.metric": 40, "rows.baseline": 24, "rows.target": 24,
+                "rows.owner": 24, "rows.date": 16, "rule": 140},
+    "next_steps": {"title": 70, "steps": (2, 6), "steps.action": 80, "steps.owner": 30, "steps.date": 20,
+                   "decision": 140, "decision_label": 30},
+}
+KICKER_MAX = 30  # characters; at most three words, so it stays a label
+COUNT_HINTS = {  # pattern.list: the pattern that fits when the count is outside the range
+    "kpi.metrics": "one number is a 'big_number' slide; a metric with its series is a 'kpi_chart'; more than six "
+                   "is a 'table'",
+    "kpi_chart.metrics": "more than four metrics: a 'kpi' slide, or a 'table'",
+    "statement.points": "more than three: a 'bullets' slide, or 'compare'",
+    "big_number.points": "more than three: a 'kpi' slide (each number its own tile) or 'bullets'",
+    "bullets.items": "more than seven: split the slide, or a 'table'",
+    "compare.columns": "one column is a 'statement' with 'points'; four or more is a 'table'",
+    "process.steps": "two steps are a 'compare'; more than eight: split into two slides",
+    "timeline.events": "two events are a 'compare'; more than seven: split, or a 'table'",
+    "risks.risks": "one risk is a 'statement'; more than four: a 'table' with likelihood and impact columns",
+    "next_steps.steps": "one step is a 'statement' with a 'decision'",
+    "metrics.rows": "more than six: a 'table'",
 }
 COMPARE_HEADING = {2: 40, 3: 24}  # compare: heading characters per column count (3 narrow columns hold less)
 
@@ -95,9 +130,15 @@ COMPARE_HEADING = {2: 40, 3: 24}  # compare: heading characters per column count
 FIELDS = {  # pattern: {field: kind}; kinds: text, int, number, list[text], list[obj:{...}], obj
     "title": {"subtitle": "text"},
     "section": {"eyebrow": "text"},
-    "statement": {"support": "text"},
-    "big_number": {"number": "text", "unit": "text", "caption": "text"},
-    "kpi": {"metrics": {"value": "text", "label": "text", "note": "text"}, "highlight": "int"},
+    "statement": {"support": "text", "decision": "text", "decision_label": "text", "owner": "text", "date": "text",
+                  "points": "list[text]",
+                  "figure": ("object", {"value": "text", "label": "text", "note": "text", "trend": "list[number]",
+                                        "trend_labels": "list[text]"})},
+    "big_number": {"number": "text", "unit": "text", "caption": "text", "visual": "enum:auto,dots,bar,none",
+                   "points": "list[text]"},
+    "kpi": {"metrics": {"value": "text", "label": "text", "note": "text", "trend": "list[number]",
+                        "trend_labels": "list[text]"},
+            "highlight": "int", "decision": "text", "decision_label": "text", "trend_chart": "bool"},
     "bullets": {"items": "list[text]"},
     "compare": {"columns": {"heading": "text", "points": "list[text]"}, "highlight": "int"},
     "process": {"steps": {"label": "text", "detail": "text"}, "highlight": "int"},
@@ -112,7 +153,9 @@ FIELDS = {  # pattern: {field: kind}; kinds: text, int, number, list[text], list
                "highlight": "int"},
     "email": {"from": "text", "to": "text", "subject": "text", "body": "list[text]", "attachment": "text",
               "callouts": {"target": "enum:from,to,subject,body,attachment", "line": "int", "note": "text"}},
-    "kpi_chart": {"metrics": {"value": "text", "label": "text", "note": "text"}, "highlight_metric": "int",
+    "kpi_chart": {"metrics": {"value": "text", "label": "text", "note": "text", "trend": "list[number]",
+                              "trend_labels": "list[text]"},
+                  "highlight_metric": "int",
                   "type": "enum:column,bar,line,pie", "categories": "list[text]",
                   "series": {"name": "text", "values": "list[number]"}, "highlight": "int|text",
                   "number_format": "text", "caption": "text", "alt": "text"},
@@ -122,22 +165,31 @@ FIELDS = {  # pattern: {field: kind}; kinds: text, int, number, list[text], list
              "answer_title": "text"},
     "risks": {"risks": {"risk": "text", "likelihood": "enum:low,medium,high", "impact": "enum:low,medium,high",
                         "mitigation": "text"}, "highlight": "int"},
+    "metrics": {"rows": {"metric": "text", "baseline": "text", "target": "text", "owner": "text", "date": "text"},
+                "rule": "text", "highlight": "int"},
+    "next_steps": {"steps": {"action": "text", "owner": "text", "date": "text"}, "decision": "text",
+                   "decision_label": "text"},
 }
 OPTIONAL_SUB = {"process.detail", "matrix.text", "kpi.note", "kpi_chart.note", "cost_table.detail",
-                "email.line"}  # sub-fields of list items that may be left out
+                "email.line", "kpi.trend", "kpi_chart.trend", "metrics.owner", "metrics.date", "next_steps.owner",
+                "next_steps.date", "timeline.date", "kpi.trend_labels", "kpi_chart.trend_labels", "statement.note", "statement.trend",
+                "statement.trend_labels"}  # sub-fields of list items that may be left out
 REQUIRED = {"title": ["title"], "section": ["title"], "statement": ["title"], "quote": ["quote"],
             "big_number": ["title", "number"], "kpi": ["title", "metrics"], "bullets": ["title", "items"],
             "compare": ["title", "columns"], "process": ["title", "steps"], "timeline": ["title", "events"],
             "chart": ["title", "categories", "series"], "table": ["title", "header", "rows"],
             "image": ["title", "image"], "matrix": ["title", "quadrants"],
-            "email": ["title", "from", "subject", "body"], "kpi_chart": ["title", "metrics", "categories", "series"],
-            "cost_table": ["title", "rows"], "quiz": ["title", "options"], "risks": ["title", "risks"]}
+            "email": ["title", "from", "subject", "body"], "kpi_chart": ["title", "metrics"],
+            "cost_table": ["title", "rows"], "quiz": ["title", "options"], "risks": ["title", "risks"],
+            "metrics": ["title", "rows"], "next_steps": ["title", "steps"]}
 _STRS = {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}
-NOTES_SCHEMA = {"description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources "
-                               "(lists may be a single string; a Q&A item may be a string).", "oneOf": [
+NOTES_SCHEMA = {"description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / "
+                               "qa (lists may be a single string; a Q&A item may be a string).", "oneOf": [
     {"type": "string"},
     {"type": "object", "additionalProperties": False, "properties": {
         "key_fact": {"type": "string"}, "facts": _STRS, "pitfalls": _STRS, "sources": _STRS,
+        "assumptions": dict(_STRS, description="What the slide assumes beyond the brief (ratings, targets, dates, "
+                                               "owners); written into the notes under ASSUMPTIONS:."),
         "qa": {"oneOf": [{"type": "object"}, {"type": "array", "items": {"oneOf": [
             {"type": "string"},
             {"type": "object", "additionalProperties": False, "required": ["q"],
@@ -145,6 +197,12 @@ NOTES_SCHEMA = {"description": "Speaker notes: a string, or key_fact / facts / q
 
 FLOOR = 27        # body text never shrinks below this (1440-pt grid; scaled by F())
 LABEL_MIN = 24    # short labels (< 4 words) may go this small
+FIGURE_W, FIGURE_H, FIGURE_TREND_H = 440, 320, 400  # the figure tile beside a decision (with a trend: taller)
+POINTS_W = 520    # the column of point cards beside a statement
+SHARE_W = 470     # the dot grid or bar beside a big number that is a share
+TREND_MAX = 200   # the tallest a tile's trend (figures, bars, periods) grows
+TREND_LABEL = 24  # the figures and periods on a tile's trend bars: the label floor, never smaller
+TREND_BARS = 72   # the shortest a tile's bars may be; with less room the trend moves to the note, never tiny
 RAMP = [0, 0.35, -0.3, 0.6, -0.5, 0.75]  # shades of the accent for series 1..6
 CHART_TYPES = {"column": XL_CHART_TYPE.COLUMN_CLUSTERED, "bar": XL_CHART_TYPE.BAR_CLUSTERED,
                "line": XL_CHART_TYPE.LINE_MARKERS, "pie": XL_CHART_TYPE.PIE}
@@ -152,16 +210,22 @@ PATTERNS = {"title": "Title", "section": "Section", "statement": "Statement", "b
             "kpi": "Kpi", "bullets": "Bullets", "compare": "Compare", "process": "Process",
             "timeline": "Timeline", "quote": "Quote", "chart": "Chart", "table": "Table", "image": "Image",
             "matrix": "Matrix", "email": "Email", "kpi_chart": "KpiChart", "cost_table": "CostTable",
-            "quiz": "Quiz", "risks": "Risks"}  # pattern -> kSlidePatterns method
-NUMERIC_KEYS = {"values", "highlight", "highlight_row", "highlight_metric", "focus_x", "focus_y", "amount", "line",
+            "quiz": "Quiz", "risks": "Risks", "metrics": "Metrics", "next_steps": "NextSteps"}  # pattern -> kSlidePatterns method
+NUMERIC_KEYS = {"values", "trend", "highlight", "highlight_row", "highlight_metric", "focus_x", "focus_y", "amount", "line",
                 "correct"}
 HIGHLIGHT_ITEMS = {"kpi": "metrics", "compare": "columns", "process": "steps", "timeline": "events",
                    "matrix": "quadrants", "chart": "categories", "kpi_chart": "categories", "cost_table": "rows",
-                   "risks": "risks"}
+                   "risks": "risks", "metrics": "rows"}
 NEEDED_LIST = {"kpi": "metrics", "process": "steps", "timeline": "events", "compare": "columns",
-               "matrix": "quadrants", "chart": "series", "table": "rows", "bullets": "items", "email": "body",
-               "kpi_chart": "series", "cost_table": "rows", "quiz": "options", "risks": "risks"}
+               "matrix": "quadrants", "chart": "series", "table": "rows", "bullets": "items", "email": "body", "cost_table": "rows", "quiz": "options", "risks": "risks", "metrics": "rows",
+               "next_steps": "steps"}
+LAYOUT_CODES = {"text_overflow", "kicker_title_overlap", "tile_text_below_floor"}  # lint findings = unfit text
+NO_CHROME = {"title", "section"}            # no footer or page number on covers and dividers
+NO_KICKER = {"title", "section", "quote"}   # their own title treatment
 LEVELS = {"high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
+MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+MEASURABLE = re.compile(r"\d|[<>\u2264\u2265=\u00b1]")  # a success target needs a number, date or comparison
+UNIT_GLUE = re.compile(r"(?<=\d) (?=(?:%|\u2030|pp\b|pt\b|[kKMB]\b|bn\b|[kM]?(?:USD|EUR|SEK|GBP)\b|x\b))")
 
 
 class kSpecSchema:
@@ -225,8 +289,14 @@ class kSpecSchema:
                                                            "description": "Stable slide id; keep it when the content changes."},
                          "title": {"type": ["string", "number"], "maxLength": Lim.get("title", 90),
                                    "description": "Write it as a claim, not a topic."},
-                         "notes": NOTES_SCHEMA}
+                         "notes": NOTES_SCHEMA,
+                         "kicker": {"type": "string", "maxLength": KICKER_MAX,
+                                    "description": "Small label above the title (at most three words); defaults "
+                                                   "to the current section's eyebrow; \"\" for none."}}
                 for Name, Kind in Fields.items():
+                    Single = isinstance(Kind, tuple)  # ("object", {...}): one object, not a list of them
+                    if Single:
+                        Kind = Kind[1]
                     if isinstance(Kind, dict):
                         Item = {"type": "object", "additionalProperties": False, "properties": {}, "required": []}
                         for Sub, Sk in Kind.items():
@@ -239,7 +309,7 @@ class kSpecSchema:
                             if Sk in ("text", "list[text]", "list[number]", "number") \
                                     and f"{Pat}.{Sub}" not in OPTIONAL_SUB:
                                 Item["required"].append(Sub)
-                        Schema = {"type": "array", "items": Item}
+                        Schema = Item if Single else {"type": "array", "items": Item}
                     else:
                         Star = Lim.get(f"{Name}.*")
                         Schema = kSpecSchema.KindSchema(Kind, Star if Kind.startswith("list") else Lim.get(Name))
@@ -260,6 +330,18 @@ class kSpecSchema:
                     "$schema": {"type": "string"},
                     "direction": {"enum": [D["id"] for D in kSpecSchema.Directions()]},
                     "template": {"type": "string", "description": ".pptx or .potx, relative to the spec"},
+                    "footer": {"type": "string", "maxLength": 70,
+                               "description": "Footer text on every content slide (not on title and section slides)."},
+                    "page_numbers": {"type": "boolean", "description": "Page numbers on content slides (default true)."},
+                    "kickers": {"type": "boolean", "description": "Kicker labels above titles (default true)."},
+                    "sources": dict(_STRS, description="Deck-level sources (e.g. [\"the brief\"]): written into "
+                                                       "the notes of every content slide whose notes name none."),
+                    "facts": {"type": "object", "description": "Named numbers from the brief (a number or a list of "
+                              "numbers, e.g. {\"revenue_q\": [4.1, 4.6, 5.2, 5.9]}): derived figures in the text are "
+                              "checked against them, and {sum:revenue_q}, {average:...}, {change:...}, {first:...}, "
+                              "{last:...}, {count:...} or {name} (a single number) in any text are computed from them.",
+                              "additionalProperties": {"oneOf": [{"type": "number"}, {"type": "array", "minItems": 1,
+                                                                                       "items": {"type": "number"}}]}},
                     "slides": {"type": "array", "minItems": 1, "items": {"oneOf": Variants}}}}
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSpecSchema.SpecSchema")
@@ -309,12 +391,18 @@ class kSpecCheck:
                     continue
                 if Pat not in ("title", "quote", "section") and not Sl.get("title"):
                     Errors.append(f"slide {I} ({Pat}): needs a 'title' - write it as a claim")
+                Kick = str(Sl.get("kicker") or "")
+                if len(Kick) > KICKER_MAX or len(Kick.split()) > 3:
+                    Errors.append(f"slide {I} ({Pat}): 'kicker' is a label - at most 3 words and {KICKER_MAX} "
+                                  f"characters: '{Kick[:40]}'")
                 for Key, Lim in LIMITS[Pat].items():
                     for Pth, Val in kSpecCheck.Values(Sl, Key.split(".")):
                         if isinstance(Lim, tuple):
                             N = len(Val) if isinstance(Val, list) else 0
                             if not Lim[0] <= N <= Lim[1]:
-                                Errors.append(f"slide {I} ({Pat}): '{Pth}' has {N} items, needs {Lim[0]}-{Lim[1]}")
+                                Hint = COUNT_HINTS.get(f"{Pat}.{Key}")
+                                Errors.append(f"slide {I} ({Pat}): '{Pth}' has {N} items, needs {Lim[0]}-{Lim[1]}"
+                                              + (f" - {Hint}" if Hint else ""))
                         elif isinstance(Val, str) and len(Val) > Lim:
                             Errors.append(f"slide {I} ({Pat}): '{Pth}' is {len(Val)} characters, max {Lim}: '{Val[:40]}…'")
                 if Pat in NEEDED_LIST and NEEDED_LIST[Pat] not in Sl:
@@ -337,6 +425,11 @@ class kSpecCheck:
                         if len(Head) > Max:
                             Errors.append(f"slide {I} (compare): 'columns.{C}.heading' is {len(Head)} characters; "
                                           f"with {len(Cols)} columns the limit is {Max}: '{Head[:40]}'")
+                if Pat == "timeline":
+                    Dated = [isinstance(E, dict) and bool(E.get("date")) for E in Sl.get("events", [])]
+                    if any(Dated) and not all(Dated):
+                        Errors.append(f"slide {I} (timeline): give every event a 'date', or none (undated stages are "
+                                      "drawn as numbered steps)")
                 if Pat == "quiz" and not any(isinstance(O, dict) and O.get("correct") is True
                                              for O in Sl.get("options", [])):
                     Errors.append(f"slide {I} (quiz): mark at least one option \"correct\": true")
@@ -351,6 +444,26 @@ class kSpecCheck:
                                                                        0 <= Ln < len(Sl.get("body", []))):
                             Errors.append(f"slide {I} (email): callout {C + 1} line {Ln!r} is not a body paragraph "
                                           f"(0-based, {len(Sl.get('body', []))} paragraphs)")
+                for Mi, Mt in enumerate(Sl.get("metrics", []) + ([Sl["figure"]] if isinstance(Sl.get("figure"), dict)
+                                                                   else [])):
+                    Tl = Mt.get("trend_labels") if isinstance(Mt, dict) else None
+                    if Tl and len(Tl) not in (2, len(Mt.get("trend") or [])):
+                        Errors.append(f"slide {I} ({Pat}): trend_labels of metric {Mi} has {len(Tl)} labels; give one "
+                                      f"per trend value ({len(Mt.get('trend') or [])}) or two (first and last)")
+                    if Tl and not Mt.get("trend"):
+                        Errors.append(f"slide {I} ({Pat}): trend_labels of metric {Mi} need a 'trend'")
+                if Pat == "statement" and Sl.get("figure") and not Sl.get("decision"):
+                    Errors.append(f"slide {I} (statement): 'figure' goes beside a 'decision'; without one use "
+                                  "'points' or a big_number slide")
+                if Pat == "statement" and Sl.get("points") and Sl.get("decision"):
+                    Errors.append(f"slide {I} (statement): 'points' are for a statement without 'decision'; a "
+                                  "decision takes 'support' and 'figure'")
+                if Pat == "kpi_chart" and "series" not in Sl and not any(
+                        isinstance(Mt, dict) and Mt.get("trend") for Mt in Sl.get("metrics", [])):
+                    Errors.append(f"slide {I} (kpi_chart): give 'categories' and 'series', or a 'trend' on a metric "
+                                  "for the chart to draw")
+                if Pat == "kpi_chart" and "series" in Sl and "categories" not in Sl:
+                    Errors.append(f"slide {I} (kpi_chart): 'series' needs 'categories'")
                 if Pat == "kpi_chart":
                     Hm = Sl.get("highlight_metric")
                     if Hm is not None and not (isinstance(Hm, int) and 0 <= Hm < len(Sl.get("metrics", []))):
@@ -371,15 +484,111 @@ class kSpecCheck:
                 if ItemsKey and isinstance(Hi, int) and not 0 <= Hi < len(Sl.get(ItemsKey, [])):
                     Errors.append(f"slide {I} ({Pat}): highlight {Hi} is out of range (0-based, "
                                   f"{len(Sl.get(ItemsKey, []))} items)")
-                if Pat in ("chart", "kpi_chart"):
+                if Pat in ("chart", "kpi_chart") and "series" in Sl:
                     Cats = len(Sl.get("categories", []))
                     for S in Sl.get("series", []):
                         if len(S.get("values", [])) != Cats:
                             Errors.append(f"slide {I} ({Pat}): series '{S.get('name')}' has {len(S.get('values', []))} "
                                           f"values for {Cats} categories")
+            if len(str(Spec.get("footer") or "")) > 70:
+                Errors.append("spec: 'footer' is over 70 characters; keep it to the deck name and audience")
             return Errors
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSpecCheck.CheckSpec")
+            return []
+
+    @staticmethod
+    def SlideSet(Text, Count):
+        """The spec slide numbers (1-based) that '--slides 1,3,5-7' names; a number outside the deck, or a part
+        that is not a number or a range, is an input mistake."""
+        if kS.ErrorMode:
+            return set()
+        try:
+            Out = set()
+            for Part in str(Text).replace(" ", "").split(","):
+                Range = re.fullmatch(r"(\d+)(?:-(\d+))?", Part)
+                if not Range:
+                    raise ToolInputException(f"--slides: '{Part}' is not a slide number or a range (e.g. 1,3,5-7)")
+                Lo, Hi = int(Range.group(1)), int(Range.group(2) or Range.group(1))
+                if not 1 <= Lo <= Hi <= Count:
+                    raise ToolInputException(f"--slides: '{Part}' is outside the deck (slides 1-{Count})")
+                Out |= set(range(Lo, Hi + 1))
+            return Out
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSpecCheck.SlideSet")
+            return set()
+
+    @staticmethod
+    def ForSlides(Messages, Only):
+        """The messages that concern the slides being built: all of them, or (with --slides) those about the
+        chosen slides and the deck as a whole."""
+        if kS.ErrorMode:
+            return []
+        try:
+            if not Only:
+                return Messages
+            Out = []
+            for Msg in Messages:
+                Found = re.search(r"\bslide (\d+)\b|^slides/(\d+)", Msg)
+                No = int(Found.group(1) or Found.group(2)) + (1 if Found and Found.group(2) else 0) if Found else 0
+                if not Found or No in Only:
+                    Out.append(Msg)
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSpecCheck.ForSlides")
+            return Messages
+
+    @staticmethod
+    def MonthIndex(Text):
+        """0-11 for a date that is just a month name ('Mar', 'April', 'Mar 2027'), else None."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Word = str(Text).strip().split(" ")[0].lower()[:3] if str(Text).strip() else ""
+            return MONTHS.index(Word) if Word in MONTHS else None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSpecCheck.MonthIndex")
+            return None
+
+    @staticmethod
+    def Warnings(Spec):
+        """Content the spec can build but a reader will question, as messages: a success target that is not
+        measurable, a monthly timeline that skips a month. They do not stop the build."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Out = []
+            for I, Sl in enumerate(Spec.get("slides", []), 1):
+                Pat = Sl.get("pattern") if isinstance(Sl, dict) else None
+                if Pat == "metrics":
+                    for R, Row in enumerate(Sl.get("rows", [])):
+                        Target = str(Row.get("target", "")) if isinstance(Row, dict) else ""
+                        if Target and not MEASURABLE.search(Target):
+                            Out.append(f"slide {I} (metrics): target '{Target}' of '{Row.get('metric', R)}' is not "
+                                       "measurable - give a number, percent, date or comparison (e.g. 'below 30 %', "
+                                       "'>= 95 % of Q4', '<= current rate')")
+                if Pat == "statement" and not Sl.get("decision") and not Sl.get("points") and I > 1:
+                    Out.append(f"slide {I} (statement): a claim with " + ("only a support line" if Sl.get("support")
+                               else "nothing under it") + " reads as sparse - add 'points' (2-3 short facts, "
+                               "steps or reasons) beside it")
+                if Pat == "big_number" and not Sl.get("points") and not kSlidePatterns.Share(Sl) and I > 1:
+                    Out.append(f"slide {I} (big_number): one number and one caption - add 'points' (what it costs, "
+                               "what drives it) or state it as a share ('41' + '%', '14/20') for a dot grid")
+                if Pat == "timeline":
+                    Months = [kSpecCheck.MonthIndex(E.get("date", "")) for E in Sl.get("events", [])
+                              if isinstance(E, dict)]
+                    if len(Months) >= 3 and None not in Months:
+                        Gaps = [(B - A) % 12 for A, B in zip(Months, Months[1:])]
+                        if Gaps.count(1) >= len(Gaps) - 1 and max(Gaps) > 1:  # monthly, but for one jump
+                            J = Gaps.index(max(Gaps))
+                            Out.append(f"slide {I} (timeline): the months jump from {MONTHS[Months[J]].title()} to "
+                                       f"{MONTHS[Months[J + 1]].title()}; add the missing month or say why in "
+                                       "the notes")
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSpecCheck.Warnings")
             return []
 
     @staticmethod
@@ -482,16 +691,37 @@ class kSpecLoader:
             return
         try:
             Look = Spec.get("template") or Spec.get("direction", "clean-corporate")
-            print(f"Deck plan ({len(Spec['slides'])} slides, look: {Look})\n")
+            print(f"Deck plan ({len(Spec['slides'])} slides, look: {Look})")
+            if Spec.get("footer"):
+                print(f"Footer: {Spec['footer']}" + ("" if Spec.get("page_numbers", True) else " (no page numbers)"))
+            if Spec.get("sources"):
+                Src = [Spec["sources"]] if isinstance(Spec["sources"], str) else Spec["sources"]
+                print(f"Sources (every slide without its own): {'; '.join(str(X) for X in Src)}")
+            for Name, Val in kFigures.Facts(Spec).items():
+                Shown = ", ".join(f"{X:g}" for X in Val) + f" (sum {kFigures.Compute('sum', Val, None)})" \
+                    if isinstance(Val, list) else f"{Val:g}"
+                print(f"Fact {Name}: {Shown}")
+            print()
+            Section = ""
             for N, Sl in enumerate(Spec["slides"], 1):
                 Title = Sl.get("title") or Sl.get("quote", "")[:60]
                 Notes = Sl.get("notes")
                 Key = Notes.get("key_fact") if isinstance(Notes, dict) else (Notes or "").split("\n")[0]
-                print(f"{N:>2}. [{Sl.get('pattern')}] {Title}")
+                if Sl.get("pattern") == "section":
+                    Section = Sl.get("kicker") or Sl.get("eyebrow") or ""
+                Kick = Sl.get("kicker", Section) if Spec.get("kickers", True) else ""
+                Kick = f"{Kick.upper()} / " if Kick and Sl.get("pattern") not in NO_KICKER else ""
+                print(f"{N:>2}. [{Sl.get('pattern')}] {Kick}{Title}")
+                if Sl.get("decision"):
+                    print(f"      DECISION: {Sl['decision'][:100]}")
                 if Key:
                     print(f"      {Key[:110]}")
                 else:
                     print("      (no speaker notes yet)")
+                Assume = Notes.get("assumptions") if isinstance(Notes, dict) else None
+                if Assume:
+                    Assume = [Assume] if isinstance(Assume, str) else Assume
+                    print(f"      ASSUMES: {'; '.join(str(X) for X in Assume)[:104]}")
                 if Sl.get("pattern") == "quiz" and Sl.get("reveal") == "slide":
                     print("      + an answer slide after it")
         except Exception as e:
@@ -532,17 +762,19 @@ class kDeckDesign:
 
     @staticmethod
     def QuietAndMuted(D):
-        """The quiet card colour (a light mix of text into the background) and the muted text colour,
-        chosen so muted text stays at 4.5:1 or better on both the background and the quiet card."""
+        """The quiet card colour (the background with a breath of the accent and the text) and the muted text
+        colour, chosen so muted text stays at 4.5:1 or better on both the background and the card, and accent
+        figures at 3:1 or better on the card."""
         if kS.ErrorMode:
             return None, None
         try:
             Muted = D["muted"]
-            for T in (0.12, 0.10, 0.08, 0.06, 0.05):
-                Quiet = kDeckDesign.Mix(D["background"], D["text"], T)
-                if kRules.ContrastRatio(Muted, Quiet) >= 4.5:
+            Tint = kDeckDesign.Mix(D["background"], D["accent"], 0.07)  # cards carry a breath of the accent, not grey
+            for T in (0.05, 0.04, 0.03, 0.02, 0.0):
+                Quiet = kDeckDesign.Mix(Tint, D["text"], T)
+                if kRules.ContrastRatio(Muted, Quiet) >= 4.5 and kRules.ContrastRatio(D["accent"], Quiet) >= 3:
                     return Quiet, Muted
-            Quiet = kDeckDesign.Mix(D["background"], D["text"], 0.06)
+            Quiet = kDeckDesign.Mix(Tint, D["text"], 0.03)
             for K in range(1, 11):  # darken (or lighten, on dark themes) the muted colour towards the text colour
                 Muted = kDeckDesign.Mix(D["muted"], D["text"], K / 10)
                 if kRules.ContrastRatio(Muted, Quiet) >= 4.5:
@@ -661,7 +893,8 @@ class kSlideText:
             Out = []
             if Notes.get("key_fact"):
                 Out.append(f"KEY FACT: {Notes['key_fact']}")
-            for Label, Key in (("FACTS", "facts"), ("PITFALLS", "pitfalls"), ("SOURCES", "sources")):
+            for Label, Key in (("FACTS", "facts"), ("ASSUMPTIONS", "assumptions"), ("PITFALLS", "pitfalls"),
+                               ("SOURCES", "sources")):
                 Items = Notes.get(Key)
                 if Items:
                     Items = [Items] if isinstance(Items, str) else Items
@@ -705,6 +938,12 @@ class kDeckBuilder:
             self.Problems = []    # text that could not be made to fit
             self.NoNotes = []     # slides the spec gave no speaker notes
             self.SlideNo, self.SlideId = 0, ""
+            self.Section = ""     # the current section's eyebrow: the default kicker
+            self.TitleInk = None  # top of the title's text (1440 grid) on the slide being built, for the kicker
+            self.Kicker = ""      # the kicker of the slide being built, so the title leaves room for it
+            self.Extra = []       # notes a pattern adds while it lays the slide out (a trend it had no room for)
+            self.Numbers = []     # the deck's slide number of each slide built (--slides builds only some)
+            self.KickerWidth = 0  # a pattern with a column beside its claim (a statement's points) narrows the kicker
             self._kx = self._ky = 1.0  # template mode: slide size / 1440 x 810, so the grid follows the template
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.__init__")
@@ -797,7 +1036,7 @@ class kDeckBuilder:
             K = self.TypeScale()
             Family = self.Major if Heading else self.Minor
             Cur = Size
-            while Cur > Smallest and max(kMeasure.TextWidth(str(T), Family, Cur * K, Bold or Heading)
+            while Cur > Smallest and max(kMeasure.SafeWidth(str(T), Family, Cur * K, Bold or Heading)
                                          for T in Texts) > Wd * 0.9 * self._kx:  # room for renderers' wider fonts
                 Cur -= 2
             return Cur
@@ -819,6 +1058,22 @@ class kDeckBuilder:
             return Height / self._ky + Size * 0.3
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.Need")
+            return 0.0
+
+    def Wrapped(self, Text, Size, Wd, Heading=False, Bold=False):
+        """Height (1440 grid) one paragraph really takes at Size in a box Wd wide: its wrapped lines (in the wider
+        of its own font and the face LibreOffice substitutes) times the line height, plus the box's insets - so a
+        paragraph cut by a few words gets a shorter box, unlike Need's fixed slack."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            K = self.TypeScale()
+            Family = self.Major if Heading else self.Minor
+            Lines = kMeasure.LooseLines(UNIT_GLUE.sub(NBSP, str(Text)), Family, Size * K, (Wd - 1) * self._kx,
+                                        Bold or Heading)
+            return Lines * Size * K * LINE_HEIGHT / self._ky + 6
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.Wrapped")
             return 0.0
 
     def NewSlide(self, Sl, N):
@@ -844,14 +1099,138 @@ class kDeckBuilder:
             kS.GlobalErrorHandler(e, "kDeckBuilder.NewSlide")
             return None
 
-    def Title(self, S, Text, Size=None, Top=TITLE_TOP, Height=TITLE_H, Align=PP_ALIGN.LEFT, Colour=TEXT):
-        """Fill and place the slide's title placeholder."""
+    def BalancedWidth(self, Text, Size, Wd, Heading=True):
+        """The width (1440 grid) at which Text wraps without a lone last word: Wd itself when it fits one line
+        or its last line already has two words, else the narrowest width that keeps the line count and moves a
+        second word down (a balanced title instead of a widow)."""
+        if kS.ErrorMode:
+            return Wd
+        try:
+            Family = self.Major if Heading else self.Minor
+            K = self.TypeScale()
+            Lines = kMeasure.LineWords(str(Text), Family, Size * K, (Wd - 1) * self._kx, True)
+            Wide = kMeasure.LineWords(str(Text), Family, Size * K, (Wd + 2) * self._kx, True)  # a renderer's insets
+            if (len(Lines) < 2 or len(Lines[-1]) >= 2) and (len(Wide) < 2 or len(Wide[-1]) >= 2):
+                return Wd
+            Try = Wd
+            while Try > Wd * 0.55:
+                Try -= 8
+                Now = kMeasure.LineWords(str(Text), Family, Size * K, (Try - 1) * self._kx, True)
+                if len(Now) > len(Lines):
+                    break
+                if len(Now[-1]) >= 2:
+                    return Try - 16  # a little slack so a wider renderer keeps the same breaks
+            return Wd
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.BalancedWidth")
+            return Wd
+
+    def TitleLines(self, Text, Size, Wd, Loose=False):
+        """How many lines a title takes at Size in a box Wd wide (1440 grid), from the font's metrics; Loose: in
+        the widest renderer (the face LibreOffice substitutes when the theme font is not installed)."""
+        if kS.ErrorMode:
+            return 1
+        try:
+            if Loose:
+                return kMeasure.LooseLines(str(Text), self.Major, Size * self.TypeScale(), (Wd - 16) * self._kx, True)
+            return max(1, len(kMeasure.LineWords(str(Text), self.Major, Size * self.TypeScale(), (Wd - 16) * self._kx,
+                                                 True)))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.TitleLines")
+            return 1
+
+    def Widow(self, Text, Size, Wd):
+        """True when the title, wrapped in a box Wd wide in its own font or in the face LibreOffice substitutes
+        for it (whatever fonts this machine has), leaves one word on its last line."""
+        if kS.ErrorMode:
+            return False
+        try:
+            Sub = kMeasure.Substitute(self.Major)
+            for Family in (self.Major, Sub) if Sub else (self.Major,):
+                for Inner in (Wd - 18, Wd - 12):  # either side of the renderers' insets
+                    Lines = kMeasure.LineWords(str(Text), Family, Size * self.TypeScale(), Inner * self._kx, True)
+                    if len(Lines) >= 2 and len(Lines[-1]) == 1:
+                        return True
+            return False
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.Widow")
+            return False
+
+    def TitleFits(self, Room, Size, Lines):
+        """True when Lines title lines at Size fit Room (1440 grid; None = any height)."""
+        if kS.ErrorMode:
+            return True
+        try:
+            return Room is None or Lines * Size * self.TypeScale() * LINE_HEIGHT / self._ky <= Room * 1.02
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.TitleFits")
+            return True
+
+    def AgreeLines(self, Text, Size, Wd, Room=None):
+        """(size, width, lines) at which the title wraps to the same number of lines in its own font and in the
+        face LibreOffice substitutes for it, so the kicker above it sits right in both: a size up to 4 pt smaller,
+        else a narrower box (the own font wraps like the substitute), else a smaller size at which the loose count
+        still fits. Every answer is measured to fit Room (the title's height, 1440 grid) and to leave no widow."""
+        if kS.ErrorMode:
+            return Size, Wd, 1
+        try:
+            Own, Loose = self.TitleLines(Text, Size, Wd), self.TitleLines(Text, Size, Wd, True)
+            if Own == Loose:
+                return Size, Wd, Own
+            for Try in (Size - 2, Size - 4):
+                if Try >= 40 and self.TitleLines(Text, Try, Wd) == self.TitleLines(Text, Try, Wd, True) \
+                        and not self.Widow(Text, Try, Wd) \
+                        and self.TitleFits(Room, Try, self.TitleLines(Text, Try, Wd)):
+                    return Try, Wd, self.TitleLines(Text, Try, Wd)
+            Nw = Wd
+            while Nw > Wd * 0.6:
+                Nw -= 16
+                Own, Loose = self.TitleLines(Text, Size, Nw), self.TitleLines(Text, Size, Nw, True)
+                if Own == Loose and not self.Widow(Text, Size, Nw) and self.TitleFits(Room, Size, Own):
+                    return Size, Nw, Own
+                if Own > Loose:
+                    break
+            Try = Size  # no agreement that fits: the largest size whose loose wrap fits the room without a widow
+            while Room is not None and Try > 36:
+                Lines = max(self.TitleLines(Text, Try, Wd), self.TitleLines(Text, Try, Wd, True))
+                if self.TitleFits(Room, Try, Lines) and not self.Widow(Text, Try, Wd):
+                    return Try, Wd, Lines
+                Try -= 2
+            return Size, Wd, max(self.TitleLines(Text, Size, Wd), self.TitleLines(Text, Size, Wd, True))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.AgreeLines")
+            return Size, Wd, 1
+
+    def Title(self, S, Text, Size=None, Top=TITLE_TOP, Height=TITLE_H, Align=PP_ALIGN.LEFT, Colour=TEXT,
+              Width=None):
+        """Fill and place the slide's title placeholder: fitted, balanced (no lone last word), bottom-anchored."""
         if kS.ErrorMode:
             return None
         try:
-            Size = self.Fit([Text], Size or SIZE["title"], W - 2 * M - 15, Height - 8, Heading=True, What="title")
+            Text = UNIT_GLUE.sub(NBSP, str(Text))  # '44 %' never breaks between the number and its unit
+            Box = Width or W - 2 * M
+            Head = Top == TITLE_TOP  # a content slide's title: it may take two lines and has the kicker above it
+            Room = Height - 8 + (TITLE_DROP if Head else 0)
+            Size = self.Fit([Text], Size or SIZE["title"], Box - 15, Room, Heading=True, What="title")
+            Wd = self.BalancedWidth(Text, Size, Box - 15) + 15
+            if Wd < Box:  # Fit again at the balanced width: the same size must still fit the height
+                Size = self.Fit([Text], Size, Wd - 15, Room, Heading=True, What="title")
+            Lines = self.TitleLines(Text, Size, Wd)
+            if Head:  # both renderers must wrap it alike, or a bottom-anchored title grows up into its kicker
+                Size, Wd, Lines = self.AgreeLines(Text, Size, Wd, Room)
+            Bottom = Top + Height + (TITLE_DROP if Head and Lines > 1 else 0)
+            # the kicker and the title are one block: measured with the line height and the line count of the
+            # loosest renderer, the title's ink must leave room for the kicker above it, or the title shrinks
+            while Head and self.Kicker and Size > 36 and \
+                    Bottom - 4 - Lines * Size * LOOSE_LINE - KICKER_GAP - KICKER_H < KICKER_TOP:
+                Size -= 2
+                if self.Widow(Text, Size, Wd):  # the smaller size wraps differently: balance it again
+                    Wd = min(Box, self.BalancedWidth(Text, Size, Box - 15) + 15)
+                Lines = self.TitleLines(Text, Size, Wd, True)
+                Bottom = Top + Height + (TITLE_DROP if Lines > 1 else 0)
             T = S.shapes.title
-            T.left, T.top, T.width, T.height = self.X(M), self.Y(Top), self.X(W - 2 * M), self.Y(Height)
+            T.left, T.top, T.width, T.height = self.X(M), self.Y(Top), self.X(Wd), self.Y(Bottom - Top)
+            self.TitleInk = Bottom - 4 - Lines * Size * LOOSE_LINE - KICKER_GAP if Head else None
             T.text = Text
             Tf = T.text_frame
             Tf.word_wrap = True
@@ -876,7 +1255,7 @@ class kDeckBuilder:
         if kS.ErrorMode:
             return None
         try:
-            Lines = Txt if isinstance(Txt, list) else [Txt]
+            Lines = [UNIT_GLUE.sub(NBSP, str(X)) for X in (Txt if isinstance(Txt, list) else [Txt])]
             Size = self.Fit(Lines, Size, Wd, Ht, Heading=Heading, Bold=Bold, What=f"'{Name}'", Spacing=Spacing)
             Tb = S.shapes.add_textbox(self.X(Lx), self.Y(Ty), self.X(Wd), self.Y(Ht))
             Tb.name = Name
@@ -934,6 +1313,78 @@ class kDeckBuilder:
             kS.GlobalErrorHandler(e, "kDeckBuilder.ShapeText")
             return None
 
+    def Backdrop(self, S, Name, Colour):
+        """A full-slide panel behind everything else on the slide (the title placeholder included)."""
+        if kS.ErrorMode:
+            return None
+        try:
+            R = self.Rect(S, Name, 0, 0, W, H, Colour)
+            Tree = S.shapes._spTree
+            Tree.remove(R._element)
+            Tree.insert(2, R._element)  # after nvGrpSpPr and grpSpPr: the first drawn, so the back of the stack
+            return R
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.Backdrop")
+            return None
+
+    def Card(self, S, Name, Lx, Ty, Wd, Ht, On=False, Edge="top", EdgeOn=None):
+        """The card language: a tinted card with an accent edge (top or left); the highlighted one filled with
+        the accent (its text then goes in the background colour). EdgeOn marks the lead card by its edge only."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Card = self.Rect(S, Name, Lx, Ty, Wd, Ht, ACCENT if On else QUIET)
+            if not On and Edge:
+                Lead = ACCENT if EdgeOn or EdgeOn is None else SOFT
+                if Edge == "left":
+                    self.Rect(S, f"{Name}Edge", Lx, Ty, EDGE, Ht, Lead)
+                else:
+                    self.Rect(S, f"{Name}Edge", Lx, Ty, Wd, EDGE, Lead)
+            return Card
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.Card")
+            return None
+
+    def KickerFor(self, Sl):
+        """The kicker this slide shows ("" for none): its own, else the current section's eyebrow."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            if not self.Spec.get("kickers", True) or Sl.get("pattern") in NO_KICKER:
+                return ""
+            return str(Sl.get("kicker", self.Section) or "")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.KickerFor")
+            return ""
+
+    def Chrome(self, S, Sl, N):
+        """The deck's furniture on a content slide: the kicker above the title, the footer and the page number."""
+        if kS.ErrorMode:
+            return
+        try:
+            Pat = Sl.get("pattern")
+            if Pat == "section":
+                self.Section = str(Sl.get("kicker") or Sl.get("eyebrow") or "")
+            if Pat in NO_CHROME:
+                return
+            Kick = self.KickerFor(Sl)
+            if Kick and self.TitleInk is not None:
+                Tb = self.Text(S, "Kicker", Kick.upper(), M, max(KICKER_TOP, self.TitleInk - KICKER_H),
+                               self.KickerWidth or W - 2 * M, KICKER_H,
+                               KICKER_SIZE, ACCENT, Bold=True, Anchor=MSO_ANCHOR.BOTTOM)
+                for R in Tb.text_frame.paragraphs[0].runs:
+                    R.font._rPr.set("spc", "200")  # tracked caps read as a label, not a sentence
+            Foot = str(self.Spec.get("footer") or "")
+            if Foot:
+                self.Text(S, "Footer", Foot, M, FOOTER_TOP, W - 2 * M - 160, FOOTER_H, FOOTER_SIZE, MUTED,
+                          Anchor=MSO_ANCHOR.MIDDLE)
+            if self.Spec.get("page_numbers", True):
+                self.Text(S, "PageNumber", str(N), W - M - 120, FOOTER_TOP, 120, FOOTER_H, FOOTER_SIZE, MUTED,
+                          Bold=True, Align=PP_ALIGN.RIGHT, Anchor=MSO_ANCHOR.MIDDLE)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.Chrome")
+            return
+
     def Rect(self, S, Name, Lx, Ty, Wd, Ht, Colour=QUIET, Shape=MSO_SHAPE.RECTANGLE, Line=None):
         """A named, theme-filled shape with no shadow; no outline unless Line (a theme colour) is given."""
         if kS.ErrorMode:
@@ -989,7 +1440,9 @@ class kDeckBuilder:
         if kS.ErrorMode:
             return
         try:
-            Text = "\n\n".join(X for X in (kSlideText.NotesText(Sl.get("notes")), Extra) if X)
+            Text = "\n\n".join(X for X in (kSlideText.NotesText(Sl.get("notes")), Extra, "\n".join(self.Extra),
+                                            self.DeckSources(Sl)) if X)
+            self.Extra = []
             if Text.strip():
                 S.notes_slide.notes_text_frame.text = Text
             if not kSlideText.NotesText(Sl.get("notes")).strip():
@@ -998,8 +1451,46 @@ class kDeckBuilder:
             kS.GlobalErrorHandler(e, "kDeckBuilder.Notes")
             return
 
-    def Build(self, Out):
-        """Build every slide and save to Out. Returns the slide count (fit problems are in self.Problems)."""
+    def LayoutCheck(self, Out):
+        """Lint the saved deck for the layout findings the builder answers for - text running out of its card,
+        a kicker on the title, tile text below the label floor - and report each one as unfit text (exit 3),
+        so the builder and lint_deck.py never disagree about a box."""
+        if kS.ErrorMode:
+            return
+        try:
+            from lint_deck import kLintDeck  # the same checks lint_deck.py runs, in this process
+            _, Found = kLintDeck.Lint(Out, 18.0, 12)
+            for I in (Found.Items if Found else []):
+                if I["code"] in LAYOUT_CODES:
+                    Shape = f" [{I['shape']}]" if I.get("shape") else ""
+                    No = self.Numbers[I["slide"] - 1] if 0 < I["slide"] <= len(self.Numbers) else I["slide"]
+                    self.Problems.append(f"slide {No}: {I['code']}{Shape} {I['message']}")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.LayoutCheck")
+            return
+
+    def DeckSources(self, Sl):
+        """The deck-level 'sources' as a SOURCES: section, for a content slide whose own notes name none."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Src = self.Spec.get("sources")
+            if not Src or Sl.get("pattern") in NO_CHROME:
+                return ""
+            Notes = Sl.get("notes")
+            if isinstance(Notes, dict) and Notes.get("sources"):
+                return ""
+            if isinstance(Notes, str) and re.search(r"source", Notes, re.I):
+                return ""
+            Src = [Src] if isinstance(Src, str) else Src
+            return "SOURCES:\n" + "\n".join(f"- {X}" for X in Src)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.DeckSources")
+            return ""
+
+    def Build(self, Out, Only=None):
+        """Build every slide (or only the spec slides numbered in Only, with the page numbers and section kickers
+        they have in the whole deck) and save to Out. Returns the slide count (fit problems are in self.Problems)."""
         if kS.ErrorMode:
             return 0
         try:
@@ -1009,23 +1500,38 @@ class kDeckBuilder:
             self.Major, self.Minor = Th.Font("+mj-lt"), Th.Font("+mn-lt")
             Patterns = kSlidePatterns(self)
             N = 0
-            for Sl in self.Spec["slides"]:
+            for SpecNo, Sl in enumerate(self.Spec["slides"], 1):
                 N += 1
+                if Only and SpecNo not in Only:  # skipped, but it still numbers the pages and sets the section
+                    if Sl["pattern"] == "section":
+                        self.Section = str(Sl.get("kicker") or Sl.get("eyebrow") or "")
+                    if Sl["pattern"] == "quiz" and Sl.get("reveal") == "slide":
+                        N += 1
+                    continue
+                self.Numbers.append(N)
                 self.SlideNo, self.SlideId = N, Sl.get("id", f"s{N:02d}")
                 S = self.NewSlide(Sl, N)
+                self.TitleInk, self.KickerWidth = None, 0
+                self.Kicker = self.KickerFor(Sl)
                 getattr(Patterns, PATTERNS[Sl["pattern"]])(S, Sl)
+                self.Chrome(S, Sl, N)
                 self.Notes(S, Sl, kSlidePatterns.ExtraNotes(Sl))
                 if Sl["pattern"] == "quiz" and Sl.get("reveal") == "slide":  # the answer on a slide of its own
                     N += 1
+                    self.Numbers.append(N)
                     Answer = dict(Sl, id=f"{self.SlideId}-answer")
                     self.SlideNo, self.SlideId = N, Answer["id"]
                     S = self.NewSlide(Answer, N)
+                    self.TitleInk, self.KickerWidth = None, 0
+                    self.Kicker = self.KickerFor(Answer)
                     Patterns.QuizAnswer(S, Answer)
+                    self.Chrome(S, Answer, N)
                     self.Notes(S, Answer, kSlidePatterns.ExtraNotes(Sl))
             if kS.ErrorMode:
                 return 0  # a step was reported and halted: do not write a half-built deck
             self.Prs.save(Out)
-            return N
+            self.LayoutCheck(Out)
+            return len(self.Numbers)
         except kToolException:
             raise
         except Exception as e:
@@ -1080,10 +1586,18 @@ class kSlidePatterns:
             return
         try:
             B = self._b
+            Fg, Sub = TEXT, MUTED
+            if B.Themed:  # the cover is a full panel in the text colour: the deck opens with weight
+                B.Backdrop(S, "CoverPanel", TEXT)
+                B.Rect(S, "CoverBand", 0, H - 24, W, 24, ACCENT)
+                Fg = Sub = BG
             B.Rect(S, "AccentRule", M, 236, 160, 10, ACCENT)
-            B.Title(S, Sl.get("title", ""), Size=SIZE["section"], Top=262, Height=230)
+            B.Title(S, Sl.get("title", ""), Size=SIZE["section"], Top=262, Height=230, Colour=Fg)
             if Sl.get("subtitle"):
-                B.Text(S, "Subtitle", Sl["subtitle"], M, 516, W - 2 * M - 160, 130, SIZE["h2"], MUTED)
+                B.Text(S, "Subtitle", Sl["subtitle"], M, 516, W - 2 * M - 160, 130, SIZE["h2"], Sub)
+            if B.Spec.get("footer"):
+                B.Text(S, "CoverFooter", str(B.Spec["footer"]), M, FOOTER_TOP - 40, W - 2 * M, FOOTER_H,
+                       FOOTER_SIZE, Sub, Anchor=MSO_ANCHOR.MIDDLE)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Title")
             return
@@ -1093,10 +1607,17 @@ class kSlidePatterns:
             return
         try:
             B = self._b
+            Fg = TEXT
+            if B.Themed:  # dividers echo the cover, so the deck has a rhythm
+                B.Backdrop(S, "SectionPanel", TEXT)
+                Fg = BG
             if Sl.get("eyebrow"):
-                B.Text(S, "Eyebrow", Sl["eyebrow"].upper(), M, 250, W - 2 * M, 50, SIZE["caption"], ACCENT, Bold=True)
-            B.Title(S, Sl["title"], Size=SIZE["section"], Top=300, Height=220)
-            B.Rect(S, "AccentRule", M, 540, 160, 8, ACCENT)
+                Tb = B.Text(S, "Eyebrow", Sl["eyebrow"].upper(), M, 250, W - 2 * M, 50, SIZE["caption"],
+                            BG if B.Themed else ACCENT, Bold=True)
+                for R in Tb.text_frame.paragraphs[0].runs:
+                    R.font._rPr.set("spc", "300")
+            B.Title(S, Sl["title"], Size=SIZE["section"], Top=300, Height=220, Colour=Fg)
+            B.Rect(S, "AccentRule", M, 540, 160, 10, ACCENT)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Section")
             return
@@ -1106,12 +1627,121 @@ class kSlidePatterns:
             return
         try:
             B = self._b
-            B.Rect(S, "AccentRule", M, 196, 160, 10, ACCENT)
-            B.Title(S, Sl["title"], Size=SIZE["statement"], Top=220, Height=300)
-            if Sl.get("support"):
-                B.Text(S, "Support", Sl["support"], M, 550, W - 2 * M - 120, 150, SIZE["h2"], MUTED)
+            if Sl.get("decision"):
+                self.Decision(S, Sl)
+                return
+            Points = [str(X) for X in Sl.get("points") or []]
+            Pw = POINTS_W if Points else 0  # the points' column on the right: numbered cards, the full body high
+            Wd = W - 2 * M - (Pw + 2 * GAP if Pw else 80)
+            Ts = B.Fit([Sl["title"]], SIZE["statement"] + (0 if Pw else 16), Wd - 15, 300, Heading=True,
+                       What="statement")
+            Tw = B.BalancedWidth(Sl["title"], Ts, Wd - 15) + 15
+            Display = 40 * max(1.0, B.Prs.slide_width / 12700 / 960) / B.TypeScale()  # lint's display size
+            while Ts > 48 and B.TitleLines(Sl["title"], Ts, Tw + 1, True) * Ts * LOOSE_LINE + 8 > 300:
+                Next = Ts - 4  # the claim must also fit where LibreOffice wraps it wider (a substituted font)
+                if Next < Display and B.TitleLines(Sl["title"], Next, B.BalancedWidth(Sl["title"], Next, Wd - 15)
+                                                   + 15) > 2:
+                    break  # below display size a claim may take two lines only: keep the measured three
+                Ts = Next
+                Tw = B.BalancedWidth(Sl["title"], Ts, Wd - 15) + 15
+            LooseH = B.TitleLines(Sl["title"], Ts, Tw + 1, True) * Ts * LOOSE_LINE + 8  # the loosest renderer's wrap
+            Th = min(max(300, LooseH), max(B.Need([Sl["title"]], Ts, Tw - 15, Heading=True) + 10, LooseH))
+            Support = str(Sl.get("support") or "")
+            Ss = B.Fit([Support], 44 if Pw else 48, Wd, 170) if Support else 0
+            Sh = B.Need(Support, Ss, Wd) if Support else 0
+            Kh = KICKER_H + 12 if B.Kicker else 0  # the kicker sits between the rule and the claim, as on every slide
+            Lead = 46 + Kh
+            Block = 10 + 36 + Kh + Th + (34 + Sh if Support else 0)
+            Top = max(120 - Kh, (120 + BODY_BOTTOM - Block) / 2)  # the block sits in the optical middle of the slide
+            if Pw:
+                B.Rect(S, "AccentRule", M, Top, 160, 10, ACCENT)
+            else:  # the anchor: an accent bar the height of the claim and its support, left of the text
+                B.Rect(S, "AnchorBar", M - 48, Top + Lead, 16, Block - Lead, ACCENT)
+            B.Title(S, Sl["title"], Size=Ts, Top=Top + Lead, Height=Th, Width=Tw)
+            if B.Kicker:  # Chrome draws it ending here: above the claim's box, whatever the renderer's line height
+                B.TitleInk, B.KickerWidth = Top + Lead - 6, Wd
+            if Support:
+                B.Text(S, "Support", Support, M, Top + Lead + Th + 34, Wd, Sh, Ss, MUTED)
+            if Pw:
+                self.PointCards(S, Points, W - M - Pw, 120, Pw, BODY_BOTTOM - 120)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Statement")
+            return
+
+    @staticmethod
+    def Share(Sl):
+        """(part, whole) that a big number states - '41' with unit '%' is (41, 100), '14/20' is (14, 20), '70 %'
+        is (70, 100) - or None when it is not a share of a whole of at most 100."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Num = str(Sl.get("number", "")).replace(NBSP, " ").replace(",", ".").strip()
+            Unit = str(Sl.get("unit") or "").strip()
+            Frac = re.fullmatch(r"(\d+)\s*(?:/|of)\s*(\d+)", Num)
+            if Frac and 0 < int(Frac.group(2)) <= 100 and int(Frac.group(1)) <= int(Frac.group(2)):
+                return int(Frac.group(1)), int(Frac.group(2))
+            Pct = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(%?)", Num)
+            if Pct and (Pct.group(2) or Unit == "%") and float(Pct.group(1)) <= 100:
+                return float(Pct.group(1)), 100
+            return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.Share")
+            return None
+
+    def ShareVisual(self, S, Part, Whole, Kind, Lx, Ty, Wd, Ht):
+        """The share as a picture: a dot grid (one dot per unit, the part filled with the accent) or a filled bar,
+        with a 'part of whole' label under it. Returns the height used."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            B = self._b
+            Label = (f"{Part:g} in every 100" if Whole == 100 else f"{Part:g} of {Whole}")
+            Lh = 44
+            if Kind == "bar":
+                Bh = min(90, Ht - Lh - 16)
+                Y = Ty + (Ht - Bh - Lh - 16) / 2
+                B.Rect(S, "ShareTrack", Lx, Y, Wd, Bh, FAINT)
+                B.Rect(S, "ShareFill", Lx, Y, max(4, Wd * Part / Whole), Bh, ACCENT)
+                B.Text(S, "ShareLabel", Label, Lx, Y + Bh + 16, Wd, Lh, 32, MUTED, Bold=True)
+                return Ht
+            Cols = 10 if Whole > 25 else (5 if Whole > 6 else Whole)  # 20 is 5 x 4, 100 is 10 x 10
+            Rows = -(-Whole // Cols)
+            Pitch = min(Wd / Cols, (Ht - Lh - 16) / Rows)
+            D = Pitch * 0.72
+            Gw = Pitch * Cols
+            X0 = Lx + (Wd - Gw) / 2
+            Y0 = Ty + (Ht - Pitch * Rows - Lh - 16) / 2
+            Filled = round(Part)
+            for K in range(Whole):
+                B.Rect(S, f"Share{K + 1}", X0 + (K % Cols) * Pitch, Y0 + (K // Cols) * Pitch, D, D,
+                       ACCENT if K < Filled else FAINT, MSO_SHAPE.OVAL)
+            B.Text(S, "ShareLabel", Label, X0, Y0 + Pitch * Rows + 16 - Pitch + D, Gw, Lh, 32, MUTED, Bold=True)
+            return Ht
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.ShareVisual")
+            return 0
+
+    def PointCards(self, S, Points, Lx, Ty, Wd, Ht):
+        """Two or three short points as numbered cards stacked in a column (tint, accent edge, a badge), sharing
+        one text size - the evidence beside a statement."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            N = len(Points)
+            Ch = min(200, (Ht - GAP * (N - 1)) / N)
+            Y0 = Ty + (Ht - Ch * N - GAP * (N - 1)) / 2
+            D, Pad = 56, 28
+            Tw = Wd - EDGE - Pad * 3 - D
+            Size = B.FitAll(Points, 36, Tw, Ch - 2 * 20)
+            for I, Pt_ in enumerate(Points):
+                Y = Y0 + I * (Ch + GAP)
+                B.Card(S, f"PointCard{I + 1}", Lx, Y, Wd, Ch, False, "left")
+                self.Badge(S, f"PointNo{I + 1}", str(I + 1), Lx + EDGE + Pad, Y + (Ch - D) / 2, D, ACCENT, BG, 26)
+                B.Text(S, f"StatementPoint{I + 1}", Pt_, Lx + EDGE + Pad * 2 + D, Y + 20, Tw, Ch - 40, Size, TEXT,
+                       Anchor=MSO_ANCHOR.MIDDLE)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.PointCards")
             return
 
     def BigNumber(self, S, Sl):
@@ -1120,17 +1750,53 @@ class kSlidePatterns:
         try:
             B = self._b
             B.Title(S, Sl["title"])
-            Num = Sl["number"] + (f" {Sl['unit']}" if Sl.get("unit") else "")
-            B.Text(S, "HeroNumber", Num, M, 220, W - 2 * M, 300, SIZE["hero"] + 20, ACCENT, Bold=True, Heading=True)
-            if Sl.get("caption"):
-                B.Text(S, "Caption", Sl["caption"], M, 550, W - 2 * M - 120, 150, SIZE["h2"], TEXT)
+            Num = str(Sl["number"]).replace(" ", NBSP) + (f"{NBSP}{Sl['unit']}" if Sl.get("unit") else "")
+            Share = self.Share(Sl)
+            Kind = Sl.get("visual", "auto")
+            Kind = ("dots" if Share else "none") if Kind == "auto" else Kind
+            if Kind == "dots" and Share and Share[1] > 100:
+                Kind = "bar"
+            Points = [str(X) for X in Sl.get("points") or []]
+            if Kind == "none" or not Share:
+                if not Points:  # the classic layout: the number, then its caption
+                    Ns = B.FitLine([Num], SIZE["hero"] + 20, W - 2 * M, Smallest=96)
+                    B.Text(S, "HeroNumber", Num, M, 220, W - 2 * M, 300, Ns, ACCENT, Bold=True, Heading=True)
+                    if Sl.get("caption"):
+                        B.Rect(S, "CaptionEdge", M, 550, EDGE, 120, ACCENT)
+                        B.Text(S, "Caption", Sl["caption"], M + EDGE + 32, 550, W - 2 * M - 160, 150, SIZE["h2"], TEXT)
+                    return
+            Vw = 0 if Kind == "none" or not Share else SHARE_W  # the visual's column on the right
+            Lw = W - 2 * M - (Vw + 2 * GAP if Vw else 0)
+            Ns = B.FitLine([Num], SIZE["hero"], Lw, Smallest=96)
+            Hh = Ns * 1.15
+            Cap = str(Sl.get("caption") or "")
+            Cs = B.Fit([Cap], 40, Lw - EDGE - 32, 130) if Cap else 0
+            Ch = B.Need(Cap, Cs, Lw - EDGE - 32) if Cap else 0
+            Ps = B.FitAll(Points, 34, Lw - 40, 200) if Points else 0
+            Ph = B.Need(["\u2022 " + X for X in Points], Ps, Lw - 40) if Points else 0
+            Block = Hh + (24 + Ch if Cap else 0) + (36 + Ph if Points else 0)
+            Y = BODY_TOP + max(0, (BODY_BOTTOM - BODY_TOP - Block) / 2)  # the column sits in the body's middle
+            B.Text(S, "HeroNumber", Num, M, Y, Lw, Hh, Ns, ACCENT, Bold=True, Heading=True)
+            Y += Hh + 24
+            if Cap:
+                B.Rect(S, "CaptionEdge", M, Y, EDGE, Ch, ACCENT)
+                B.Text(S, "Caption", Cap, M + EDGE + 32, Y, Lw - EDGE - 32, Ch, Cs, TEXT)
+                Y += Ch + 36
+            if Points:
+                B.Text(S, "Points", ["\u2022 " + X for X in Points], M, Y, Lw - 40, Ph, Ps, TEXT)
+            if Vw:
+                self.ShareVisual(S, Share[0], Share[1], Kind, W - M - Vw, BODY_TOP + 10, Vw,
+                                 BODY_BOTTOM - BODY_TOP - 10)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.BigNumber")
             return
 
     def Tiles(self, S, Ms, Hi, Lx, Ty, Wd, Ht, Across, ValueMax, LabelMax):
-        """Metric tiles (value, label, optional note) in a row (Across) or a column, filling Wd x Ht; the
-        highlighted one in the accent. Values, labels and notes share one size each and line up."""
+        """Metric tiles (value, label, optional note and trend) in a row (Across) or a column, filling Wd x Ht;
+        the highlighted one filled with the accent, the others tinted with an accent edge and the value in the
+        accent. Values, labels and notes share one size each and line up. Labels, notes and the trend's figures
+        never go below the label floor (LABEL_MIN): the trend and the value give way first, and what still does
+        not fit is reported."""
         if kS.ErrorMode:
             return
         try:
@@ -1139,34 +1805,81 @@ class kSlidePatterns:
             Tw = (Wd - GAP * (N - 1)) / N if Across else Wd
             Th = Ht if Across else (Ht - GAP * (N - 1)) / N
             Pad = 32 if Across else 28
-            Iw = Tw - 2 * Pad
+            Iw = Tw - 2 * Pad - (0 if Across else EDGE)
+            Ix = Pad + (0 if Across else EDGE)
+            Values = [self.Value(X["value"]) for X in Ms]
             Notes = [str(X.get("note", "")) for X in Ms]
-            Vs = B.FitLine([X["value"] for X in Ms], ValueMax, Iw)
-            Ls = B.FitAll([str(X["label"]) for X in Ms], LabelMax, Iw, Th * (0.28 if Across else 0.3))
-            Ns = B.FitAll([X for X in Notes if X], GROW["note"] - 2, Iw, Th * 0.22) if any(Notes) else 0
-            while True:  # the value, label and note must fit the tile together: shrink the largest first
-                Hv = max(B.Need(str(X["value"]), Vs, Iw, Heading=True) for X in Ms)
+            Trends = any(X.get("trend") for X in Ms)
+            Periods = any(X.get("trend_labels") for X in Ms if X.get("trend"))
+            TrMin = TREND_LABEL * 1.3 + TREND_BARS + (TREND_LABEL * 1.3 if Periods else 0)  # figures, bars, periods
+            Tr = max(TrMin, min(TREND_MAX, Th * 0.42)) if Trends else 0
+            Vs = B.FitLine(Values, ValueMax, Iw)
+            # first guesses (the loop below has the last word, and reports what cannot fit)
+            Ls = B.FitAll([str(X["label"]) for X in Ms], LabelMax, Iw, Th * (0.28 if Across else 0.3) + 30)
+            Ns = B.FitAll([X for X in Notes if X], GROW["note"] - 2, Iw, Th * 0.22 + 30) if any(Notes) else 0
+            Room = Th - Pad * 0.8 - (EDGE if Across else 0)
+            VFloor = max(64, ValueMax * 0.6)
+            while Trends:  # legible bars or none: the value and the labels give a little first
                 Hl = max(B.Need(str(X["label"]), Ls, Iw) for X in Ms)
                 Hn = max(B.Need(X, Ns, Iw) for X in Notes if X) if Ns else 0
-                Block = Hv + 10 + Hl + (14 + Hn if Ns else 0)
-                if Block <= Th - Pad * 0.8 or (Vs <= 40 and Ls <= LABEL_MIN + 2):
+                if Room - (Vs * 1.28 + 10 + Hl + (14 + Hn if Ns else 0)) >= TrMin + 18:
                     break
-                if Vs > 40:
+                if Vs > VFloor:
+                    Vs = max(VFloor, Vs - 4)
+                elif Ls > 28 or Ns > 28:
+                    Ls, Ns = max(28, Ls - 2), (max(28, Ns - 2) if Ns else 0)
+                else:
+                    Trends = False
+            if any(X.get("trend") for X in Ms) and not Trends:
+                # no room for legible bars: the trend moves to the note (when there is none) and the speaker notes
+                Vs = B.FitLine(Values, ValueMax, Iw)
+                Tr = 0
+                for I, Mt in enumerate(Ms):
+                    if Mt.get("trend"):
+                        Text = self.TrendText(Mt)
+                        Notes[I] = Notes[I] or Text
+                        B.Extra.append(f"TREND ({Mt['label']}, not drawn - too little room on the slide): {Text}")
+                Ns = B.FitAll([X for X in Notes if X], GROW["note"] - 2, Iw, Th * 0.22 + 30)
+            while True:  # value, label, note and trend must fit the tile together: the trend gives way first
+                Hv = Vs * 1.28  # FitLine keeps every value on one line
+                Hl = max(B.Need(str(X["label"]), Ls, Iw) for X in Ms)
+                Hn = max(B.Need(X, Ns, Iw) for X in Notes if X) if Ns else 0
+                Block = Hv + 10 + Hl + (14 + Hn if Ns else 0) + (18 + Tr if Tr else 0)
+                if Block <= Room:
+                    break
+                if Tr > TrMin:
+                    Tr = max(TrMin, Tr - 10)
+                elif Ls > 28 or Ns > 28:  # the labels give way before the value: the value is the point
+                    Ls, Ns = max(28, Ls - 2), (max(28, Ns - 2) if Ns else 0)
+                elif Vs > 56:
+                    Vs -= 4
+                elif Ls > LABEL_MIN or Ns > LABEL_MIN:
+                    Ls, Ns = max(LABEL_MIN, Ls - 2), (max(LABEL_MIN, Ns - 2) if Ns else 0)
+                elif Vs > 40:
                     Vs -= 4
                 else:
-                    Ls, Ns = Ls - 2, (max(LABEL_MIN, Ns - 2) if Ns else 0)
+                    B.Problems.append(f"slide {B.SlideNo} ({B.SlideId}): the metric tiles do not fit at the label "
+                                      f"floor ({LABEL_MIN} pt); shorten labels or notes, or drop a metric")
+                    break
+            if Tr and Block < Room:  # room to spare: the trend takes it, so its bars read from the back
+                Grow = min(Room - Block, TREND_MAX - Tr) * 0.8
+                Tr, Block = Tr + max(0, Grow), Block + max(0, Grow)
+            Figure = ACCENT if B.Themed else TEXT
             for I, Mt in enumerate(Ms):
                 X0 = Lx + (I * (Tw + GAP) if Across else 0)
                 Y0 = Ty + (0 if Across else I * (Th + GAP))
                 On = I == Hi
-                B.Rect(S, f"Card{I + 1}", X0, Y0, Tw, Th, ACCENT if On else QUIET)
+                B.Card(S, f"Card{I + 1}", X0, Y0, Tw, Th, On, "top" if Across else "left", EdgeOn=False)
                 Fg = BG if On else TEXT
-                Top = Y0 + max(Pad * 0.6, (Th - Block) / 2)
-                B.Text(S, f"Value{I + 1}", str(Mt["value"]), X0 + Pad, Top, Iw, Hv, Vs, Fg, Bold=True, Heading=True)
-                B.Text(S, f"Label{I + 1}", str(Mt["label"]), X0 + Pad, Top + Hv + 10, Iw, Hl, Ls, Fg)
+                Top = Y0 + max(Pad * 0.6 + (EDGE if Across else 0), (Th - Block) / 2)
+                B.Text(S, f"Value{I + 1}", Values[I], X0 + Ix, Top, Iw, Hv, Vs, BG if On else Figure, Bold=True,
+                       Heading=True)
+                B.Text(S, f"Label{I + 1}", str(Mt["label"]), X0 + Ix, Top + Hv + 10, Iw, Hl, Ls, Fg)
+                Y = Top + Hv + 10 + Hl
                 if Notes[I]:
-                    B.Text(S, f"Note{I + 1}", Notes[I], X0 + Pad, Top + Hv + 10 + Hl + 14, Iw, Hn, Ns,
-                           BG if On else MUTED)
+                    B.Text(S, f"Note{I + 1}", Notes[I], X0 + Ix, Y + 14, Iw, Hn, Ns, BG if On else MUTED)
+                if Tr and Mt.get("trend"):
+                    self.Trend(S, I, Mt["trend"], Mt.get("trend_labels"), X0 + Ix, Top + Block - Tr, Iw, Tr, On)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Tiles")
             return
@@ -1178,8 +1891,18 @@ class kSlidePatterns:
             B = self._b
             B.Title(S, Sl["title"])
             Top = BODY_TOP + 24
-            self.Tiles(S, Sl["metrics"], Sl.get("highlight", 0), M, Top, W - 2 * M, BODY_BOTTOM - Top - 6, True,
-                       GROW["value"], 40)
+            Bottom = BODY_BOTTOM - 6
+            Hi = Sl.get("highlight", 0)
+            Lead = self.ChartMetric(Sl["metrics"], Hi)
+            if Lead is not None and not Sl.get("decision") and Sl.get("trend_chart", True) \
+                    and len(Sl["metrics"]) <= 4:  # a metric with a series: its chart beside the tiles
+                self.TilesAndChart(S, Sl, Hi, Lead)
+                return
+            if Sl.get("decision"):  # an exec summary: the numbers, then the decision they lead to
+                Bh = self.DecisionSize(Sl, W - 2 * M, 36)[3]
+                Bottom = BODY_BOTTOM - Bh - GAP
+                self.DecisionBox(S, Sl, M, Bottom + GAP, W - 2 * M, 36)
+            self.Tiles(S, Sl["metrics"], Hi, M, Top, W - 2 * M, Bottom - Top, True, GROW["value"], 40)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Kpi")
             return
@@ -1204,7 +1927,7 @@ class kSlidePatterns:
             return
 
     def BulletRows(self, S, Sl):
-        """Up to four short points as full-width bands with an accent edge, sized to fill the body."""
+        """Up to four short points as full-width tinted bands with an accent edge, sized to fill the body."""
         if kS.ErrorMode:
             return
         try:
@@ -1213,13 +1936,12 @@ class kSlidePatterns:
             N = len(Items)
             Ht = min(150, (BODY_BOTTOM - BODY_TOP - 10 - GAP * (N - 1)) / N)
             Pad = 40
-            Tw = W - 2 * M - 14 - 2 * Pad
+            Tw = W - 2 * M - EDGE - 2 * Pad
             Size = B.FitAll(Items, GROW["body"], Tw, Ht - 20)
             for I, Item in enumerate(Items):
                 Ty = BODY_TOP + 10 + I * (Ht + GAP)
-                B.Rect(S, f"PointBand{I + 1}", M, Ty, W - 2 * M, Ht, QUIET)
-                B.Rect(S, f"PointEdge{I + 1}", M, Ty, 14, Ht, ACCENT)
-                B.Text(S, f"Point{I + 1}", Item, M + 14 + Pad, Ty + 10, Tw, Ht - 20, Size, TEXT,
+                B.Card(S, f"PointBand{I + 1}", M, Ty, W - 2 * M, Ht, False, "left")
+                B.Text(S, f"Point{I + 1}", Item, M + EDGE + Pad, Ty + 10, Tw, Ht - 20, Size, TEXT,
                        Anchor=MSO_ANCHOR.MIDDLE)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.BulletRows")
@@ -1241,22 +1963,21 @@ class kSlidePatterns:
             BodyH = BODY_BOTTOM - BODY_TOP - 10
             Hs = B.FitAll([str(C["heading"]) for C in Cols], GROW["heading"] - 4, Iw, 120, Heading=True)
             Hh = max(B.Need(str(C["heading"]), Hs, Iw, Heading=True) for C in Cols)
-            Room = BodyH - 12 - 2 * Pad - Hh - 20
+            Room = BodyH - EDGE - 2 * Pad - Hh - 20
             Points = [["• " + str(P) for P in C["points"]] for C in Cols]
             Ps = B.FitAll(Points, GROW["point"], Iw, Room)
             Ph = max(B.Need(P, Ps, Iw) for P in Points)
             Most = max(len(P) for P in Points)
             Spacing = 0.5 + (min(0.9, max(0.0, Room - Ph) / (Most - 1) / Ps * 0.6) if Most > 1 else 0)
             Ph = min(max(B.Need(P, Ps, Iw, Spacing=Spacing) for P in Points), Room)  # overflow stays visible to lint
-            CardH = min(BodyH, max(12 + 2 * Pad + Hh + 20 + Ph, BodyH * 0.78))
+            CardH = min(BodyH, max(EDGE + 2 * Pad + Hh + 20 + Ph, BodyH * 0.78))
             Ty = BODY_TOP + 10 + (BodyH - CardH) / 2
             for I, C in enumerate(Cols):
                 Lx = M + I * (Wd + Gap)
-                B.Rect(S, f"Card{I + 1}", Lx, Ty, Wd, CardH, QUIET)
-                B.Rect(S, f"Rule{I + 1}", Lx, Ty, Wd, 12, ACCENT if I == Hi else MUTED)
-                B.Text(S, f"Heading{I + 1}", str(C["heading"]), Lx + Pad, Ty + 12 + Pad, Iw, Hh, Hs, TEXT, Bold=True,
-                       Heading=True)
-                B.Text(S, f"Points{I + 1}", Points[I], Lx + Pad, Ty + 12 + Pad + Hh + 20, Iw, Ph, Ps, TEXT,
+                B.Card(S, f"Card{I + 1}", Lx, Ty, Wd, CardH, False, "top", EdgeOn=Hi is None or I == Hi)
+                B.Text(S, f"Heading{I + 1}", str(C["heading"]), Lx + Pad, Ty + EDGE + Pad, Iw, Hh, Hs,
+                       ACCENT if I == Hi and B.Themed else TEXT, Bold=True, Heading=True)
+                B.Text(S, f"Points{I + 1}", Points[I], Lx + Pad, Ty + EDGE + Pad + Hh + 20, Iw, Ph, Ps, TEXT,
                        Spacing=Spacing)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Compare")
@@ -1272,20 +1993,24 @@ class kSlidePatterns:
             if len(Steps) > 5:
                 self.ProcessGrid(S, Sl)
                 return
+            if len(Steps) == 5:
+                self.ProcessRows(S, Sl)
+                return
             N = len(Steps)
             Hi = Sl.get("highlight")
             Wd = (W - 2 * M - GAP * (N - 1)) / N
             Pad = 26
             Iw = Wd - 2 * Pad
             ChevH, BodyH = 96, BODY_BOTTOM - BODY_TOP - 10
-            Ls = B.FitAll([str(X["label"]) for X in Steps], 38, Iw, 130, Bold=True)
+            Ls = B.FitAll([str(X["label"]) for X in Steps], 44, Iw, 150, Bold=True)
             Lh = max(B.Need(str(X["label"]), Ls, Iw, Bold=True) for X in Steps)
             Details = [str(X.get("detail", "")) for X in Steps]
-            Room = BodyH - ChevH - 20 - 2 * Pad - Lh - 14
-            Ds = B.FitAll([X for X in Details if X], min(GROW["detail"], max(Ls + 4, FLOOR)), Iw, Room) \
+            Room = BodyH - ChevH - 20 - 2 * Pad - EDGE - Lh - 14
+            Ds = B.FitAll([X for X in Details if X], min(GROW["detail"] + 4, max(Ls, FLOOR)), Iw, Room) \
                 if any(Details) else 0  # never louder than the label above it
             Dh = max(B.Need(X, Ds, Iw) for X in Details if X) if Ds else 0
-            CardH = min(BodyH - ChevH - 20, max(2 * Pad + Lh + (14 + Dh if Ds else 0), BodyH * 0.84 - ChevH - 20))
+            Content = 2 * Pad + EDGE + Lh + (14 + Dh if Ds else 0)
+            CardH = min(BodyH - ChevH - 20, max(Content, BodyH * 0.6 - ChevH))  # no tall empty cards
             Top = BODY_TOP + 10 + (BodyH - ChevH - 20 - CardH) / 2
             Depth = 0.32
             for I, St in enumerate(Steps):
@@ -1295,12 +2020,14 @@ class kSlidePatterns:
                                ACCENT if On else QUIET, MSO_SHAPE.PENTAGON if I == 0 else MSO_SHAPE.CHEVRON)
                 Arrow.adjustments[0] = Depth
                 # the number sits in the arrow's body, clear of the notch and the point
-                B.ShapeText(Arrow, str(I + 1), SIZE["h2"], BG if On else TEXT, Inset=ChevH * Depth + 6)
+                B.ShapeText(Arrow, str(I + 1), SIZE["h2"], BG if On else ACCENT, Inset=ChevH * Depth + 6)
                 Card = Top + ChevH + 20
-                B.Rect(S, f"StepCard{I + 1}", Lx, Card, Wd, CardH, QUIET, Line=ACCENT if On else None)
-                B.Text(S, f"StepLabel{I + 1}", str(St["label"]), Lx + Pad, Card + Pad, Iw, Lh, Ls, TEXT, Bold=True)
+                B.Card(S, f"StepCard{I + 1}", Lx, Card, Wd, CardH, False, "top", EdgeOn=Hi is None or On)
+                Block = Lh + (14 + Dh if Ds else 0)
+                Y = Card + EDGE + max(Pad, (CardH - EDGE - Block) / 2)  # the text block in the card's middle
+                B.Text(S, f"StepLabel{I + 1}", str(St["label"]), Lx + Pad, Y, Iw, Lh, Ls, TEXT, Bold=True)
                 if Details[I]:
-                    B.Text(S, f"StepDetail{I + 1}", Details[I], Lx + Pad, Card + Pad + Lh + 14, Iw, Dh, Ds, TEXT)
+                    B.Text(S, f"StepDetail{I + 1}", Details[I], Lx + Pad, Y + Lh + 14, Iw, Dh, Ds, TEXT)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Process")
             return
@@ -1321,19 +2048,20 @@ class kSlidePatterns:
             Ls = B.FitAll([str(X["label"]) for X in Steps], 34, Iw, 90, Bold=True)
             Lh = max(B.Need(str(X["label"]), Ls, Iw, Bold=True) for X in Steps)
             Details = [str(X.get("detail", "")) for X in Steps]
-            Room = Ht - 2 * Pad - D - 14 - Lh - 10
+            Room = Ht - 2 * Pad - EDGE - D - 14 - Lh - 10
             Ds = B.FitAll([X for X in Details if X], 30, Iw, Room) if any(Details) else 0
             for I, St in enumerate(Steps):
                 Lx = M + (I % Cols) * (Wd + GAP)
                 Ty = BODY_TOP + 10 + (I // Cols) * (Ht + GAP)
                 On = I == Hi
-                B.Rect(S, f"Step{I + 1}", Lx, Ty, Wd, Ht, ACCENT if On else QUIET)
-                self.Badge(S, f"StepNo{I + 1}", str(I + 1), Lx + Pad, Ty + Pad, D, BG if On else ACCENT,
+                B.Card(S, f"Step{I + 1}", Lx, Ty, Wd, Ht, On, "top")
+                self.Badge(S, f"StepNo{I + 1}", str(I + 1), Lx + Pad, Ty + EDGE + Pad, D, BG if On else ACCENT,
                            ACCENT if On else BG)
                 Fg = BG if On else TEXT
-                B.Text(S, f"StepLabel{I + 1}", str(St["label"]), Lx + Pad, Ty + Pad + D + 14, Iw, Lh, Ls, Fg, Bold=True)
+                Y = Ty + EDGE + Pad + D + 14
+                B.Text(S, f"StepLabel{I + 1}", str(St["label"]), Lx + Pad, Y, Iw, Lh, Ls, Fg, Bold=True)
                 if Details[I]:
-                    B.Text(S, f"StepDetail{I + 1}", Details[I], Lx + Pad, Ty + Pad + D + 14 + Lh + 10, Iw, Room, Ds, Fg)
+                    B.Text(S, f"StepDetail{I + 1}", Details[I], Lx + Pad, Y + Lh + 10, Iw, Room, Ds, Fg)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.ProcessGrid")
             return
@@ -1346,6 +2074,9 @@ class kSlidePatterns:
             B.Title(S, Sl["title"])
             Ev = Sl["events"]
             N = len(Ev)
+            if not any(E.get("date") for E in Ev):  # undated sequential stages: numbered badges on the rail
+                self.Stages(S, Sl)
+                return
             Ry = (BODY_TOP + BODY_BOTTOM) / 2 + 10
             Step = (W - 2 * M) / N
             Lw = min(2 * Step - 32, 440) if N > 2 else Step - 32  # neighbours sit on the other side of the rail
@@ -1378,6 +2109,41 @@ class kSlidePatterns:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Timeline")
             return
 
+    def Stages(self, S, Sl):
+        """A timeline without dates: undated stages in order - a numbered badge on the rail for each, its label
+        above or below (alternating, so neighbours get twice the width), the highlighted stage in the accent."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            Ev = Sl["events"]
+            N = len(Ev)
+            Ry = (BODY_TOP + BODY_BOTTOM) / 2 + 10
+            Step = (W - 2 * M) / N
+            Lw = min(2 * Step - 32, 440) if N > 2 else Step - 32
+            Hi = Sl.get("highlight")
+            Centres = [M + Step * I + Step / 2 for I in range(N)]
+            Widths = [min(Lw, 2 * (Cx - M), 2 * (W - M - Cx)) for Cx in Centres]
+            D = 88
+            Room = Ry - D / 2 - 24 - BODY_TOP
+            Ls = min(B.Fit([str(E["label"])], 48, Widths[I], Room) for I, E in enumerate(Ev))
+            Lh = max(B.Need(str(E["label"]), Ls, Widths[I]) for I, E in enumerate(Ev))
+            B.Rect(S, "Rail", M, Ry - 4, W - 2 * M, 8, QUIET)
+            for I, E in enumerate(Ev):
+                Cx, Wd = Centres[I], Widths[I]
+                On = I == Hi or Hi is None
+                self.Badge(S, f"Stage{I + 1}", str(I + 1), Cx - D / 2, Ry - D / 2, D, ACCENT if On else MUTED, BG, 40)
+                Lx = Cx - Wd / 2
+                if I % 2 == 0:
+                    B.Text(S, f"Event{I + 1}", str(E["label"]), Lx, Ry - D / 2 - 24 - Lh, Wd, Lh, Ls, TEXT,
+                           Bold=I == Hi, Align=PP_ALIGN.CENTER, Anchor=MSO_ANCHOR.BOTTOM)
+                else:
+                    B.Text(S, f"Event{I + 1}", str(E["label"]), Lx, Ry + D / 2 + 24, Wd, Lh, Ls, TEXT, Bold=I == Hi,
+                           Align=PP_ALIGN.CENTER)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.Stages")
+            return
+
     def Quote(self, S, Sl):
         if kS.ErrorMode:
             return
@@ -1396,8 +2162,9 @@ class kSlidePatterns:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Quote")
             return
 
-    def DrawChart(self, S, Sl, Lx, Ty, Wd, Ht):
-        """A native chart of Sl's categories and series in the box: one highlighted finding, the rest quiet."""
+    def DrawChart(self, S, Sl, Lx, Ty, Wd, Ht, Rest=QUIET):
+        """A native chart of Sl's categories and series in the box: one highlighted finding, the rest quiet (Rest:
+        the colour of the other bars - SOFT on a tinted card, where QUIET would vanish)."""
         if kS.ErrorMode:
             return None
         try:
@@ -1467,7 +2234,7 @@ class kSlidePatterns:
                     NPts = len(Sl["categories"])
                     for Pi, Point in enumerate(Ser.points):
                         Point.format.fill.solid()
-                        Point.format.fill.fore_color.theme_color = ACCENT if (Hi is None or Pi == Hi) else QUIET
+                        Point.format.fill.fore_color.theme_color = ACCENT if (Hi is None or Pi == Hi) else Rest
                         if Kind == "pie" and Hi is None:  # slices must differ: one hue, light to dark
                             Point.format.fill.fore_color.brightness = round(-0.4 + 0.8 * Pi / max(1, NPts - 1), 2)
                 else:
@@ -1506,16 +2273,106 @@ class kSlidePatterns:
         try:
             B = self._b
             B.Title(S, Sl["title"])
-            Tw = 420
-            Bottom = BODY_BOTTOM - (70 if Sl.get("caption") else 0)
-            self.Tiles(S, Sl["metrics"], Sl.get("highlight_metric"), M, BODY_TOP + 10, Tw, BODY_BOTTOM - BODY_TOP - 10,
-                       False, 80, 32)
-            Cx = M + Tw + 48
-            self.DrawChart(S, Sl, Cx, BODY_TOP, W - M - Cx, Bottom - BODY_TOP)
-            if Sl.get("caption"):
-                B.Text(S, "ChartNote", Sl["caption"], Cx, Bottom + 10, W - M - Cx, 60, 30, MUTED)
+            Hi = Sl.get("highlight_metric")
+            Lead = None if "series" in Sl else self.ChartMetric(Sl["metrics"], Hi)  # no series: chart a trend
+            self.TilesAndChart(S, Sl, Hi, Lead)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.KpiChart")
+            return
+
+    @staticmethod
+    def ChartMetric(Ms, Hi):
+        """The index of the metric whose trend becomes the chart: the highlighted one if it has a trend, else the
+        first with one; None when no metric has a trend."""
+        if kS.ErrorMode:
+            return None
+        try:
+            With = [I for I, X in enumerate(Ms) if isinstance(X, dict) and len(X.get("trend") or []) >= 2]
+            if not With:
+                return None
+            return Hi if Hi in With else With[0]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.ChartMetric")
+            return None
+
+    @staticmethod
+    def TrendChart(Mt):
+        """Chart fields (categories, one series, the last point highlighted, a number format) from a metric's
+        trend: its trend_labels as categories, else 'Start' / 'Now' for two values and 1..n for more."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            Vals = list(Mt["trend"])
+            Names = [str(X) for X in (Mt.get("trend_labels") or [])]
+            if len(Names) == len(Vals):
+                Cats = Names
+            elif len(Names) == 2:
+                Cats = [Names[0]] + [NBSP * (J + 1) for J in range(len(Vals) - 2)] + [Names[1]]
+            else:
+                Cats = ["Start", "Now"] if len(Vals) == 2 else [str(J + 1) for J in range(len(Vals))]
+            Places = max((len(f"{X:g}".split(".")[1]) if "." in f"{X:g}" else 0) for X in Vals
+                         if isinstance(X, (int, float)))
+            return {"type": "column", "categories": Cats, "series": [{"name": str(Mt["label"]), "values": Vals}],
+                    "highlight": len(Vals) - 1, "number_format": "0" + ("." + "0" * min(Places, 2) if Places else ""),
+                    "alt": f"Column chart of {Mt['label']}: " + ", ".join(
+                        f"{C.strip() or J + 1} {V:g}" for J, (C, V) in enumerate(zip(Cats, Vals))
+                        if isinstance(V, (int, float))) + "."}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.TrendChart")
+            return {}
+
+    def TilesAndChart(self, S, Sl, Hi, Lead):
+        """Tiles in a column on the left, a native chart on the right. With Lead (a metric whose trend becomes the
+        chart) the chart sits in that metric's own card - its value, label and note as the card's header - and
+        the other metrics are the tiles."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            Ms = Sl["metrics"]
+            Tw = 420
+            Cx = M + Tw + 48
+            Ty, Th = BODY_TOP + 10, BODY_BOTTOM - BODY_TOP - 10
+            if Lead is None:
+                Bottom = BODY_BOTTOM - (70 if Sl.get("caption") else 0)
+                self.Tiles(S, Ms, Hi, M, Ty, Tw, Th, False, 80, 32)
+                self.DrawChart(S, Sl, Cx, BODY_TOP, W - M - Cx, Bottom - BODY_TOP)
+                if Sl.get("caption"):
+                    B.Text(S, "ChartNote", Sl["caption"], Cx, Bottom + 10, W - M - Cx, 60, 30, MUTED)
+                return
+            Mt = Ms[Lead]
+            Others = [X for J, X in enumerate(Ms) if J != Lead]
+            HiO = None if Hi is None or Hi == Lead else (Hi if Hi < Lead else Hi - 1)
+            if Others:
+                self.Tiles(S, Others, HiO, M, Ty, Tw, Th, False, 80, 32)
+            else:
+                Cx = M
+            Cw = W - M - Cx
+            Pad = 32
+            B.Card(S, "ChartCard", Cx, Ty, Cw, Th, False, "top", EdgeOn=Hi in (None, Lead))
+            Value = self.Value(Mt["value"])
+            Vs = B.FitLine([Value], 88, Cw * 0.42)
+            Vw = min(Cw * 0.45, kMeasure.SafeWidth(Value, B.Major, Vs * B.TypeScale(), True) * 1.12 / B._kx + 24)
+            Hh = Vs * 1.28
+            Y = Ty + EDGE + Pad - 8
+            B.Text(S, "LeadValue", Value, Cx + Pad, Y, Vw, Hh, Vs, ACCENT if B.Themed else TEXT, Bold=True,
+                   Heading=True)
+            Lx = Cx + Pad + Vw + 32
+            Lw = Cx + Cw - Pad - Lx
+            Note = str(Mt.get("note") or "")
+            Ls = B.Fit([str(Mt["label"])], 34, Lw, Hh * (0.55 if Note else 1))
+            Lh = B.Need(str(Mt["label"]), Ls, Lw)
+            Ns = B.Fit([Note], 28, Lw, max(Hh - Lh, 80)) if Note else 0  # two lines of note may push the chart down
+            Nh = B.Need(Note, Ns, Lw) if Note else 0
+            Ly = Y + max(0, (Hh - Lh - Nh) / 2)
+            B.Text(S, "LeadLabel", str(Mt["label"]), Lx, Ly, Lw, Lh, Ls, TEXT, Bold=True)
+            if Note:
+                B.Text(S, "LeadNote", Note, Lx, Ly + Lh, Lw, Nh, Ns, MUTED)
+            Top = Y + max(Hh, Lh + Nh) + 16
+            self.DrawChart(S, dict(Sl, **self.TrendChart(Mt)), Cx + Pad / 2, Top, Cw - Pad, Ty + Th - Pad / 2 - Top,
+                           SOFT)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.TilesAndChart")
             return
 
     @staticmethod
@@ -1704,7 +2561,7 @@ class kSlidePatterns:
             for I, Quad in enumerate(Q):
                 Lx = Left + (I % 2) * (Wd + GAP)
                 Ty = Top + (I // 2) * (Ht + GAP)
-                B.Rect(S, f"Quadrant{I + 1}", Lx, Ty, Wd, Ht, ACCENT if I == Hi else QUIET)
+                B.Card(S, f"Quadrant{I + 1}", Lx, Ty, Wd, Ht, I == Hi, "left")
                 Fg = BG if I == Hi else TEXT
                 B.Text(S, f"QHeading{I + 1}", Quad["heading"], Lx + 28, Ty + 24, Wd - 56, 54, Hs, Fg,
                        Bold=True, Heading=True)
@@ -1754,7 +2611,7 @@ class kSlidePatterns:
             Y += 4 + Sh + 8
             Att = Sl.get("attachment")
             if Att:  # where mail programs show it: under the subject
-                Cw = kMeasure.TextWidth(f"Attachment: {Att}", B.Minor, 26 * B.TypeScale()) / B._kx + 48
+                Cw = kMeasure.SafeWidth(f"Attachment: {Att}", B.Minor, 26 * B.TypeScale()) / B._kx + 56
                 Chip = B.Rect(S, "EmailAttachment", Lx + Pad, Y, min(Iw, Cw), 48, QUIET, Line=MUTED)
                 B.ShapeText(Chip, f"Attachment: {Att}", 26, TEXT, Bold=False, Heading=False, Inset=14)
                 RowY[("attachment", 0)] = Y + 24
@@ -1764,13 +2621,15 @@ class kSlidePatterns:
             Bottom = Ty + Eh - 20
             Body = [str(X) for X in Sl["body"]]
             Size = 30
-            while Size > FLOOR and sum(B.Need(X, Size, Iw) for X in Body) + 10 * (len(Body) - 1) > Bottom - Y:
+            # each paragraph measured by its real wrapped height, so cutting words shows up at once
+            while Size > FLOOR and sum(B.Wrapped(X, Size, Iw) for X in Body) + 10 * (len(Body) - 1) > Bottom - Y:
                 Size -= 1
-            if sum(B.Need(X, Size, Iw) for X in Body) + 10 * (len(Body) - 1) > (Bottom - Y) * 1.05:
-                B.Problems.append(f"slide {B.SlideNo} ({B.SlideId}): the email body does not fit even at {Size} pt; "
-                                  "shorten its paragraphs or drop one")
+            BodyH = sum(B.Wrapped(X, Size, Iw) for X in Body) + 10 * (len(Body) - 1)
+            if BodyH > Bottom - Y + 2:
+                B.Problems.append(f"slide {B.SlideNo} ({B.SlideId}): the email body does not fit even at {Size} pt "
+                                  f"(needs ~{BodyH:.0f} pt of {Bottom - Y:.0f}); shorten its paragraphs or drop one")
             for I, Para in enumerate(Body):
-                Ph = B.Need(Para, Size, Iw)
+                Ph = B.Wrapped(Para, Size, Iw)
                 Tb = B.Text(S, f"EmailBody{I + 1}", Para, Lx + Pad, Y, Iw, Ph, Size, TEXT)
                 if Para.lower().startswith(("http://", "https://", "www.")):  # a link looks like one
                     for Run in Tb.text_frame.paragraphs[0].runs:
@@ -1823,7 +2682,7 @@ class kSlidePatterns:
                 Lx = M + (I % Cols) * (Wd + GAP)
                 Ty = BODY_TOP + 10 + (I // Cols) * (Ht + GAP)
                 Right = Answer and O.get("correct")
-                B.Rect(S, f"Option{I + 1}", Lx, Ty, Wd, Ht, ACCENT if Right else QUIET)
+                B.Card(S, f"Option{I + 1}", Lx, Ty, Wd, Ht, bool(Right), None if Answer else "left")
                 self.Badge(S, f"Letter{I + 1}", "ABCD"[I], Lx + Pad, Ty + (Ht - D) / 2, D, BG if Right else (
                     MUTED if Answer else ACCENT), ACCENT if Right else BG, 32)
                 B.Text(S, f"OptionText{I + 1}", str(O["text"]), Lx + Pad + D + 24, Ty + 12, Tw, Ht - 24, Ts,
@@ -1876,31 +2735,357 @@ class kSlidePatterns:
             Iw = Wd - 2 * Pad
             Hs = B.FitAll([str(R["risk"]) for R in Rk], 40, Iw, 150, Heading=True)
             Hh = max(B.Need(str(R["risk"]), Hs, Iw, Heading=True) for R in Rk)
-            ChipsTop = Ty + 14 + Pad + Hh + 16
-            MitTop = ChipsTop + 2 * 46 + 22
-            Room = Ty + Ht - Pad - MitTop - 40
+            Levels = [LEVELS.get(str(R.get(Key, "medium")).lower(), "MEDIUM") for R in Rk
+                      for Key in ("likelihood", "impact")]
+            ChipS, ChipH, RowH = 26, 44, 52
+            # a chip is as wide as its longest word plus padding, so 'MEDIUM' never breaks
+            ChipW = max(kMeasure.SafeWidth(L, B.Major, ChipS * B.TypeScale(), True) for L in Levels) / B._kx + 36
+            ChipsTop = Ty + EDGE + Pad + Hh + 18
+            MitTop = ChipsTop + 2 * RowH + 20
+            Room = Ty + Ht - Pad - MitTop - 44
             Ms = B.FitAll([str(R.get("mitigation", "")) for R in Rk], GROW["detail"], Iw, Room)
             Fills = {"HIGH": (ACCENT, BG), "MEDIUM": (TEXT, BG), "LOW": (BG, TEXT)}
             for I, R in enumerate(Rk):
                 Lx = M + I * (Wd + GAP)
-                B.Rect(S, f"Risk{I + 1}", Lx, Ty, Wd, Ht, QUIET)
-                B.Rect(S, f"RiskRule{I + 1}", Lx, Ty, Wd, 14, ACCENT if I == Hi else MUTED)
-                B.Text(S, f"RiskName{I + 1}", str(R["risk"]), Lx + Pad, Ty + 14 + Pad, Iw, Hh, Hs, TEXT, Bold=True,
+                B.Card(S, f"Risk{I + 1}", Lx, Ty, Wd, Ht, False, "top", EdgeOn=Hi is None or I == Hi)
+                B.Text(S, f"RiskName{I + 1}", str(R["risk"]), Lx + Pad, Ty + EDGE + Pad, Iw, Hh, Hs, TEXT, Bold=True,
                        Heading=True)
                 for J, (Key, Label) in enumerate((("likelihood", "Likelihood"), ("impact", "Impact"))):
                     Level = LEVELS.get(str(R.get(Key, "medium")).lower(), "MEDIUM")
-                    Cy = ChipsTop + J * 46
-                    B.Text(S, f"{Label}{I + 1}", Label, Lx + Pad, Cy, Iw - 132, 38, 26, MUTED,
+                    Cy = ChipsTop + J * RowH
+                    B.Text(S, f"{Label}{I + 1}", Label, Lx + Pad, Cy, Iw - ChipW - 8, ChipH, 28, MUTED,
                            Anchor=MSO_ANCHOR.MIDDLE)
-                    Chip = B.Rect(S, f"{Label}Chip{I + 1}", Lx + Pad + Iw - 124, Cy, 124, 38, Fills[Level][0],
+                    Chip = B.Rect(S, f"{Label}Chip{I + 1}", Lx + Pad + Iw - ChipW, Cy, ChipW, ChipH, Fills[Level][0],
                                   Line=TEXT if Level == "LOW" else None)
-                    B.ShapeText(Chip, Level, 24, Fills[Level][1])
-                B.Text(S, f"MitigationLabel{I + 1}", "Mitigation", Lx + Pad, MitTop, Iw, 36, SIZE["label"], MUTED,
-                       Bold=True)
+                    B.ShapeText(Chip, Level, ChipS, Fills[Level][1])
+                B.Rect(S, f"MitigationRule{I + 1}", Lx + Pad, MitTop - 10, Iw, 2, SOFT)
+                B.Text(S, f"MitigationLabel{I + 1}", "Mitigation", Lx + Pad, MitTop, Iw, 40, 26, ACCENT if B.Themed
+                       else MUTED, Bold=True)
                 if R.get("mitigation"):
-                    B.Text(S, f"Mitigation{I + 1}", str(R["mitigation"]), Lx + Pad, MitTop + 40, Iw, Room, Ms, TEXT)
+                    B.Text(S, f"Mitigation{I + 1}", str(R["mitigation"]), Lx + Pad, MitTop + 44, Iw, Room, Ms, TEXT)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Risks")
+            return
+
+    def DecisionSize(self, Sl, Wd, Size=40, Who=None):
+        """(text size, text width, text height, box height) of the decision box Wd wide - measured once, so a
+        layout can reserve exactly the room the box will take."""
+        if kS.ErrorMode:
+            return Size, Wd, 0, 0
+        try:
+            B = self._b
+            Pad = 36
+            Iw = Wd - 2 * Pad - EDGE
+            Text = str(Sl["decision"])
+            Ds = B.Fit([Text], Size, Iw, 170, Heading=True, Bold=True, What="the decision")
+            Dh = B.Need(Text, Ds, Iw, Heading=True)
+            for Try in (Ds - 2, Ds - 4):  # a line saved by a slightly smaller size beats a mostly empty second line
+                if Try >= 30 and B.Need(Text, Try, Iw, Heading=True) < Dh - Try * 0.6:
+                    Ds = Try
+                    break
+            Bw = B.BalancedWidth(Text, Ds, Iw)  # no lone last word in the ask
+            Dh = B.Need(Text, Ds, Bw, Heading=True)
+            return Ds, Bw, Dh, Pad + KICKER_H + 10 + Dh + (52 if Who else 0) + Pad - 10
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.DecisionSize")
+            return Size, Wd, 0, 0
+
+    def DecisionBox(self, S, Sl, Lx, Ty, Wd, Size=40, Name="Decision", MinHt=0, Who=None):
+        """The ask in a box of its own: the text colour as fill, an accent edge, a tracked label and the decision
+        itself. Returns the box height (1440 grid); Ty is its top. MinHt stretches the box (a figure beside it),
+        its text block centred. Who ([(label, value)]) adds the owner / date line inside the box, under the ask."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            B = self._b
+            Pad = 36
+            Iw = Wd - 2 * Pad - EDGE
+            Text = str(Sl["decision"])
+            Ds, Bw, Dh, Natural = self.DecisionSize(Sl, Wd, Size, Who)
+            Ht = max(Natural, MinHt)
+            Off = (Ht - Natural) / 2
+            B.Rect(S, f"{Name}Box", Lx, Ty, Wd, Ht, TEXT)
+            B.Rect(S, f"{Name}Edge", Lx, Ty, EDGE, Ht, ACCENT)
+            Tb = B.Text(S, f"{Name}Label", str(Sl.get("decision_label") or "Decision requested").upper(),
+                        Lx + EDGE + Pad, Ty + Off + Pad - 6, Iw, KICKER_H, KICKER_SIZE, BG, Bold=True)
+            for R in Tb.text_frame.paragraphs[0].runs:
+                R.font._rPr.set("spc", "200")
+            B.Text(S, Name, Text, Lx + EDGE + Pad, Ty + Off + Pad + KICKER_H + 4, Bw, Dh, Ds, BG, Bold=True,
+                   Heading=True)
+            X, Y = Lx + EDGE + Pad, Ty + Off + Pad + KICKER_H + 4 + Dh + 12
+            for Label, Val in Who or []:  # 'OWNER Executive team   BY Today' on one line inside the box
+                Lw = kMeasure.SafeWidth(Label.upper(), B.Minor, KICKER_SIZE * B.TypeScale(), True) * 1.25 / B._kx + 12
+                Tb = B.Text(S, f"{Label}Label", Label.upper(), X, Y + 4, Lw, 36, KICKER_SIZE, BG, Bold=True,
+                            Anchor=MSO_ANCHOR.MIDDLE)
+                for R in Tb.text_frame.paragraphs[0].runs:
+                    R.font._rPr.set("spc", "200")
+                Vw = min(Lx + Wd - Pad - X - Lw, kMeasure.SafeWidth(Val, B.Major, 30 * B.TypeScale(), True)
+                         * 1.1 / B._kx + 16)
+                B.Text(S, f"{Label}Value", Val.replace(" ", NBSP) if len(Val) <= 16 else Val, X + Lw, Y, Vw, 44,
+                       30, BG, Bold=True, Heading=True, Anchor=MSO_ANCHOR.MIDDLE)
+                X += Lw + Vw + 48
+            return Ht
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.DecisionBox")
+            return 0
+
+    def Decision(self, S, Sl):
+        """A statement with a decision: the claim as the title, the ask in a box, then who and by when, then the
+        reasons - the designed close of a deck that asks for something."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            B.Title(S, Sl["title"])
+            Top = BODY_TOP + 14
+            Fig = Sl.get("figure") if isinstance(Sl.get("figure"), dict) else None
+            Lw = W - 2 * M  # the who/by line and the reasons run the full width under the ask
+            Dw = Lw - (FIGURE_W + GAP if Fig else 0)
+            Who = [(Label, str(Sl[Key])) for Key, Label in (("owner", "Owner"), ("date", "By")) if Sl.get(Key)]
+            Bh = self.DecisionBox(S, Sl, M, Top, Dw, 44 if Fig else 46,
+                                  MinHt=(FIGURE_TREND_H if Fig and Fig.get("trend") else FIGURE_H) if Fig else 0,
+                                  Who=Who if Fig else None)  # beside a figure the owner line goes in the box
+            if Fig:  # the number the decision moves, beside the ask: a tile (with its trend as labelled bars)
+                self.Tiles(S, [Fig], None, W - M - FIGURE_W, Top, FIGURE_W, Bh, True, 96, 32)
+            Y = Top + Bh + (24 if Fig else 36)
+            if Who and not Fig:
+                X = M
+                for I, (Label, Val) in enumerate(Who):
+                    B.Text(S, f"{Label}Label", Label.upper(), X, Y, 300, KICKER_H, KICKER_SIZE, MUTED, Bold=True)
+                    Vw = min(M + Lw - X, kMeasure.SafeWidth(Val, B.Major, 36 * B.TypeScale(), True) / B._kx + 40)
+                    B.Text(S, f"{Label}Value", Val.replace(" ", NBSP) if len(Val) <= 16 else Val, X, Y + KICKER_H + 4,
+                           Vw, 54, 36, TEXT, Bold=True, Heading=True)
+                    X += max(Vw, 300) + 80
+                Y += KICKER_H + 4 + 54 + 30
+            if Sl.get("support"):
+                Support = str(Sl["support"])
+                Sw = Lw - 200
+                Ss = B.Fit([Support], 40, Sw, BODY_BOTTOM - Y - 24, What="the support line")
+                B.Rect(S, "SupportRule", M, Y, Lw, 2, QUIET)
+                B.Text(S, "Support", Support, M, Y + 24, Sw, BODY_BOTTOM - Y - 24, Ss, MUTED)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.Decision")
+            return
+
+    def Value(self, Val):
+        """A metric value that cannot wrap: every space no-break, so '112 %' and '5.9 M' stay whole."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            return str(Val).strip().replace(" ", NBSP)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.Value")
+            return ""
+
+    @staticmethod
+    def TrendText(Mt):
+        """A metric's trend as words, for a tile with no room for its bars: 'Q1 4.1 → Q4 5.9'."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Vals = [V for V in Mt.get("trend") or [] if isinstance(V, (int, float))]
+            if not Vals:
+                return ""
+            Names = [str(X) for X in (Mt.get("trend_labels") or [])]
+            First = kSlidePatterns.TrendNumber(Vals[0], Vals)
+            Last = kSlidePatterns.TrendNumber(Vals[-1], Vals)
+            if len(Names) >= 2:
+                return f"{Names[0]} {First} \u2192 {Names[-1]} {Last}"
+            return f"{First} \u2192 {Last}"
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.TrendText")
+            return ""
+
+    @staticmethod
+    def TrendNumber(V, Values):
+        """A trend value as text, with as many decimals as the most precise value in its series."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Places = max((len(f"{X:g}".split(".")[1]) if "." in f"{X:g}" else 0) for X in Values
+                         if isinstance(X, (int, float)))
+            return f"{V:.{min(Places, 2)}f}"
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.TrendNumber")
+            return ""
+
+    def Trend(self, S, I, Values, Periods, Lx, Ty, Wd, Ht, On):
+        """A metric's trend as labelled bars (zero-based, so the change is honest): the first and the last value
+        written above their bars, the first and last period (trend_labels) below them, the latest bar in the
+        accent. Two values read as a before/after; every figure is at the label floor or above."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            Vals = [V for V in Values if isinstance(V, (int, float))]
+            Top = max(Vals) if Vals else 0
+            if not Vals or Top <= 0:
+                return
+            N = len(Values)
+            Fh = TREND_LABEL * 1.3
+            Ph = Fh if Periods else 0
+            BarsTop, BarsH = Ty + Fh, Ht - Fh - Ph
+            Slot = Wd / N
+            Bw = min(Slot * (0.5 if N == 2 else 0.66), 120)
+            Edge = [J for J, V in enumerate(Values) if isinstance(V, (int, float))]
+            First, Last = Edge[0], Edge[-1]
+            Names = [str(X) for X in (Periods or [])]
+            Ends = {First: Names[0] if Names else "", Last: Names[-1] if Names else ""}
+            for J, V in enumerate(Values):
+                if not isinstance(V, (int, float)):
+                    continue
+                Bh = max(4, BarsH * V / Top)
+                # two bars centred in their halves; more spread so the first starts and the last ends the row
+                X = Lx + J * Slot + (Slot - Bw) / 2 if N == 2 else Lx + J * Slot + (Slot - Bw) * J / (N - 1)
+                Lead = J == Last
+                B.Rect(S, f"Trend{I + 1}Bar{J + 1}", X, BarsTop + BarsH - Bh, Bw, Bh,
+                       BG if On else (ACCENT if Lead else SOFT))
+                if J in (First, Last):  # the figure above its bar, the period below it
+                    Lw = Wd * 0.48
+                    Fx = min(max(Lx, X + Bw / 2 - Lw / 2), Lx + Wd - Lw) if N == 2 else (Lx if J == First
+                                                                                        else Lx + Wd - Lw)
+                    Align = PP_ALIGN.CENTER if N == 2 else (PP_ALIGN.LEFT if J == First else PP_ALIGN.RIGHT)
+                    B.Text(S, f"Trend{I + 1}{'Last' if Lead else 'First'}", self.TrendNumber(V, Vals), Fx,
+                           BarsTop + BarsH - Bh - Fh, Lw, Fh, TREND_LABEL, BG if On else (ACCENT if Lead else MUTED),
+                           Bold=True, Align=Align, Anchor=MSO_ANCHOR.BOTTOM)
+                    if Ends[J]:
+                        B.Text(S, f"Trend{I + 1}{'To' if Lead else 'From'}", Ends[J], Fx, BarsTop + BarsH + 2, Lw,
+                               Fh, TREND_LABEL, BG if On else MUTED, Align=Align)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.Trend")
+            return
+
+    def Metrics(self, S, Sl):
+        """Success metrics as a table: metric, baseline, target (in the accent) and, when given, owner and date;
+        an optional rule (the stop or go condition) below it."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            B.Title(S, Sl["title"])
+            Items = Sl["rows"]
+            Owner = any(R.get("owner") for R in Items)
+            Date = any(R.get("date") for R in Items)
+            Header = ["Metric", "Baseline", "Target"] + (["Owner"] if Owner else []) + (["By"] if Date else [])
+            Keys = ["metric", "baseline", "target"] + (["owner"] if Owner else []) + (["date"] if Date else [])
+            Rule = str(Sl.get("rule") or "")
+            Rs = B.Fit([Rule], 34, W - 2 * M - EDGE - 64, 120) if Rule else 0
+            Rh = B.Need(Rule, Rs, W - 2 * M - EDGE - 64) + 36 if Rule else 0
+            Avail = BODY_BOTTOM - BODY_TOP - 10 - (Rh + 32 if Rule else 0)
+            Rows = len(Items) + 1
+            RowH = min(104, Avail / Rows)
+            Size = 34 if RowH >= 90 else (32 if RowH >= 72 else (30 if RowH >= 62 else 27))
+            Share = {"metric": 3.0, "baseline": 1.5, "target": 1.5, "owner": 2.0, "date": 1.1}
+            Total = sum(Share[K] for K in Keys)
+            Widths = [(W - 2 * M) * Share[K] / Total for K in Keys]
+            Cols = [[str(R.get(K, "")) for R in Items] for K in Keys]
+            Size = min([Size] + [B.FitAll(Col, Size, Widths[C] - 36, RowH - 10) for C, Col in enumerate(Cols)])
+            Gf = S.shapes.add_table(Rows, len(Keys), B.X(M), B.Y(BODY_TOP + 10), B.X(W - 2 * M), B.Y(RowH * Rows))
+            Gf.name = "MetricsTable"
+            Tbl = Gf.table
+            for C, Wd in enumerate(Widths):
+                Tbl.columns[C].width = B.X(Wd)
+            for R in range(Rows):
+                Tbl.rows[R].height = B.Y(RowH)
+            for C, Head in enumerate(Header):
+                self.Cell(Tbl, 0, C, Head, Size - 2, TEXT, BG, Bold=True)
+            Hi = Sl.get("highlight")
+            for Ri, Row in enumerate(Items, 1):
+                On = Hi == Ri - 1
+                Fill = ACCENT if On else (QUIET if Ri % 2 == 0 else BG)
+                for C, K in enumerate(Keys):
+                    Target = K == "target"
+                    Fg = BG if On else (ACCENT if Target and B.Themed else TEXT)
+                    self.Cell(Tbl, Ri, C, str(Row.get(K, "")), Size, Fill, Fg, Bold=On or Target or K == "metric")
+            kSlideText.Alt(Gf, Sl.get("alt") or "Success metrics: " + "; ".join(
+                f"{R.get('metric')} from {R.get('baseline')} to {R.get('target')}" for R in Items) + ".")
+            if Rule:
+                Ry = BODY_TOP + 10 + RowH * Rows + 32
+                B.Card(S, "MetricsRule", M, Ry, W - 2 * M, Rh, False, "left")
+                B.Text(S, "MetricsRuleText", Rule, M + EDGE + 32, Ry + 18, W - 2 * M - EDGE - 64, Rh - 36, Rs, TEXT,
+                       Bold=True, Anchor=MSO_ANCHOR.MIDDLE)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.Metrics")
+            return
+
+    def NextSteps(self, S, Sl):
+        """Actions with an owner and a date, one numbered row each; an optional decision box above them."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            B.Title(S, Sl["title"])
+            Steps = Sl["steps"]
+            Top = BODY_TOP + 10
+            if Sl.get("decision"):
+                Top += self.DecisionBox(S, Sl, M, Top, W - 2 * M, 36) + 28
+            N = len(Steps)
+            RowH = min(124, (BODY_BOTTOM - Top) / N)
+            D = 52
+            Dx, Dw = M + D + 28, 250                     # date column
+            Ow = 300 if any(X.get("owner") for X in Steps) else 0
+            Ax = Dx + Dw + 24
+            Aw = W - M - Ax - (Ow + 24 if Ow else 0)
+            Actions = [str(X["action"]) for X in Steps]
+            As = B.FitAll(Actions, 36, Aw, RowH - 20)
+            Dates = [str(X.get("date", "")).replace(" ", NBSP) for X in Steps]
+            Ds = B.FitLine([X for X in Dates if X] or ["-"], 32, Dw, Smallest=24)
+            Owners = [str(X.get("owner", "")) for X in Steps]
+            Os = B.FitAll([X for X in Owners if X], 30, Ow, RowH - 20) if Ow else 0
+            for I in range(N):
+                Ty = Top + I * RowH
+                if I:
+                    B.Rect(S, f"StepRule{I + 1}", Dx, Ty, W - M - Dx, 2, QUIET)
+                self.Badge(S, f"StepNo{I + 1}", str(I + 1), M, Ty + (RowH - D) / 2, D, ACCENT, BG, 26)
+                if Dates[I]:
+                    B.Text(S, f"When{I + 1}", Dates[I], Dx, Ty + 10, Dw, RowH - 20, Ds, ACCENT if B.Themed else TEXT,
+                           Bold=True, Heading=True, Anchor=MSO_ANCHOR.MIDDLE)
+                B.Text(S, f"Action{I + 1}", Actions[I], Ax, Ty + 10, Aw, RowH - 20, As, TEXT,
+                       Anchor=MSO_ANCHOR.MIDDLE)
+                if Ow and Owners[I]:
+                    B.Text(S, f"Owner{I + 1}", Owners[I], W - M - Ow, Ty + 10, Ow, RowH - 20, Os, MUTED,
+                           Align=PP_ALIGN.RIGHT, Anchor=MSO_ANCHOR.MIDDLE)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.NextSteps")
+            return
+
+    def ProcessRows(self, S, Sl):
+        """Five steps: one numbered row each (label, then its detail beside it), so the text stays large instead
+        of squeezing into five narrow columns."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            Steps = Sl["steps"]
+            Hi = Sl.get("highlight")
+            N = len(Steps)
+            Gap = 14
+            Ht = (BODY_BOTTOM - BODY_TOP - 10 - Gap * (N - 1)) / N
+            D = min(64, Ht - 24)
+            Lx = M + EDGE + 28 + D + 28
+            Lw = 380
+            Dx = Lx + Lw + 32
+            Dw = W - M - 32 - Dx
+            Ls = B.FitAll([str(X["label"]) for X in Steps], 40, Lw, Ht - 16, Heading=True, Bold=True)
+            Short = [str(X["label"]) for X in Steps if len(str(X["label"]).split()) <= 3]
+            if Short:  # a short label stays on one line
+                Ls = min(Ls, B.FitLine(Short, Ls, Lw, Smallest=LABEL_MIN + 4))
+            Details = [str(X.get("detail", "")) for X in Steps]
+            Ds = B.FitAll([X for X in Details if X], 36, Dw, Ht - 16) if any(Details) else 0
+            for I, St in enumerate(Steps):
+                Ty = BODY_TOP + 10 + I * (Ht + Gap)
+                On = I == Hi
+                B.Card(S, f"StepRow{I + 1}", M, Ty, W - 2 * M, Ht, On, "left")
+                self.Badge(S, f"StepNo{I + 1}", str(I + 1), M + EDGE + 28, Ty + (Ht - D) / 2, D, BG if On else ACCENT,
+                           ACCENT if On else BG, 28)
+                Fg = BG if On else TEXT
+                B.Text(S, f"StepLabel{I + 1}", str(St["label"]), Lx, Ty + 8, Lw, Ht - 16, Ls, Fg, Bold=True,
+                       Heading=True, Anchor=MSO_ANCHOR.MIDDLE)
+                if Details[I]:
+                    B.Text(S, f"StepDetail{I + 1}", Details[I], Dx, Ty + 8, Dw, Ht - 16, Ds, Fg,
+                           Anchor=MSO_ANCHOR.MIDDLE)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.ProcessRows")
             return
 
 
@@ -1919,6 +3104,8 @@ class kBuildDeckApp:
             Ap.add_argument("--list-directions", action="store_true")
             Ap.add_argument("--print-schema", action="store_true", help="print the spec's JSON Schema")
             Ap.add_argument("--plan", action="store_true", help="print the story (titles and key facts) and stop")
+            Ap.add_argument("--slides", help="build only these spec slides, e.g. 1,3 or 2-4 (the showcase-first "
+                                             "step): same theme, page numbers and kickers as in the whole deck")
             Args = Ap.parse_args()
             if Args.print_schema:
                 print(json.dumps(kSpecSchema.SpecSchema(), indent=2, ensure_ascii=False))
@@ -1933,21 +3120,29 @@ class kBuildDeckApp:
             Spec = kSpecLoader.Load(Args.spec)
             if Spec is None:
                 return 1
-            Errors = kSpecCheck.CheckSpec(Spec) + kSpecCheck.SchemaErrors(Spec)
+            Only = kSpecCheck.SlideSet(Args.slides, len(Spec.get("slides", []))) if Args.slides else None
+            Schema = kSpecCheck.SchemaErrors(Spec)  # on the spec as written, before figure tokens are filled in
+            Tokens = kFigures.Resolve(Spec, kSlidePatterns.Share)
+            Errors = kSpecCheck.ForSlides(kSpecCheck.CheckSpec(Spec) + Schema + Tokens, Only)
+            Warnings = kSpecCheck.ForSlides(kSpecCheck.Warnings(Spec) + kFigures.SpecWarnings(Spec), Only)
             if Args.plan:
                 kSpecLoader.PrintPlan(Spec)
                 for E in Errors:
                     print(f"spec: {E}")
+                for Wn in Warnings:
+                    print(f"spec warning: {Wn}")
                 return 2 if Errors else 0
             for E in Errors:
                 print(f"spec: {E}", file=sys.stderr)
+            for Wn in Warnings:
+                print(f"spec warning: {Wn}", file=sys.stderr)
             if Errors and not Args.force:
                 return 2  # spec mistakes (expected state): listed above, nothing written
             Builder = kDeckBuilder(Spec)
-            N = Builder.Build(Args.out)
+            N = Builder.Build(Args.out, Only)
             if kS.ErrorMode:
                 return 1
-            print(f"{N} slides -> {Args.out}")
+            print(f"{N} slides -> {Args.out}" + (f" (spec slides {Args.slides} only)" if Only else ""))
             for Pr in Builder.Problems:
                 print(f"fit: {Pr}", file=sys.stderr)
             for Nn in Builder.NoNotes:

@@ -40,6 +40,51 @@
       "type": "string",
       "description": ".pptx or .potx, relative to the spec"
     },
+    "footer": {
+      "type": "string",
+      "maxLength": 70,
+      "description": "Footer text on every content slide (not on title and section slides)."
+    },
+    "page_numbers": {
+      "type": "boolean",
+      "description": "Page numbers on content slides (default true)."
+    },
+    "kickers": {
+      "type": "boolean",
+      "description": "Kicker labels above titles (default true)."
+    },
+    "sources": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "description": "Deck-level sources (e.g. [\"the brief\"]): written into the notes of every content slide whose notes name none."
+    },
+    "facts": {
+      "type": "object",
+      "description": "Named numbers from the brief (a number or a list of numbers, e.g. {\"revenue_q\": [4.1, 4.6, 5.2, 5.9]}): derived figures in the text are checked against them, and {sum:revenue_q}, {average:...}, {change:...}, {first:...}, {last:...}, {count:...} or {name} (a single number) in any text are computed from them.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "number"
+            }
+          }
+        ]
+      }
+    },
     "slides": {
       "type": "array",
       "minItems": 1,
@@ -66,7 +111,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -117,6 +162,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -152,6 +211,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "subtitle": {
                 "type": [
@@ -187,7 +251,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -238,6 +302,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -273,6 +351,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "eyebrow": {
                 "type": [
@@ -308,7 +391,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -359,6 +442,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -395,12 +492,111 @@
                   }
                 ]
               },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
+              },
               "support": {
                 "type": [
                   "string",
                   "number"
                 ],
                 "maxLength": 140
+              },
+              "decision": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 140
+              },
+              "decision_label": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 30
+              },
+              "owner": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 40
+              },
+              "date": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 30
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "number"
+                  ],
+                  "maxLength": 60
+                },
+                "minItems": 1,
+                "maxItems": 3
+              },
+              "figure": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "value": {
+                    "type": [
+                      "string",
+                      "number"
+                    ],
+                    "maxLength": 12
+                  },
+                  "label": {
+                    "type": [
+                      "string",
+                      "number"
+                    ],
+                    "maxLength": 28
+                  },
+                  "note": {
+                    "type": [
+                      "string",
+                      "number"
+                    ],
+                    "maxLength": 50
+                  },
+                  "trend": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "minItems": 2,
+                    "maxItems": 12
+                  },
+                  "trend_labels": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 16
+                    },
+                    "minItems": 2,
+                    "maxItems": 12
+                  }
+                },
+                "required": [
+                  "value",
+                  "label"
+                ]
               }
             },
             "required": [
@@ -429,7 +625,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -480,6 +676,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -516,6 +726,11 @@
                   }
                 ]
               },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
+              },
               "number": {
                 "type": [
                   "string",
@@ -536,6 +751,26 @@
                   "number"
                 ],
                 "maxLength": 90
+              },
+              "visual": {
+                "enum": [
+                  "auto",
+                  "dots",
+                  "bar",
+                  "none"
+                ]
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "number"
+                  ],
+                  "maxLength": 70
+                },
+                "minItems": 1,
+                "maxItems": 3
               }
             },
             "required": [
@@ -565,7 +800,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -616,6 +851,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -652,6 +901,11 @@
                   }
                 ]
               },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
+              },
               "metrics": {
                 "type": "array",
                 "items": {
@@ -678,6 +932,29 @@
                         "number"
                       ],
                       "maxLength": 50
+                    },
+                    "trend": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "minItems": 2,
+                      "maxItems": 12
+                    },
+                    "trend_labels": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "number"
+                        ],
+                        "maxLength": 16
+                      },
+                      "minItems": 2,
+                      "maxItems": 12
                     }
                   },
                   "required": [
@@ -685,12 +962,29 @@
                     "label"
                   ]
                 },
-                "minItems": 3,
+                "minItems": 2,
                 "maxItems": 6
               },
               "highlight": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "decision": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 140
+              },
+              "decision_label": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 30
+              },
+              "trend_chart": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -720,7 +1014,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -771,6 +1065,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -806,6 +1114,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "items": {
                 "type": "array",
@@ -847,7 +1160,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -898,6 +1211,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -933,6 +1260,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "columns": {
                 "type": "array",
@@ -1000,7 +1332,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1051,6 +1383,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -1086,6 +1432,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "steps": {
                 "type": "array",
@@ -1147,7 +1498,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1198,6 +1549,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -1234,6 +1599,11 @@
                   }
                 ]
               },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
+              },
               "events": {
                 "type": "array",
                 "items": {
@@ -1256,7 +1626,6 @@
                     }
                   },
                   "required": [
-                    "date",
                     "label"
                   ]
                 },
@@ -1295,7 +1664,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1346,6 +1715,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -1381,6 +1764,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "quote": {
                 "type": [
@@ -1430,7 +1818,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1481,6 +1869,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -1516,6 +1918,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "type": {
                 "enum": [
@@ -1619,7 +2026,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1670,6 +2077,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -1705,6 +2126,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "header": {
                 "type": "array",
@@ -1770,7 +2196,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1821,6 +2247,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -1856,6 +2296,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "image": {
                 "type": [
@@ -1910,7 +2355,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1961,6 +2406,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -1996,6 +2455,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "quadrants": {
                 "type": "array",
@@ -2071,7 +2535,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2122,6 +2586,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -2157,6 +2635,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "from": {
                 "type": [
@@ -2262,7 +2745,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2313,6 +2796,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -2349,6 +2846,11 @@
                   }
                 ]
               },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
+              },
               "metrics": {
                 "type": "array",
                 "items": {
@@ -2375,6 +2877,29 @@
                         "number"
                       ],
                       "maxLength": 40
+                    },
+                    "trend": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "minItems": 2,
+                      "maxItems": 12
+                    },
+                    "trend_labels": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "number"
+                        ],
+                        "maxLength": 16
+                      },
+                      "minItems": 2,
+                      "maxItems": 12
                     }
                   },
                   "required": [
@@ -2382,7 +2907,7 @@
                     "label"
                   ]
                 },
-                "minItems": 2,
+                "minItems": 1,
                 "maxItems": 4
               },
               "highlight_metric": {
@@ -2467,9 +2992,7 @@
             "required": [
               "pattern",
               "title",
-              "metrics",
-              "categories",
-              "series"
+              "metrics"
             ]
           },
           {
@@ -2493,7 +3016,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2544,6 +3067,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -2579,6 +3116,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "rows": {
                 "type": "array",
@@ -2665,7 +3207,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2716,6 +3258,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -2751,6 +3307,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "options": {
                 "type": "array",
@@ -2824,7 +3385,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / qa / pitfalls / sources (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2875,6 +3436,20 @@
                           }
                         ]
                       },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
                       "qa": {
                         "oneOf": [
                           {
@@ -2910,6 +3485,11 @@
                     }
                   }
                 ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
               },
               "risks": {
                 "type": "array",
@@ -2963,6 +3543,385 @@
               "pattern",
               "title",
               "risks"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "const": "metrics"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "description": "Stable slide id; keep it when the content changes."
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 70,
+                "description": "Write it as a claim, not a topic."
+              },
+              "notes": {
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "key_fact": {
+                        "type": "string"
+                      },
+                      "facts": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "pitfalls": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "sources": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
+                      "qa": {
+                        "oneOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "q"
+                                  ],
+                                  "properties": {
+                                    "q": {
+                                      "type": "string"
+                                    },
+                                    "a": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "metric": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 40
+                    },
+                    "baseline": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 24
+                    },
+                    "target": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 24
+                    },
+                    "owner": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 24
+                    },
+                    "date": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 16
+                    }
+                  },
+                  "required": [
+                    "metric",
+                    "baseline",
+                    "target"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 6
+              },
+              "rule": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 140
+              },
+              "highlight": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "pattern",
+              "title",
+              "rows"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "const": "next_steps"
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+$",
+                "description": "Stable slide id; keep it when the content changes."
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 70,
+                "description": "Write it as a claim, not a topic."
+              },
+              "notes": {
+                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "key_fact": {
+                        "type": "string"
+                      },
+                      "facts": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "pitfalls": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "sources": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      },
+                      "assumptions": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                      },
+                      "qa": {
+                        "oneOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "q"
+                                  ],
+                                  "properties": {
+                                    "q": {
+                                      "type": "string"
+                                    },
+                                    "a": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              "kicker": {
+                "type": "string",
+                "maxLength": 30,
+                "description": "Small label above the title (at most three words); defaults to the current section's eyebrow; \"\" for none."
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 80
+                    },
+                    "owner": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 30
+                    },
+                    "date": {
+                      "type": [
+                        "string",
+                        "number"
+                      ],
+                      "maxLength": 20
+                    }
+                  },
+                  "required": [
+                    "action"
+                  ]
+                },
+                "minItems": 2,
+                "maxItems": 6
+              },
+              "decision": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 140
+              },
+              "decision_label": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 30
+              }
+            },
+            "required": [
+              "pattern",
+              "title",
+              "steps"
             ]
           }
         ]

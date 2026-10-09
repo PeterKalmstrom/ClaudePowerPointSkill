@@ -48,7 +48,26 @@ numbers right-aligned, one highlighted row at most.
 Entrance 0.3 s, emphasis 0.4 s, exit 0.25 s, transitions 0.4 s, chart elements staggered by ~0.12 s —
 and the whole slide built within ~2 s ([ANIMATION.md](ANIMATION.md)).
 
-## Design directions
+## The builder's visual system
+
+`build_deck.py` applies one system in all twenty directions, built only from theme colours so it re-themes:
+
+| Element | Rule |
+|---|---|
+| Kicker | 24 pt tracked caps in the accent, just above the title; at most three words; from the section's eyebrow by default |
+| Footer | 18 pt muted deck text bottom left, bold page number bottom right; not on title or section slides |
+| Card | tinted fill (background + 7 % accent + a little text), 8 pt accent edge on top (columns) or left (rows); lead card's edge in the full accent, the others in the soft accent |
+| Highlight | the card filled with the accent, its text in the background colour (≥ 4.5:1, self-tested) |
+| Figures | KPI values and targets in the accent on cards (≥ 3:1 on the card, self-tested) |
+| Decision | a box in the text colour with an accent edge, a tracked label and the ask in the heading font; with a `figure`, the number the ask moves (and its trend) in a tile beside it, owner and date inside the box |
+| Kicker + title | measured as one block with the line height of the loosest renderer: a two-line title's box reaches 16 pt lower and the title shrinks until its ink clears the kicker |
+| Tile trend | labelled bars: the first and last value above their bars (24 pt, the label floor), the first and last period (`trend_labels`) below; zero-based; the latest bar in the accent; two values read as a before/after |
+| Trend chart | a `kpi` metric with a trend (≤ 4 metrics, no decision) gets its own card: value, label and note as the header, a native column chart with data labels below, the other bars in the soft accent |
+| Share | a big number that is a share (`41` + `%`, `14/20`) gets a dot grid beside it (10 × 10, or 5 per row up to 25), the part in the accent, the rest faint, labelled "41 in every 100" |
+| Statement | with `points`: the claim on the left, the points as numbered cards in a column on the right; without: an accent bar the height of the claim and its support anchors it |
+| Floors in tiles | labels, notes and trend figures never below 24 pt: the trend, then labels (to 28), then the value give way; what still does not fit is reported (exit 3) |
+| Cover / divider | a full panel in the text colour with an accent rule; the cover adds a band in the accent |
+
 
 Twenty starting points, written for this skill and stored in
 [`scripts/directions.json`](../scripts/directions.json). Pass one as `direction` to `build_deck.py`, or use

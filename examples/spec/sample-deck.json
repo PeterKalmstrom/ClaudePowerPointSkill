@@ -1,5 +1,9 @@
 {
   "direction": "clean-corporate",
+  "footer": "Regional performance · Q1 2026",
+  "sources": [
+    "Finance dashboard, April 2026"
+  ],
   "slides": [
     {
       "id": "cover",
@@ -16,7 +20,7 @@
       "title": "East grew faster than any region",
       "number": "+8",
       "unit": "%",
-      "caption": "East revenue vs Q4. Every other region within ±3 %.",
+      "caption": "East revenue vs Q4, constant currency",
       "notes": {
         "key_fact": "East grew 8 % quarter on quarter.",
         "facts": [
@@ -32,7 +36,12 @@
         "sources": [
           "Finance dashboard, April 2026"
         ]
-      }
+      },
+      "kicker": "Results",
+      "points": [
+        "Every other region within ±3 %",
+        "Partner-led sales and weekly pipeline reviews"
+      ]
     },
     {
       "id": "growth-chart",
@@ -68,7 +77,17 @@
       "metrics": [
         {
           "value": "41.2 M",
-          "label": "Total revenue"
+          "label": "Total revenue",
+          "trend": [
+            12.9,
+            13.4,
+            14.9
+          ],
+          "note": "Jan to Mar, M",
+          "trend_labels": [
+            "Jan",
+            "Mar"
+          ]
         },
         {
           "value": "+1.5 pt",
@@ -88,7 +107,9 @@
         "sources": [
           "Finance dashboard, April 2026"
         ]
-      }
+      },
+      "decision": "Fund the partner programme in every region: 410 k this year",
+      "kicker": "Summary"
     },
     {
       "id": "why-east",
@@ -320,8 +341,8 @@
       ],
       "notes": {
         "key_fact": "Partner pace is the risk that matters.",
-        "pitfalls": [
-          "Ratings are the team's assessment, not data."
+        "assumptions": [
+          "Likelihood and impact ratings are the team's assessment, not data."
         ]
       }
     },
@@ -432,6 +453,79 @@
       "notes": "Budget detail in the appendix."
     },
     {
+      "id": "success",
+      "pattern": "metrics",
+      "kicker": "Success",
+      "title": "We will call the rollout a success at these targets",
+      "rows": [
+        {
+          "metric": "Revenue growth vs Q4",
+          "baseline": "+1 %",
+          "target": "+5 %",
+          "owner": "Regional leads",
+          "date": "Q3"
+        },
+        {
+          "metric": "Deals from partners",
+          "baseline": "18 %",
+          "target": "30 %",
+          "owner": "Partner team",
+          "date": "Q3"
+        },
+        {
+          "metric": "Weekly reviews held",
+          "baseline": "1 of 4",
+          "target": "4 of 4",
+          "owner": "Sales ops",
+          "date": "Jul"
+        }
+      ],
+      "rule": "Stop rule: if partner deals stay under 20 % by July, we pause and review.",
+      "notes": {
+        "key_fact": "Three targets with an owner and a date; one stop rule.",
+        "pitfalls": [
+          "Example targets; set them with Finance."
+        ],
+        "sources": [
+          "Finance dashboard, April 2026"
+        ]
+      }
+    },
+    {
+      "id": "next-steps",
+      "pattern": "next_steps",
+      "kicker": "Next steps",
+      "title": "Four steps take the playbook live by October",
+      "steps": [
+        {
+          "action": "Approve the partner budget",
+          "owner": "Leadership team",
+          "date": "Today"
+        },
+        {
+          "action": "Pick two partners per region",
+          "owner": "Regional leads",
+          "date": "By 15 May"
+        },
+        {
+          "action": "Train every regional team",
+          "owner": "Sales enablement",
+          "date": "June"
+        },
+        {
+          "action": "Review the first results",
+          "owner": "Sales ops",
+          "date": "Q3 review"
+        }
+      ],
+      "notes": {
+        "key_fact": "Each step has one owner and a date.",
+        "sources": [
+          "Rollout plan, April 2026"
+        ]
+      }
+    },
+    {
       "id": "next",
       "pattern": "section",
       "eyebrow": "Appendix",
@@ -442,8 +536,23 @@
       "id": "close",
       "pattern": "statement",
       "title": "Copy what works in East, everywhere",
-      "support": "Decision needed today: the partner budget.",
-      "notes": "Close."
+      "support": "East grew 8 % with partners and weekly reviews; the other regions can follow by October.",
+      "notes": {
+        "key_fact": "Close on the one decision: the partner budget.",
+        "sources": [
+          "Finance dashboard, April 2026"
+        ]
+      },
+      "decision": "Approve the partner budget of 410 k for the rollout",
+      "decision_label": "Decision today",
+      "owner": "Regional director",
+      "date": "Today",
+      "kicker": "The ask",
+      "figure": {
+        "value": "410 k",
+        "label": "Rollout budget this year",
+        "note": "Most of it paid only on results"
+      }
     }
   ]
 }

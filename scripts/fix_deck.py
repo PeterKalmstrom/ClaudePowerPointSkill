@@ -226,6 +226,10 @@ class kFixDeck:
             return None
 
 
+USAGE_HINT = ("usage: fix_deck.py deck.pptx --out fixed.pptx | --in-place (keeps deck.pptx.bak) | --dry-run "
+              "(lists the fixes) - one of the three is required")
+
+
 class kFixDeckApp:
     """Command line: fix, save a copy, then lint the copy."""
 
@@ -252,7 +256,7 @@ class kFixDeckApp:
             return 1
         try:
             Ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-            Ap.add_argument("file")
+            Ap.add_argument("file", nargs="?")
             Ap.add_argument("--out")
             Ap.add_argument("--only", help=f"comma-separated subset of: {', '.join(FIXES)}")
             Ap.add_argument("--dry-run", action="store_true", help="list the fixes without writing")
@@ -263,8 +267,9 @@ class kFixDeckApp:
             A = Ap.parse_args()
             if A.in_place and A.out:
                 Ap.error("use --out or --in-place, not both")
-            if not A.out and not A.dry_run and not A.in_place:
-                Ap.error("--out is required (or --in-place, which keeps a .bak), or use --dry-run")
+            if not A.file or (not A.out and not A.dry_run and not A.in_place):
+                print(USAGE_HINT, file=sys.stderr)  # one line: how to call it (a bare call lands here)
+                return 2
             if A.out and os.path.abspath(A.out) == os.path.abspath(A.file):
                 Ap.error("--out must differ from the input (use --in-place to overwrite it with a .bak kept)")
             Only = set(A.only.split(",")) if A.only else set(FIXES)

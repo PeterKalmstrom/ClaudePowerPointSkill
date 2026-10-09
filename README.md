@@ -26,7 +26,7 @@ Or build one yourself from a spec — [`examples/spec/sample-deck.json`](example
 uvx --with python-pptx --with pillow python scripts/build_deck.py examples/spec/sample-deck.json --out deck.pptx --lint
 ```
 
-![The 19-slide sample deck built from that spec](examples/spec/sample-deck.png)
+![The 21-slide sample deck built from that spec](examples/spec/sample-deck.png)
 
 ---
 
@@ -74,11 +74,11 @@ the shapes, rendering and looking, putting the citation in the notes.
 Blind-judged against plain Claude and Anthropic's pptx skill on three briefs (details, method and the round this
 skill lost: [evals/benchmark](evals/benchmark/README.md)):
 
-| Maker | Overall (1-10) | Speaker notes | Lint errors / warnings (3 decks) |
-|---|---|---|---|
-| **This skill** | **7.94** | **8.7** | **0 / 0** |
-| Plain Claude | 7.72 | 5.3 | 30 / 135 |
-| Anthropic pptx skill | 6.78 | 2.0 | 15 / 81 |
+| Maker | Overall (1-10) | Legibility | Speaker notes | Lint errors / warnings (3 decks) |
+|---|---|---|---|---|
+| **This skill** | **8.50** | **9.0** | **8.7** | **0 / 0** |
+| Plain Claude | 7.06 | 6.0 | 5.0 | 30 / 135 |
+| Anthropic pptx skill | 6.11 | 6.0 | 1.7 | 15 / 81 |
 
 ## What runs where
 

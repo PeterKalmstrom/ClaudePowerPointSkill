@@ -13,9 +13,9 @@ only the reference file the task needs.
 
 | Task | Read, in order |
 |---|---|
-| **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · write a spec (`scripts/spec.schema.json`), show `--plan`, then build with `scripts/build_deck.py` — show the thing itself: `email`, `kpi_chart`, `cost_table`, `quiz`, `risks` beat bullets ([BUILDER](reference/BUILDER.md), looks in [DESIGN](reference/DESIGN.md)) · look at all slides at once with `render_lo.py --sheet` · showcase-first (below) · the build loop (below) |
+| **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · write a spec (`scripts/spec.schema.json`), show `--plan`, then build with `scripts/build_deck.py` — show the thing itself: `email`, `kpi_chart`, `cost_table`, `quiz`, `risks`, `metrics`, `next_steps` beat bullets; give the deck a `footer` and the ask a `decision` with the number it moves (`figure`); before/after numbers get a `trend` (they become a chart), a share a dot grid, a statement its `points` ([BUILDER](reference/BUILDER.md), looks in [DESIGN](reference/DESIGN.md)) · never compute a total, average, change or share by hand: put the brief's numbers in `facts` and write `{sum}` / `{change}` / `{share}` ([computed figures](reference/BUILDER.md#computed-figures)) · treat `spec warning:` lines (a figure that does not add up, vague targets, a skipped month, a sparse slide) as content to fix · look at all slides at once with `render_lo.py --sheet` · showcase-first (below) · the build loop (below) |
 | **Edit an existing deck** | Snapshot first · `scripts/read_deck.py` before judging ([AUDIT](reference/AUDIT.md)) · find the open deck by name ([COM](reference/COM.md)) · rebuilding a generated deck? `scripts/harvest_edits.py` first |
-| **Review / audit a deck** | `scripts/lint_deck.py` first (any OS) · `scripts/fix_deck.py` for the mechanical fixes · then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
+| **Review / audit a deck** | `scripts/lint_deck.py` first (any OS) · `scripts/fix_deck.py deck.pptx --out fixed.pptx` (or `--in-place`, or `--dry-run`; one is required) for the mechanical fixes · then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
 | **Before a talk** | Audit clean first, then [PRESENTING](reference/PRESENTING.md) |
 | **Images, video, Remotion, Veo** | [MEDIA](reference/MEDIA.md), then [ANIMATION](reference/ANIMATION.md) if it moves |
 | **PowerPoint automation failing (Windows)** | [SETUP](reference/SETUP.md) → Troubleshooting |
@@ -53,7 +53,7 @@ These apply to every deck. Each links to its full explanation.
 6. **About 10 visible words per slide (by anchor type), body ≥ 18 pt on a 960-pt slide — ≥ 27 pt on Full HD (1440 pt)**, claim titles. ([LAYOUT](reference/LAYOUT.md#anchor-types-and-word-budgets), [CONTENT](reference/CONTENT.md#titles-make-a-claim-not-a-topic))
 7. **No text baked into images or video** — overlay it in PowerPoint. ([MEDIA](reference/MEDIA.md#generate-images-without-text--overlay-text-in-powerpoint))
 8. **Crop pictures, never stretch them.** ([LAYOUT](reference/LAYOUT.md#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly))
-9. **The slide carries the punch, the notes carry the depth** — notes on every slide, written first, fixed order. Never invent facts beyond the brief: mark anything you add as `Assumption:` in the notes. An ask states its reasons and its cost or impact. ([CONTENT](reference/CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief), [ask](reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost))
+9. **The slide carries the punch, the notes carry the depth** — notes on every slide, written first, fixed order. Never invent facts beyond the brief: put anything you add in the notes' `assumptions` (written as `ASSUMPTIONS:`); when the brief is the only source, say so — deck-level `"sources": ["the brief"]`. An ask states its reasons and its cost or impact. ([CONTENT](reference/CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief), [ask](reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost))
 10. **Lint, then render and LOOK** before calling anything done — `scripts/lint_deck.py` catches what the file shows (overlaps, stretched pictures, small text, missing alt text) on any OS; the render catches the rest. Render via Save As JPEG on Windows, not `Slide.Export`; `scripts/render_lo.py` elsewhere (approximate). (Loop below; [LAYOUT](reference/LAYOUT.md#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg))
 
 ## Showcase-first for multi-slide sections
@@ -61,6 +61,12 @@ These apply to every deck. Each links to its full explanation.
 For any section of **4+ slides** that share a design, build the opener and one detail slide first, render both,
 and ask the user to approve before producing the rest. Iterating slide 1 of 6 is cheap; rebuilding all six in the
 wrong design is not.
+
+**Unattended runs** (no one to ask — a batch job, a benchmark, an agent told to finish alone): still build the
+opener and one detail slide first — `build_deck.py spec.json --out showcase.pptx --slides 1,3` builds only those
+from the full spec, with the deck's theme and page numbers — render them (`render_lo.py --sheet`) and look at
+them yourself against the brief and the design rules; fix what you see, then build the rest. Say in the final summary that the showcase was self-approved, and what you
+changed after looking.
 
 ## Workflow
 
@@ -155,6 +161,9 @@ A consolidated catalog of the silent failures that have actually shipped broken 
 | Calling `ExportAsFixedFormat` positionally from pywin32 | `TypeError: The Python instance can not be converted to a COM object` — no PDF | [Presenter prep](reference/PRESENTING.md#presenter-prep) |
 | Inventing specifics the brief never gave (times, extensions, targets, "root cause fixed") | The room knows the real answer; credibility goes, and the notes can't defend it | [Never invent facts](reference/CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief) |
 | A bare "Approve X" ask slide | Reads as a slogan: no reasons, no cost, nothing to weigh | [The ask states its reasons and its cost](reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost) |
+| Two numbers in two tiles ("1.8 %", "1.2 %") for one before/after | Reads as two unrelated facts; the change is never shown | [Patterns and limits](reference/BUILDER.md#patterns-and-limits) (`trend`) |
+| Adding up or dividing by hand ("21.8 MUSD, sum of quarters" for 4.1 + 4.6 + 5.2 + 5.9 = 19.8) | One wrong figure and the board doubts every other number | [Compute derived figures](reference/CONTENT.md#compute-derived-figures-never-by-hand) |
+| A success target with no number ("Clearly lower", "No drop") | Nobody can say afterwards whether the pilot passed | [Success has a number](reference/CONTENT.md#success-has-a-number) |
 | `for p in app.Presentations: if ...: target = p` without `break` | Picks the *last* matching presentation in enumeration order (effectively random when multiple match the substring) | [Multi-presentation safety](reference/COM.md#multi-presentation-safety--never-trust-activepresentation) |
 
 When one of these bites, fix it and **add a row here** if it's a new variant. The signal is: "I lost an hour to a silent failure" → it belongs in this table.

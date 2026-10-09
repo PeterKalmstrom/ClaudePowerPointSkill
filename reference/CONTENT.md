@@ -71,14 +71,19 @@ claim, the hierarchy is wrong.
 
 **Rule:** every slide — the cover and the close included — has speaker notes, and nothing on a slide or in its
 notes goes beyond what the brief, the data or a named source says. Anything you add to make the story work (a
-rating, a target, a start date, a mitigation, a process step, a time) is marked as an assumption in the notes —
-`Assumption: …` under *Pitfalls* — so the presenter knows what to confirm before standing up.
+rating, a target, a start date, a mitigation, a process step, a time) is listed in the notes' **`assumptions`**
+(the builder writes them as an `ASSUMPTIONS:` section after the facts; `--plan` shows them per slide) — so the
+presenter knows what to confirm before standing up. When the brief is the only source, say so: `"sources":
+["the brief"]` in a slide's notes, or once at deck level (`"sources"` beside `footer`), which fills every content
+slide that names none and satisfies `figure_without_source`.
 
 **Why:** in a blind benchmark (October 2026) the judge's notes on all three decks that lost points were the same:
 slides with one-word or no notes, and confident details nobody had given ("15 minutes", "ext. 4400", "root cause
 fixed", "multi-region failover"). Invented specifics are the fastest way to lose a room that knows the real answer.
 
-**How to apply:** write the notes first (next section). `build_deck.py` prints `notes: slide N … has no speaker
+**How to apply:** write the notes first (next section). An `assumptions` entry is a short sentence that names
+what was assumed ("Likelihood and impact ratings are the team's proposal, not in the brief."); `pitfalls` stay
+for what not to say. `build_deck.py` prints `notes: slide N … has no speaker
 notes` for every slide the spec left without, and `lint_deck.py` reports `missing_notes`. A worked example
 (a training email, a sample price) is labelled as made up in the notes, and placeholder contact details are
 written as "give the real number here", never as a plausible fake.
@@ -94,8 +99,43 @@ no cost, say what the cost consists of and that the figure comes from Finance �
 scored it as a thin ask. Decision-makers approve what they can weigh.
 
 **How to apply:** build the ask as a `compare` (*Why now* / *Cost and impact*) or `kpi` slide rather than a bare
-`statement`; repeat the decision on the closing slide. Put the expected questions ("What does it cost?", "What if
+`statement`; repeat the decision on the closing slide, with a **`figure`** beside the box — the number the
+decision moves (new customers and their trend) or what it costs (`200 kSEK`) — so the close is not text only. Put the expected questions ("What does it cost?", "What if
 it fails?") in the notes' Q&A.
+
+### Success has a number
+
+**Rule:** every success target is measurable — a number, a percent, a date or a comparison with a reference:
+"below 30 %", "≥ 95 % of the Q4 level", "≤ the current rate", "by 30 June". Never "Clearly lower", "No drop",
+"Improved". The same goes for a timeline: monthly milestones cover every month, or the notes say why one is
+skipped; and a worked example (an email with its red flags, a quiz) shows as many cases as the slide promises.
+
+**Why:** in a blind benchmark (round 3) the judge marked targets such as "Clearly lower" and "No drop" as vague,
+and a January–June timeline that skipped April as a gap — the board cannot judge a pilot against words.
+
+**How to apply:** if the brief gives no target, propose one and list it in the notes' `assumptions` for the
+owner to confirm. `build_deck.py` prints `spec warning: … target … is not measurable` and `… the months jump from
+Mar to May`; `lint_deck.py` reports `target_not_measurable` on a metrics table. A statement with nothing but a
+support line, or a big number with one caption, also gets a `spec warning`: give it `points` (2–3 short facts,
+steps or reasons).
+
+### Compute derived figures, never by hand
+
+**Rule:** a total, an average, a change in percent or a share is computed — by the builder or a script — from the
+numbers it is derived from, never added up in your head. In a spec, write `{sum}`, `{average}`, `{change}`,
+`{share}` (or `{sum:revenue_q}` against a deck-level `facts` list) and the builder fills in the figure
+([BUILDER.md](BUILDER.md#computed-figures)). Put the brief's raw numbers in `facts` and every derived figure
+comes from them.
+
+**Why:** in a blind benchmark (round 4) the best-scoring deck said 2026 revenue was "21.8 MUSD" while its own
+chart showed quarters of 4.1, 4.6, 5.2 and 5.9 — 19.8. Its notes even said "sum of quarters". One wrong number
+costs the whole deck its credibility with a board that can add.
+
+**How to apply:** the builder checks every hand-written figure that reads as derived (next to *sum*, *total*,
+*average*, *up 44 %*, `+44 %`, `70 % of …`, an equation in the notes) against the chart series, metric trends,
+cost and table columns and `facts` in the same deck, and prints `spec warning: figure: …` when one is close but
+wrong; `lint_deck.py` reports `figure_mismatch` on the built deck. The check catches slips — it is not a reason to
+compute by hand.
 
 ### Write the notes first, in a fixed order
 
@@ -104,9 +144,10 @@ Use the same order on every slide so the presenter always knows where to look:
 
 1. **Key fact** — the one sentence the slide exists to land
 2. **Facts** — supporting points, numbers and context to browse (no word cap)
-3. **Q&A** — likely questions with short answers
+3. **Assumptions** — what you added beyond the brief, to confirm
 4. **Pitfalls** — what is commonly misunderstood, or what not to say
-5. **Sources** — citations with DOI or URL
+5. **Sources** — citations with DOI or URL (or "the brief")
+6. **Q&A** — likely questions with short answers
 
 Write facts to browse, not a script to read aloud. A fixed structure also lets a script check notes coverage
 (every content slide has a key fact and at least one source) and feeds the Q&A panic sheet in *Presenter prep*.
@@ -144,6 +185,10 @@ For any section of **4+ slides** that share a design grammar, build the **opener
 2. Export both as PNG previews
 3. Ask the user: "These two define the design grammar. Approve and I'll batch the rest, or tell me what to change."
 4. Wait for explicit sign-off before producing the remaining slides
+
+With the builder, `build_deck.py spec.json --out showcase.pptx --slides 1,3` builds just those two slides (same
+theme, page numbers and kickers as in the full deck) from the spec you are still writing; render them with
+`render_lo.py showcase.pptx --out renders/ --sheet` and LOOK.
 
 **Why this matters:** iterating slide 1 of 6 is cheap. Iterating slide 5 of 6 after building all six in the wrong grammar is brutal. A single round-trip on two showcase slides saves hours of rebuild.
 

@@ -18,12 +18,17 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 |---|---|---|
 | `slide_size` | warn (info if 16:9) | Deck isn't 1440 × 810 pt |
 | `missing_title` / `empty_title` | warn | No title placeholder / it's empty (screen readers and the outline need one, even hidden) |
-| `headline_too_long` / `headline_two_line` | warn | Title > 55 characters / has a hard line break |
+| `headline_too_long` / `headline_two_line` | warn | Title takes more than two lines at its size in its box (three for display titles ≥ 40 pt on a 960-pt slide), measured from the font; > 55 characters when its size is unknown / has a hard line break |
+| `kicker_title_overlap` | warn | The kicker (small label above the title) ends below the top of the title's ink, measured with the loosest renderer's line height and line count (LibreOffice wraps a missing theme font in a wider substitute) |
+| `title_widow` / `unwanted_wrap` | warn | A title leaves one short word alone on its last line / a short single-line role (value, chip, number) wraps in its box |
 | `title_is_label` | info | 1–2 words, no verb, not a question — a topic, not a claim |
 | `body_below_floor` | warn | A paragraph of 4+ words between the label ceiling and the floor. Both scale with slide width: 12 / 18 pt on a 960-pt slide, **18 / 27 pt on Full HD**; `--room-depth` raises the floor |
 | `too_many_bullets` | warn | More than 7 paragraphs in one shape |
 | `word_budget` | info | More than 12 visible words — or, on a slide `build_deck.py` made, more than its pattern's budget (bullets 30, compare 32, process 36, email 130, risks 64…; `--budget` scales them) — accept for gallery, matrix, chart, quote, reference slides |
-| `text_overflow` | warn / error > 1.5× | Text needs more height than its box (estimated from real font metrics, measured against LibreOffice to the line), or a box that grows with its text spills out of the card behind it |
+| `text_overflow` | warn / error > 1.5× | Text needs more height than its box (estimated from real font metrics, measured against LibreOffice to the line), or a text box that starts on a card or frame (a tile, a risk card, a mocked email) runs past its bottom — as drawn or once grown to its text |
+| `tile_text_below_floor` | warn | A label, note or trend figure in a `build_deck.py` metric tile below the label floor (16 pt on a 960-pt slide, 24 pt on Full HD) |
+| `figure_mismatch` | warn | A total, average, change or share in the text (or an equation in the notes) that the deck's own chart series and table columns contradict - close but wrong, e.g. "21.8, sum of four quarters" beside 4.1 + 4.6 + 5.2 + 5.9 = 19.8; compute it with a `build_deck.py` token |
+| `target_not_measurable` | warn | A target in a `build_deck.py` metrics table with no number, percent, date or comparison ("Clearly lower", "No drop") |
 | `text_shrinks` | info | The box is set to shrink text on overflow — check the shrunk size stays above the floor |
 | `word_breaks` | warn | A single word is wider than its box and will break mid-word (on Windows, `check_word_breaks.py` gives the exact answer) |
 | `offslide_shape` | warn | A shape sticks out past the slide edge (2 pt tolerance) |
@@ -54,7 +59,7 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `grid_monotony` | info | 4+ identical boxes in a row |
 | `stock_or_cartoon_image` | info | Picture name, alt text or link points at a stock or generic-illustration site |
 | `missing_notes` | info | No speaker notes |
-| `figure_without_source` | info | The slide shows numbers (%, currency, a chart or table figures) but the notes name no source (not on the cover or a section divider) |
+| `figure_without_source` | info | The slide shows numbers (%, currency, a chart or table figures) but the notes name no source (not on the cover or a section divider). `SOURCES: the brief` counts; `build_deck.py` writes a deck-level `sources` into every slide without its own |
 | `duplicate_titles` / `mixed_font_families` | warn | Deck-wide: repeated titles / more than 3 fonts set directly on text |
 | `default_font_only` | info | Deck-wide: one default face (Calibri, Aptos, Arial, Inter…) for everything |
 
@@ -62,8 +67,8 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 stand-ins when the real font isn't installed); it can't judge what is behind text on a picture or gradient, and
 it can't tell how the slide *looks*. Those need a render — `render_slides.py` (Windows,
 exact) or `render_lo.py` (any OS, approximate) — and your eyes. An `info` finding is a prompt to check,
-not a defect. Thresholds follow the skill's rules; the overlap areas and 55-character title limit
-match the ones the author's PowerPoint add-in uses.
+not a defect. Thresholds follow the skill's rules; the overlap areas match the ones the author's PowerPoint
+add-in uses.
 
 ## Fixing what lint finds — `scripts/fix_deck.py` (any OS)
 

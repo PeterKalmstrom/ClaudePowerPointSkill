@@ -30,6 +30,7 @@ from _rules import (CARTOON_HOSTS, DEFAULT_FACES, INSIGHT_WORDS, OFFICE_DEFAULT_
                     STOCK_HOSTS, STOP_WORDS, kRules)
 from _theme import kTheme
 from _measure import kMeasure
+from _figures import kFigures
 
 PT = 12700  # EMU per point
 NS = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main",
@@ -54,14 +55,26 @@ IDENTITY_TF = (1.0, 0.0, 1.0, 0.0)
 
 # build_deck.py patterns, recognised by the shape names the builder gives them (first match wins), and the
 # visible-word budget each one reads well with on a 960-pt slide's default of 12 (reference/LAYOUT.md#anchor-types-and-word-budgets).
-PATTERN_MARKERS = [("EmailBar", "email"), ("CostTable", "cost_table"), ("Option1", "quiz"), ("Risk1", "risks"),
-                   ("Card1+Chart", "kpi_chart"), ("Chart", "chart"), ("Value1", "kpi"), ("HeroNumber", "big_number"),
-                   ("Points", "bullets"), ("Point1", "bullets"), ("Heading1", "compare"), ("StepLabel1", "process"), ("Rail", "timeline"),
+PATTERN_MARKERS = [("DecisionBox+Support", "decision"), ("DecisionBox+OwnerValue", "decision"), ("MetricsTable", "metrics"), ("Action1", "next_steps"), ("EmailBar", "email"), ("CostTable", "cost_table"), ("Option1", "quiz"), ("Risk1", "risks"),
+                   ("ChartCard", "kpi_chart"), ("Card1+Chart", "kpi_chart"), ("Chart", "chart"), ("Value1", "kpi"), ("HeroNumber+Points", "big_number_points"), ("HeroNumber", "big_number"),
+                   ("Points", "bullets"), ("StatementPoint1", "statement_points"), ("Point1", "bullets"), ("Heading1", "compare"), ("StepLabel1", "process"), ("Rail", "timeline"),
                    ("QuoteMark", "quote"), ("Table", "table"), ("Photo", "image"), ("Quadrant1", "matrix"),
-                   ("Subtitle", "title"), ("Eyebrow", "section"), ("Support", "statement")]
-PATTERN_BUDGET = {"title": 15, "section": 10, "statement": 20, "big_number": 12, "kpi": 25, "bullets": 30,
+                   ("Subtitle", "title"), ("Eyebrow", "section"), ("Support", "statement"),
+                   ("DecisionBox", "decision"), ("SectionPanel", "section"), ("CoverPanel", "title"),
+                   ("AccentRule", "statement"), ("AnchorBar", "statement")]
+CHROME_NAMES = {"Footer", "PageNumber", "Kicker", "CoverFooter"}  # the builder's deck furniture: not content
+SINGLE_LINE_WORDS = 3      # a box this short (words) whose height holds one line is a single-line role
+WRAP_MARGIN = 0.96         # measure single-line roles against 96 % of the width: other renderers set wider
+PATTERN_BUDGET = {"title": 15, "section": 10, "statement": 20, "big_number": 12, "kpi": 32, "bullets": 30,
                   "compare": 32, "process": 36, "timeline": 30, "quote": 60, "chart": 16, "table": 999, "image": 16,
-                  "matrix": 999, "email": 130, "kpi_chart": 26, "cost_table": 40, "quiz": 40, "risks": 64}
+                  "matrix": 999, "email": 130, "kpi_chart": 26, "cost_table": 40, "quiz": 40, "risks": 64,
+                  "metrics": 999, "next_steps": 60, "decision": 55,
+                  "big_number_points": 30, "statement_points": 40}
+LOOSE_LINE = 1.28          # line height of the loosest renderer (LibreOffice, serif faces): where a title's ink starts
+LABEL_FLOOR_PT = 16.0      # the label floor on a 960-pt slide (24 pt on Full HD); text in metric tiles stays above it
+DATA_LABELS = re.compile(r"Trend\d+(?:First|Last|From|To)|ShareLabel")
+TILE_TEXT = re.compile(r"(?:Label|Note)\d+|Trend\d+(?:First|Last|From|To)|Lead(?:Label|Note)|ShareLabel")
+MEASURABLE = re.compile(r"\d|[<>\u2264\u2265=\u00b1]")  # a target needs a number, date or comparison
 COVER_PATTERNS = {"title", "section"}  # no figure_without_source: a cover's numbers are the talk's own headline
 
 GROUP_TF = {}  # shape_id -> (sx, tx, sy, ty): child coordinates -> slide coordinates (pt)
@@ -432,9 +445,14 @@ class kLintDeck:
             elif not TitleText:
                 F.Add(N, "warn", "empty_title", "Title placeholder is empty.", Titles[0].name)
             else:
-                if len(TitleText) > TITLE_MAX_CHARS:
+                Lines = kLintDeck.TitleLines(Titles[0], Theme)
+                Display = (kLintDeck.ParaSize(Titles[0], Titles[0].text_frame.paragraphs[0]) or 0) >= 40 * kLintDeck.Scale
+                if Lines > (3 if Display else 2) or (Lines == 0 and len(TitleText) > TITLE_MAX_CHARS):
                     F.Add(N, "warn", "headline_too_long",
-                          f"Title is {len(TitleText)} characters (> {TITLE_MAX_CHARS}); it will likely wrap.", Titles[0].name)
+                          (f"Title takes {Lines} lines at its size in its box" if Lines else
+                           f"Title is {len(TitleText)} characters (> {TITLE_MAX_CHARS})") + "; cut it to one claim "
+                          "of one or two lines.", Titles[0].name)
+                kLintDeck.KickerCheck(N, Shapes, Titles[0], Theme, F)
                 if "\n" in TitleText or "\v" in TitleText:
                     F.Add(N, "warn", "headline_two_line", "Title has a hard line break; make it one line or split "
                           "headline and subhead.", Titles[0].name)
@@ -445,17 +463,13 @@ class kLintDeck:
             ContentAll = [S for S in Shapes if S.shape_type != MSO_SHAPE_TYPE.GROUP]
             for S in ContentAll:  # first pass: estimate text layout, so later checks see grown boxes
                 if S.has_text_frame and S.text_frame.text.strip():
-                    Base = Rect(S)
                     kLintDeck.FitCheck(N, S, Theme, F)
-                    if S.shape_id in GROWN:
-                        Grown = Rect(S)
-                        for O in ContentAll:
-                            if O is S or O.has_text_frame and O.text_frame.text.strip():
-                                continue
-                            if kRules.Contains(Rect(O), Base, Tol=2.0) and not kRules.Contains(Rect(O), Grown, Tol=2.0):
-                                F.Add(N, "warn", "text_overflow", f"Text needs ~{Grown[3]:.0f} pt and spills out of "
-                                      f"'{O.name}' behind it; cut words or enlarge the card.", S.name)
-                                break
+                    if not kLintDeck.IsTitle(S):
+                        kLintDeck.SpillCheck(N, S, ContentAll, F)
+                    kLintDeck.TileFloorCheck(N, S, F)
+                if getattr(S, "has_table", False) and S.has_table and S.name == "MetricsTable":
+                    kLintDeck.TargetCheck(N, S, F)
+            Pattern = kLintDeck.PatternOf(Shapes)
             Words, Colours, RawFills, Shadows, Accents = 0, set(), 0, 0, set()
             Sizes, BigTokens, ContrastDone = [], Counter(), False
             Content = [S for S in Shapes if not kLintDeck.IsTitle(S) and S.shape_type != MSO_SHAPE_TYPE.GROUP]
@@ -503,7 +517,9 @@ class kLintDeck:
                 # text
                 if S.has_text_frame and S.text_frame.text.strip():
                     Paras = [P for P in S.text_frame.paragraphs if P.text.strip()]
-                    Words += sum(len(P.text.split()) for P in Paras)
+                    Chrome = S.name in CHROME_NAMES
+                    Data = bool(DATA_LABELS.fullmatch(S.name or ""))  # a trend's figures and periods: chart labels
+                    Words += 0 if Chrome or Data else sum(len(P.text.split()) for P in Paras)
                     Text = S.text_frame.text
                     if len(Paras) > MAX_BULLETS:
                         F.Add(N, "warn", "too_many_bullets", f"{len(Paras)} paragraphs (> {MAX_BULLETS}); split the "
@@ -519,7 +535,8 @@ class kLintDeck:
                     for P in Paras:
                         PtText = P.text.strip()
                         Size = kLintDeck.ParaSize(S, P) or 18.0
-                        Sizes.append(Size)
+                        if not Chrome:
+                            Sizes.append(Size)
                         if len(PtText) <= 24 and kRules.HasEmoji(PtText):
                             F.Add(N, "warn", "emoji_as_icon", f"Emoji used as an icon ('{PtText}'); use a real icon "
                                   "with a text label.", S.name)
@@ -611,7 +628,6 @@ class kLintDeck:
                 if getattr(S, "has_chart", False):
                     kLintDeck.LintChart(N, S, F, Theme)
 
-            Pattern = kLintDeck.PatternOf(Shapes)
             Allowed = round(Budget * PATTERN_BUDGET[Pattern] / 12) if Pattern else Budget
             if Words > Allowed:
                 F.Add(N, "info", "word_budget", f"{Words} visible words (budget {Allowed}"
@@ -632,7 +648,9 @@ class kLintDeck:
                     F.Add(N, "warn", "repeated_word", f"'{Tok}' appears {C} times in large type; demote the repeats.")
                     break
             Big = sorted(set(Sizes), reverse=True)
-            if len(Big) >= 2 and 1.08 < Big[0] / Big[1] < 1.6:
+            # build_deck.py layouts set their own hierarchy (a heading over its points, a value over its label,
+            # cards that share one size); the check is for hand-made slides
+            if len(Big) >= 2 and 1.08 < Big[0] / Big[1] < 1.6 and not Pattern:
                 F.Add(N, "info", "weak_focal_hierarchy", f"Largest text sizes {Big[0]:g} and {Big[1]:g} pt are too "
                       "close; make one element clearly dominant (≥ 1.6×) or equal.")
 
@@ -677,6 +695,214 @@ class kLintDeck:
             return None
 
     @staticmethod
+    def TitleLines(T, Theme, Loose=False):
+        """How many lines the title takes at its size in its box, from font metrics; 0 when its size is unknown.
+        Loose: in the widest renderer (the face LibreOffice substitutes when the theme font is not installed)."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            Paras = [P for P in T.text_frame.paragraphs if P.text.strip()]
+            Size = kLintDeck.ParaSize(T, Paras[0]) if Paras else None
+            if not Size:
+                return 0
+            Bp = T.text_frame._txBody.find("a:bodyPr", NS)
+            Width = kLintDeck.Rect(T)[2] - kLintDeck.Inset(Bp, "lIns", 7.2) - kLintDeck.Inset(Bp, "rIns", 7.2)
+            if Loose:
+                return sum(kMeasure.LooseLines(P.text, Theme.Major, Size, Width, True) for P in Paras)
+            return sum(len(kMeasure.LineWords(P.text, Theme.Major, Size, Width, True)) for P in Paras)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.TitleLines")
+            return 0
+
+    @staticmethod
+    def KickerCheck(N, Shapes, T, Theme, F):
+        """A kicker (the small label above a title) must end above the title's ink. The title's ink is measured
+        with the line height and the line count of the loosest renderer (LibreOffice draws a missing theme font
+        with a wider substitute), from its anchor: a bottom-anchored two-line title grows up."""
+        if kS.ErrorMode:
+            return
+        try:
+            Kick = next((S for S in Shapes if S.name == "Kicker" and S.has_text_frame), None)
+            Paras = [P for P in T.text_frame.paragraphs if P.text.strip()]
+            if Kick is None or not Paras:
+                return
+            Bp = T.text_frame._txBody.find("a:bodyPr", NS)
+            L, Tp, W, H = kLintDeck.Rect(T)
+            Size = kLintDeck.ParaSize(T, Paras[0]) or 44.0
+            Lines = max(1, kLintDeck.TitleLines(T, Theme, True))
+            Ink = Lines * Size * LOOSE_LINE
+            Anchor = Bp.get("anchor") if Bp is not None else None
+            if Anchor == "b":
+                InkTop = Tp + H - kLintDeck.Inset(Bp, "bIns", 3.6) - Ink
+            elif Anchor == "ctr":
+                InkTop = Tp + (H - Ink) / 2
+            else:
+                InkTop = Tp + kLintDeck.Inset(Bp, "tIns", 3.6)
+            Kl, Kt, Kw, Kh = kLintDeck.Rect(Kick)
+            if Kt + Kh > InkTop + 1 and Kl < L + W and L < Kl + Kw:
+                F.Add(N, "warn", "kicker_title_overlap", f"The kicker ends at {Kt + Kh:.0f} pt but the title's "
+                      f"{Lines} line(s) start at ~{InkTop:.0f} pt; shorten the title to one line, lower its size or "
+                      "move the kicker up.", Kick.name)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.KickerCheck(slide={N})")
+            return
+
+    @staticmethod
+    def SlideFigures(N, Slide, Contexts, Series):
+        """One slide's figures for FigureCheck: chart series and numeric table columns (a total row is a claim on
+        its column), the text of each card as one context (its largest number is the figure, the rest says what it
+        is), every other text box, and the speaker notes."""
+        if kS.ErrorMode:
+            return
+        try:
+            Shapes = list(kLintDeck.Walk(Slide.shapes))
+            Cards = [S for S in Shapes if kLintDeck.IsCard(S) and not (S.has_text_frame and S.text_frame.text.strip())]
+            Groups = {}
+            for S in Shapes:
+                if getattr(S, "has_chart", False):
+                    for Plot in S.chart.plots:
+                        for Ser in Plot.series:
+                            Series.append({"slide": N, "name": Ser.name or "chart series", "values": list(Ser.values)})
+                if getattr(S, "has_table", False):
+                    Rows = [[C.text.strip() for C in R.cells] for R in S.table.rows]
+                    Cols, Totals = kFigures.TableColumns({"header": Rows[0] if Rows else [], "rows": Rows[1:]}, N)
+                    Series += Cols
+                    Contexts += [dict(Ctx, shape=S.name) for Ctx in Totals]
+                    continue
+                if not S.has_text_frame or not S.text_frame.text.strip():
+                    continue
+                L, T, W, H = kLintDeck.Rect(S)
+                Home = None
+                for C in Cards:
+                    Cl, Ct, Cw, Ch = kLintDeck.Rect(C)
+                    if Ch >= 40 and Cl - 2 <= L and L + W <= Cl + Cw + 2 and Ct - 2 <= T < Ct + Ch - 2 and \
+                            (Home is None or Cw * Ch < Home[1]):
+                        Home = (C.shape_id, Cw * Ch)
+                Groups.setdefault(Home[0] if Home else f"own{S.shape_id}", []).append(S)
+            for Members in Groups.values():
+                Texts = [M.text_frame.text.strip() for M in Members]
+                if len(Members) == 1:
+                    Contexts.append({"slide": N, "where": Members[0].name, "shape": Members[0].name, "text": Texts[0],
+                                     "primary": None})
+                    continue
+                Sized = [(kLintDeck.ParaSize(M, M.text_frame.paragraphs[0]) or 0, J) for J, M in enumerate(Members)
+                         if kFigures.Numbers(Texts[J])]
+                Lead = max(Sized)[1] if Sized else None
+                for J, M in enumerate(Members):
+                    if J != Lead:
+                        Contexts.append({"slide": N, "where": M.name, "shape": M.name, "text": Texts[J],
+                                         "primary": None})
+                if Lead is not None:
+                    Contexts.append({"slide": N, "where": Members[Lead].name, "shape": Members[Lead].name,
+                                     "text": " \u00b7 ".join(Texts), "primary": Texts[Lead]})
+            if Slide.has_notes_slide:
+                Notes = Slide.notes_slide.notes_text_frame.text
+                Contexts.append({"slide": N, "where": "notes", "shape": None, "text": Notes, "primary": None})
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.SlideFigures(slide={N})")
+            return
+
+    @staticmethod
+    def FigureCheck(Prs, F):
+        """figure_mismatch: a total, average, change or share written on a slide (or in its notes) that the
+        deck's own data contradicts - '21.8 MUSD, sum of four quarters' beside a chart of 4.1, 4.6, 5.2, 5.9."""
+        if kS.ErrorMode:
+            return
+        try:
+            Contexts, Series = [], []
+            for N, Slide in enumerate(Prs.slides, 1):
+                if Slide._element.get("show") != "0":
+                    kLintDeck.SlideFigures(N, Slide, Contexts, Series)
+            for Found in kFigures.Check(Contexts, Series):
+                F.Add(Found["slide"], "warn", "figure_mismatch", Found["message"] + ".", Found.get("shape"))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.FigureCheck")
+            return
+
+    @staticmethod
+    def SpillCheck(N, S, Shapes, F):
+        """Text that starts on a card (or a frame such as a mocked email) but runs past its bottom: the box
+        itself, or the box once grown to its text, ends below the card. The tightest card that holds the box's
+        top is the one it belongs to."""
+        if kS.ErrorMode:
+            return
+        try:
+            L, T, W, H = kLintDeck.Rect(S)
+            Best = None
+            for O in Shapes:
+                if O is S or (O.has_text_frame and O.text_frame.text.strip()) or not kLintDeck.IsCard(O):
+                    continue
+                Ol, Ot, Ow, Oh = kLintDeck.Rect(O)
+                if Oh < 40 or not (Ol - 2 <= L and L + W <= Ol + Ow + 2 and Ot - 2 <= T < Ot + Oh - 2):
+                    continue
+                if Best is None or Ow * Oh < Best[2] * Best[3]:
+                    Best = (Ol, Ot, Ow, Oh, O.name)
+            if Best and T + H > Best[1] + Best[3] + 2:
+                F.Add(N, "warn", "text_overflow", f"Text runs to {T + H:.0f} pt, past the bottom of '{Best[4]}' "
+                      f"({Best[1] + Best[3]:.0f} pt); cut words, drop a paragraph or enlarge the card.", S.name)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.SpillCheck(slide={N})")
+            return
+
+    @staticmethod
+    def IsCard(Sh):
+        """A filled (or outlined) autoshape that text can sit on: a card, a tile, a frame - not a picture, chart,
+        table, line or placeholder."""
+        if kS.ErrorMode:
+            return False
+        try:
+            if Sh.shape_type != MSO_SHAPE_TYPE.AUTO_SHAPE or Sh.is_placeholder:
+                return False
+            Sp = Sh._element.find(".//p:spPr", NS)
+            return Sp is not None and (Sp.find("a:solidFill", NS) is not None or Sp.find("a:gradFill", NS) is not None
+                                       or Sp.find("a:ln/a:solidFill", NS) is not None)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.IsCard")
+            return False
+
+    @staticmethod
+    def TileFloorCheck(N, S, F):
+        """Labels, notes and trend figures inside the builder's metric tiles never go below the label floor
+        (16 pt on a 960-pt slide, 24 pt on Full HD): small text in a tile is unreadable from the back."""
+        if kS.ErrorMode:
+            return
+        try:
+            if not TILE_TEXT.fullmatch(S.name or ""):
+                return
+            Floor = LABEL_FLOOR_PT * kLintDeck.Scale
+            for P in S.text_frame.paragraphs:
+                Size = kLintDeck.ParaSize(S, P)
+                if P.text.strip() and Size and Size < Floor - 0.05:
+                    F.Add(N, "warn", "tile_text_below_floor", f"{Size:g} pt in a metric tile (label floor "
+                          f"{Floor:g} pt): '{P.text.strip()[:30]}'; shorten the label or note, or drop a metric.",
+                          S.name)
+                    return
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.TileFloorCheck(slide={N})")
+            return
+
+    @staticmethod
+    def TargetCheck(N, S, F):
+        """A success-metrics table: every target needs a number, percent, date or comparison to be judged by."""
+        if kS.ErrorMode:
+            return
+        try:
+            Rows = list(S.table.rows)
+            Head = [C.text.strip().lower() for C in Rows[0].cells] if Rows else []
+            if "target" not in Head:
+                return
+            Col = Head.index("target")
+            for R in Rows[1:]:
+                Text = R.cells[Col].text.strip()
+                if Text and not MEASURABLE.search(Text):
+                    F.Add(N, "warn", "target_not_measurable", f"Target '{Text}' ({R.cells[0].text.strip()[:30]}) has "
+                          "no number, percent, date or comparison; write it so the result can be judged (e.g. "
+                          "'below 30 %', '>= 95 % of Q4').", S.name)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.TargetCheck(slide={N})")
+            return
+
+    @staticmethod
     def FitCheck(N, S, Theme, F):
         """Estimate wrapped text height from font metrics and flag text that won't fit its box."""
         if kS.ErrorMode:
@@ -707,6 +933,7 @@ class kLintDeck:
                 Before = P.space_before.pt if P.space_before is not None else 0
                 Paras.append((P.text, Family, Size, Bold, Before))
             Need, Widest, Lines = kMeasure.TextHeight(Paras, Width)
+            kLintDeck.WrapCheck(N, S, Paras, Width, Height, Heading, F)
             if Grows:  # "resize shape to fit text": the box will be as tall as its text; overlap/off-slide use that
                 Grown = Need + Ins(Bp, "tIns", 3.6) + Ins(Bp, "bIns", 3.6)
                 if Grown > H:
@@ -731,6 +958,35 @@ class kLintDeck:
         except Exception as e:
             kS.GlobalErrorHandler(e, f"kLintDeck.FitCheck(slide={N})")
             return None
+
+    @staticmethod
+    def WrapCheck(N, S, Paras, Width, Height, Heading, F):
+        """Unwanted line breaks: a short single-line role (a KPI value, a chip, a label, a number) that wraps
+        inside its box ('112 %' leaving the '%' on the label below), and a title whose last line is one word."""
+        if kS.ErrorMode:
+            return
+        try:
+            if len(Paras) == 1 and not Heading:
+                Text, Family, Size, Bold, _ = Paras[0]
+                Words = Text.split()
+                OneLine = Height < Size * 1.2 * 1.7  # the box only has room for one line
+                if Words and len(Words) <= SINGLE_LINE_WORDS and OneLine and len(Text.strip()) > 1:
+                    Need = kMeasure.SafeWidth(Text.strip(), Family, Size, Bold)
+                    if Need > Width * WRAP_MARGIN + 1:
+                        F.Add(N, "warn", "unwanted_wrap", f"'{Text.strip()[:30]}' needs ~{Need:.0f} pt on one line but "
+                              f"its box is {Width:.0f} pt wide; it will wrap (e.g. a unit under its number). Lower "
+                              "the size, widen the box, or join number and unit with a no-break space.", S.name)
+            if Heading and len(Paras) == 1:
+                Text, Family, Size, Bold, _ = Paras[0]
+                Lines = kMeasure.LineWords(Text, Family, Size, Width, Bold)
+                if len(Lines) >= 2 and len(Lines[-1]) == 1 and len(Lines[-1][0]) <= 14:
+                    F.Add(N, "warn", "title_widow", f"The title wraps leaving '{Lines[-1][0]}' alone on its last "
+                          "line; shorten it by a word, narrow the box to balance the lines, or lower the size.",
+                          S.name)
+            return
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.WrapCheck(slide={N})")
+            return
 
     @staticmethod
     def LintChart(N, S, F, Theme):
@@ -836,6 +1092,7 @@ class kLintDeck:
                                                                       else Theme.Minor)
                                 if Face:
                                     Resolved[Face.lower()] += 1
+            kLintDeck.FigureCheck(Prs, F)
             for T, C in Titles.items():
                 if C > 1:
                     F.Add(0, "warn", "duplicate_titles", f"{C} slides share the title '{T}'; screen-reader and "

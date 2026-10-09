@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Fonts the text measurement needs (metric-compatible Calibri/Cambria/Arial twins)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation2
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation2 fonts-dejavu
 
       - name: Install dependencies
         run: pip install python-pptx pillow numpy jsonschema
@@ -25,5 +25,7 @@ jobs:
         run: python tools/check_docs.py
       - name: Self-test (scripts that need no PowerPoint)
         run: python scripts/selftest.py
+      - name: Self-test with only the CI runner's fonts
+        run: python scripts/selftest.py --ci-fonts
       - name: Trigger evals are well-formed
         run: python tools/check_evals.py

@@ -11,7 +11,22 @@ All 27 slides per maker were rendered with LibreOffice and scored **blind** by a
 only anonymous labels (keys: `round*-key.json`), on six criteria from 1 to 10: message, visual design, legibility,
 layout correctness, data presentation, presenter support (speaker notes).
 
-## Round 4 - after the data-presentation round (current)
+## Round 5 - after the computed-figure and font rounds (current)
+
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
+|---|---|---|---|---|---|---|---|
+| **This skill** | 8.7 | 7.7 | 9.0 | 9.0 | 8.3 | 8.7 | **8.56** |
+| Plain Claude | 7.7 | 8.0 | 6.7 | 8.0 | 7.7 | 6.0 | 7.33 |
+| Anthropic pptx skill | 7.0 | 7.0 | 5.7 | 7.7 | 7.3 | 2.0 | 6.11 |
+
+Judge, in short: this skill - claim titles with **all arithmetic correct** (derived figures now come from the
+builder's `{sum}`/`{change}`/`{share}` tokens, not hand sums), notes with key fact / facts / assumptions / sources
+on every slide, large text, nothing overflowing, decisions with owner and date; weakest on visual flair (the phishing
+deck reads plain) and a few uneven stage labels. Plain Claude - the most polished visuals and the best phishing
+teaching slide, but invented facts presented as fact and thin notes. pptx skill - right chart types, but almost no
+notes and ~10-11 pt body text.
+
+## Round 4 - after the data-presentation round
 
 | Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
 |---|---|---|---|---|---|---|---|
@@ -81,5 +96,5 @@ and missing alt text.
 
 Three briefs, one judge model, LibreOffice renders (fonts substitute), a single run per maker. Treat it as a
 signal, not a leaderboard. The other two makers' decks are identical in all three rounds; their overall scores moved by up to 0.56 between
-judges, so differences under about half a point are noise. Next for this skill: checking computed figures
-against the brief (round 4's error) and the rough edges the round-4 maker reported.
+judges, so differences under about half a point are noise. Next for this skill: visual flair on
+teaching decks (round 5's main criticism) and the rough edges the round-5 maker reported.

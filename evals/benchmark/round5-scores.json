@@ -1,0 +1,89 @@
+{
+ "S": {
+  "qbr": {
+   "message": 9,
+   "design": 8,
+   "legibility": 9,
+   "layout": 9,
+   "data": 9,
+   "notes": 9,
+   "comment": "Claim titles throughout, correct arithmetic (19.8, +44%, 191, 70%), assumptions flagged in notes; ask cost honestly marked unknown."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 7,
+   "legibility": 9,
+   "layout": 9,
+   "data": 7,
+   "notes": 8,
+   "comment": "Clear, large text and a good quiz reveal pair (s7-s8); somewhat plain grey-green boxes and s6 timeline labels float awkwardly."
+  },
+  "fourday": {
+   "message": 9,
+   "design": 8,
+   "legibility": 9,
+   "layout": 9,
+   "data": 9,
+   "notes": 9,
+   "comment": "Tight board story with metrics table, stop rule, cost table summing to 200 and owner/date; invented targets flagged as assumptions."
+  }
+ },
+ "T": {
+  "qbr": {
+   "message": 7,
+   "design": 7,
+   "legibility": 5,
+   "layout": 8,
+   "data": 8,
+   "notes": 2,
+   "comment": "Real charts (bar, line, donut) and correct numbers, but topic titles on several slides, tiny 10-11pt body text, generic 'Thank you' closer (s9) and almost no notes."
+  },
+  "phishing": {
+   "message": 7,
+   "design": 7,
+   "legibility": 6,
+   "layout": 7,
+   "data": 6,
+   "notes": 3,
+   "comment": "Friendly and complete, but quiz answers printed on the question slide (s7), large empty box on s2, small card text, notes on 2 of 8 slides."
+  },
+  "fourday": {
+   "message": 7,
+   "design": 7,
+   "legibility": 6,
+   "layout": 8,
+   "data": 8,
+   "notes": 1,
+   "comment": "Good 100-80-100 design and cost table+bar, but 'hiring already behind plan' (s2) is borrowed from another brief, topic titles, small text, zero notes."
+  }
+ },
+ "U": {
+  "qbr": {
+   "message": 8,
+   "design": 8,
+   "legibility": 7,
+   "layout": 8,
+   "data": 8,
+   "notes": 6,
+   "comment": "Strong exec summary and correct maths (~13% QoQ, 59% H2), but invents agency partner, multi-region failover, Jan 2027 date unflagged; small grey body text."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 8,
+   "legibility": 7,
+   "layout": 8,
+   "data": 7,
+   "notes": 7,
+   "comment": "Polished STOP/REPORT/CALL slide (s5) and answers kept in notes, but unsourced '9 out of 10 attacks' stat (s2) and small body text on cards."
+  },
+  "fourday": {
+   "message": 7,
+   "design": 8,
+   "legibility": 6,
+   "layout": 8,
+   "data": 8,
+   "notes": 5,
+   "comment": "Clean table and budget panel, but title claims 'we are losing them' with no attrition data, invented 'UK/Iceland pilots' note, low-contrast small serif body text."
+  }
+ }
+}

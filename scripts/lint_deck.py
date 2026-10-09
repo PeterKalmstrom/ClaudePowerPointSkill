@@ -978,11 +978,15 @@ class kLintDeck:
                               "the size, widen the box, or join number and unit with a no-break space.", S.name)
             if Heading and len(Paras) == 1:
                 Text, Family, Size, Bold, _ = Paras[0]
-                Lines = kMeasure.LineWords(Text, Family, Size, Width, Bold)
-                if len(Lines) >= 2 and len(Lines[-1]) == 1 and len(Lines[-1][0]) <= 14:
-                    F.Add(N, "warn", "title_widow", f"The title wraps leaving '{Lines[-1][0]}' alone on its last "
-                          "line; shorten it by a word, narrow the box to balance the lines, or lower the size.",
-                          S.name)
+                Sub = kMeasure.Substitute(Family)  # LibreOffice draws a missing theme font in another face
+                for Face in (Family, Sub) if Sub else (Family,):
+                    Lines = kMeasure.LineWords(Text, Face, Size, Width, Bold)
+                    if len(Lines) >= 2 and len(Lines[-1]) == 1 and len(Lines[-1][0]) <= 14:
+                        Where = "" if Face == Family else f" in {Face} (the face LibreOffice substitutes)"
+                        F.Add(N, "warn", "title_widow", f"The title wraps leaving '{Lines[-1][0]}' alone on its last "
+                              f"line{Where}; shorten it by a word, narrow the box to balance the lines, or lower the "
+                              "size.", S.name)
+                        break
             return
         except Exception as e:
             kS.GlobalErrorHandler(e, f"kLintDeck.WrapCheck(slide={N})")

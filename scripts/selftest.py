@@ -1605,6 +1605,19 @@ class kSelfTest:
             self.Check("build_deck: a statement with points has its kicker, above the claim and clear of the cards",
                        Clear and Kick.top + Kick.height <= Slides[3].shapes.title.top + Pt(1)
                        and Kick.text_frame.text == "WHAT IT IS", str(sorted(Names[3])))
+            sys.path.insert(0, HERE)
+            from _measure import kMeasure
+            from _theme import kTheme
+            Claim = Slides[3].shapes.title
+            Size = Claim.text_frame.paragraphs[0].runs[0].font.size.pt
+            Major = kTheme(Presentation(Deck).slide_master).Major  # with --ci-fonts the theme font is missing and
+            Faces = [F for F in (Major, kMeasure.Substitute(Major)) if F]  # LibreOffice draws DejaVu Sans instead
+            Wraps = [kMeasure.LineWords(Claim.text_frame.text, F, Size, Claim.width / 12700 - W, True)
+                     for F in Faces for W in (14.4, 9.0)]
+            Widows = [f"{Sl}:{C}" for Sl, C, _, Sev in Found if C == "title_widow"]
+            self.Check("build_deck: the statement claim has no lone last word in its font or its substitute "
+                       f"({', '.join(Faces)}), and lint agrees", all(len(L) < 2 or len(L[-1]) >= 2 for L in Wraps)
+                       and not Widows, str(list(zip(Faces, Wraps))) + str(Widows))
             Short = Names[1]["EmailBody2"].height
 
             Spec["slides"][1]["body"] = Body[:1] + [Long, Long, Long] + Body[2:]

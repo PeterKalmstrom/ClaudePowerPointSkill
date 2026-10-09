@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **No title widow in the substitute face either**: `kDeckBuilder.BalancedWidth` now balances the theme font AND
+  the face LibreOffice substitutes for it (`kMeasure.Substitute`, new helper `AnyWidow`), `Title` drops up to 8 pt
+  when no width balances both, and lint's `title_widow` measures both faces (naming the substitute). The round-4
+  statement claim no longer leaves 'fast' alone in DejaVu Sans; a new self-test check proves it under `--ci-fonts`.
+
 - **Titles measured right under any font set** (the self-test passed locally but failed 6 checks on the CI runner,
   where fontconfig substitutes the wide DejaVu Sans for Aptos instead of Inter): a content title whose own font and
   LibreOffice's substitute wrap differently is no longer narrowed to two lines that overflow its box - every

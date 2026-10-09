@@ -1100,30 +1100,48 @@ class kDeckBuilder:
             return None
 
     def BalancedWidth(self, Text, Size, Wd, Heading=True):
-        """The width (1440 grid) at which Text wraps without a lone last word: Wd itself when it fits one line
-        or its last line already has two words, else the narrowest width that keeps the line count and moves a
-        second word down (a balanced title instead of a widow)."""
+        """The width (1440 grid) at which Text wraps without a lone last word, in its own font AND in the face
+        LibreOffice substitutes for it (kMeasure.Substitute): Wd itself when every face fits one line or already
+        ends on two words, else the narrowest width that keeps each face's line count and moves a second word down
+        (a balanced title instead of a widow)."""
         if kS.ErrorMode:
             return Wd
         try:
             Family = self.Major if Heading else self.Minor
-            K = self.TypeScale()
-            Lines = kMeasure.LineWords(str(Text), Family, Size * K, (Wd - 1) * self._kx, True)
-            Wide = kMeasure.LineWords(str(Text), Family, Size * K, (Wd + 2) * self._kx, True)  # a renderer's insets
-            if (len(Lines) < 2 or len(Lines[-1]) >= 2) and (len(Wide) < 2 or len(Wide[-1]) >= 2):
+            Sub = kMeasure.Substitute(Family)
+            Families = (Family, Sub) if Sub else (Family,)
+            Pt = Size * self.TypeScale()
+            Counts = [len(kMeasure.LineWords(str(Text), F, Pt, (Wd - 1) * self._kx, True)) for F in Families]
+            if not self.AnyWidow(Text, Families, Pt, (Wd - 1, Wd + 2)):  # either side of a renderer's insets
                 return Wd
             Try = Wd
             while Try > Wd * 0.55:
                 Try -= 8
-                Now = kMeasure.LineWords(str(Text), Family, Size * K, (Try - 1) * self._kx, True)
-                if len(Now) > len(Lines):
+                Now = [len(kMeasure.LineWords(str(Text), F, Pt, (Try - 1) * self._kx, True)) for F in Families]
+                if any(N > C for N, C in zip(Now, Counts)):
                     break
-                if len(Now[-1]) >= 2:
+                if not self.AnyWidow(Text, Families, Pt, (Try - 17, Try - 1)):
                     return Try - 16  # a little slack so a wider renderer keeps the same breaks
             return Wd
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.BalancedWidth")
             return Wd
+
+    def AnyWidow(self, Text, Families, SizePt, Widths):
+        """True when Text, wrapped in any of Families at any of Widths (1440 grid), leaves one word on its last
+        line."""
+        if kS.ErrorMode:
+            return False
+        try:
+            for Family in Families:
+                for W in Widths:
+                    Lines = kMeasure.LineWords(str(Text), Family, SizePt, W * self._kx, True)
+                    if len(Lines) >= 2 and len(Lines[-1]) == 1:
+                        return True
+            return False
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.AnyWidow")
+            return False
 
     def TitleLines(self, Text, Size, Wd, Loose=False):
         """How many lines a title takes at Size in a box Wd wide (1440 grid), from the font's metrics; Loose: in
@@ -1215,6 +1233,10 @@ class kDeckBuilder:
             Wd = self.BalancedWidth(Text, Size, Box - 15) + 15
             if Wd < Box:  # Fit again at the balanced width: the same size must still fit the height
                 Size = self.Fit([Text], Size, Wd - 15, Room, Heading=True, What="title")
+            Floor = Size - 8  # no width balances it in every face (the substitute wraps a word sooner): a size
+            while self.Widow(Text, Size, Wd) and Size - 2 >= max(Floor, 36):  # up to 8 pt smaller that does
+                Size -= 2
+                Wd = min(Box, self.BalancedWidth(Text, Size, Box - 15) + 15)
             Lines = self.TitleLines(Text, Size, Wd)
             if Head:  # both renderers must wrap it alike, or a bottom-anchored title grows up into its kicker
                 Size, Wd, Lines = self.AgreeLines(Text, Size, Wd, Room)

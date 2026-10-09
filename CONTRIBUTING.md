@@ -4,7 +4,7 @@
 > here automatically on every change. Issues and pull requests are welcome: accepted changes are applied at the
 > source and arrive here with the next publish (a pull request merged only here would be overwritten).
 
-The skill grows by accretion: every silent failure that costs an hour of debugging belongs in the *Anti-patterns* table at the bottom of `SKILL.md`. The goal is that Claude never re-learns the same lesson twice.
+The skill grows by accretion: every silent failure that costs an hour of debugging belongs in the *Anti-patterns* table in [`reference/WORKFLOW.md`](reference/WORKFLOW.md#anti-patterns-recurring-com--build-traps). The goal is that Claude never re-learns the same lesson twice.
 
 ## Reporting a defect
 
@@ -21,12 +21,12 @@ Silent-failure reports are most valuable. If you lost an hour because PowerPoint
 
 If you hit a defect and figured out the fix, send a PR with:
 
-1. **A new row in the anti-patterns table** at the bottom of `SKILL.md`. Format:
+1. **A new row in the anti-patterns table** at the bottom of `reference/WORKFLOW.md`. Format:
    ```
    | <One-line anti-pattern> | <What goes wrong> | [Section name](#anchor) |
    ```
 2. **A linked rule** in the right file under `reference/` (see the table in `SKILL.md`), explaining the fix. Link
-   it from the anti-patterns row as `reference/FILE.md#anchor`. Each rule should have:
+   it from the anti-patterns row as `FILE.md#anchor` (same folder). Each rule should have:
    - The rule itself, stated as a constraint to design around
    - **Why** — what specifically breaks if you ignore it (ideally a one-sentence incident)
    - **How to apply** — the concrete check or code pattern that prevents recurrence

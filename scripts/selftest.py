@@ -1352,7 +1352,7 @@ class kSelfTest:
             Path = os.path.join(Edge, "edges.json")
             self.WriteJson(Spec, Path)
             Deck = os.path.join(Tmp, "edges.pptx")
-            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck, "--no-auto")
             Found = self.LintFindings(Deck)
             Codes = [(Sl, C) for Sl, C, _, _ in Found]
             Slides = list(Presentation(Deck).slides) if os.path.exists(Deck) else []
@@ -1574,7 +1574,7 @@ class kSelfTest:
             Path = os.path.join(Edge, "round5-wide.json")
             self.WriteJson(Wide, Path)
             Deck = os.path.join(Tmp, "round5-wide.pptx")
-            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck, "--no-auto")
             Codes = {C for _, C, _, _ in self.LintFindings(Deck)}
             self.Check("build_deck: a tile value that would wrap in either face is unfit text (exit 3, fit:) and lint "
                        "flags it", Code == 3 and "fit: slide 1 (kpi): value does not fit on one line" in Out
@@ -1709,7 +1709,7 @@ class kSelfTest:
 
             Spec["slides"][1]["body"] = Body[:1] + [Long, Long, Long] + Body[2:]
             self.WriteJson(Spec, Path)
-            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck, "--no-auto")
             Grown = {S.name: S for S in Presentation(Deck).slides[1].shapes}.get("EmailBody2") if os.path.exists(
                 Deck) else None
             self.Check("build_deck: an email paragraph's box is as tall as its wrapped text (a long paragraph "
@@ -1753,6 +1753,116 @@ class kSelfTest:
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckRound4")
             return
+
+    def CheckAutoAndCheck(self):
+        """Speed round: automatic fixes for unfit text (filler words, units, detail to the notes, a split), --no-auto,
+        build --check (every problem of every class in one summary, sorted by slide) and --plan's pre-checks."""
+        if kS.ErrorMode:
+            return
+        try:
+            from _autofix import kAutoFix
+            Tmp, Edge = self.Tmp, self.Edge
+            Tidy = kAutoFix.Tidy("We really need to act in order to keep 41 percent of a total of 3 million users")
+            self.Check("autofix: filler words dropped, units written short ('in order to' -> 'to', '41 percent' -> "
+                       "'41 %', '3 million' -> '3 M')", Tidy == "We need to act to keep 41 % of 3 M users", Tidy)
+            Kept, Ok = kAutoFix.Cut("Add three sales engineers to run technical evaluations in parallel with "
+                                    "procurement reviews")
+            self.Check("autofix: detail is cut at a clause boundary, never mid-phrase", Ok and Kept ==
+                       "Add three sales engineers to run technical evaluations in parallel", Kept)
+            Risks = [{"risk": "Longer enterprise sales cycle", "likelihood": "high", "impact": "high",
+                      "mitigation": "Add three sales engineers to run technical evaluations in parallel with "
+                                    "procurement reviews"},
+                     {"risk": "Data-centre outage (one in Q3)", "likelihood": "medium", "impact": "high",
+                      "mitigation": "Review the Q3 outage and test failover before the big renewals in spring"},
+                     {"risk": "Hiring behind plan: 14 of 20", "likelihood": "high", "impact": "medium",
+                      "mitigation": "Prioritise the open roles that face customers and use the referral bonus"}]
+            Spec = {"direction": "consulting-blue", "footer": "QBR", "slides": [
+                {"id": "kpi", "pattern": "kpi", "title": "Growth accelerated every quarter", "notes": "n",
+                 "metrics": [{"value": "19.8 MUSD", "label": "Revenue"}, {"value": "112 %", "label": "Retention"},
+                             {"value": "1.2 %", "label": "Churn"}, {"value": "191", "label": "New customers"}],
+                 "decision": "Approve 3 extra sales engineers to offset the longer enterprise sales cycle"},
+                {"id": "risks", "pattern": "risks", "title": "Three risks could slow 2027, sales cycle first",
+                 "notes": "n", "risks": Risks}]}
+            Path = os.path.join(Edge, "auto.json")
+            self.WriteJson(Spec, Path)
+            Deck = os.path.join(Tmp, "auto-off.pptx")
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck, "--no-auto")
+            self.Check("build_deck --no-auto: unfit text is only reported (exit 3, no auto: lines)",
+                       Code == 3 and "auto:" not in Out and "fit: slide 1" in Out and "fit: slide 2" in Out, Out[-400:])
+            Deck = os.path.join(Tmp, "auto.pptx")
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Slides = list(Presentation(Deck).slides) if os.path.exists(Deck) else []
+            Shapes = [{Sh.name: Sh for Sh in Sl.shapes} for Sl in Slides]
+            Notes = self.NotesOf(Slides[1]) if len(Slides) > 1 else ""
+            self.Check("build_deck: auto-fixes make the deck fit (exit 0) and print each change as an auto: line "
+                       "(slide, field, what changed)", Code == 0 and "auto: slide 1 (kpi) metrics[0].value" in Out
+                       and "auto: slide 2 (risks) risks[0].mitigation" in Out, Out[-600:])
+            self.Check("build_deck: '19.8 MUSD' becomes '19.8 M' with the currency in the label",
+                       len(Shapes) > 1 and Shapes[0]["Value1"].text_frame.text == "19.8\u00a0M"
+                       and Shapes[0]["Label1"].text_frame.text == "Revenue (USD)", Out[-300:])
+            self.Check("build_deck: detail cut from a card goes to the notes in full, marked MOVED FROM SLIDE:",
+                       "MOVED FROM SLIDE (risks[0].mitigation): Add three sales engineers to run technical evaluations "
+                       "in parallel with procurement reviews" in Notes and len(Shapes) > 1
+                       and "procurement" not in Shapes[1]["Mitigation1"].text_frame.text, Notes[-300:])
+            Items = [f"Reason {N} the pilot is worth running, with a short explanation" for N in range(1, 10)]
+            Split = {"slides": [{"id": "why", "pattern": "bullets", "title": "Nine reasons to run the pilot",
+                                 "notes": "n", "items": Items, "allow_split": True}]}
+            Path = os.path.join(Edge, "split.json")
+            self.WriteJson(Split, Path)
+            Deck = os.path.join(Tmp, "split.pptx")
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Slides = list(Presentation(Deck).slides) if os.path.exists(Deck) else []
+            self.Check("build_deck: \"allow_split\": true splits 9 bullets over two slides (5 + 4), the second "
+                       "'(continued)'", Code == 0 and len(Slides) == 2 and "split into two slides" in Out
+                       and Slides[1].shapes.title.text_frame.text.endswith("(continued)"), Out[-300:])
+            Split["slides"][0]["allow_split"] = False
+            self.WriteJson(Split, Path)
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            self.Check("build_deck: without allow_split a 9-bullet slide stays a spec error (exit 2)", Code == 2, Out[-200:])
+            Many = {"direction": "consulting-blue", "footer": "QBR", "slides": [
+                {"id": "bare", "pattern": "statement", "title": "Approve the pilot", "points": ["A", "B"]},
+                {"id": "what", "pattern": "statement", "title": "Phishing tricks you into helping", "notes": "n",
+                 "support": "One click is enough"},
+                Spec["slides"][0]]}
+            Path = os.path.join(Edge, "check.json")
+            self.WriteJson(Many, Path)
+            Deck = os.path.join(Tmp, "check.pptx")
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck, "--check", "--no-auto")
+            Line = [L for L in Out.splitlines() if L.startswith("CHECK-JSON ")]
+            Data = json.loads(Line[-1][11:]) if Line else {}
+            Found = [(P["slide"], P["code"]) for P in Data.get("problems", [])]
+            self.Check("build_deck --check: one summary lists every class - spec warning, missing notes, unfit value "
+                       "and the lint finding - sorted by slide, each with an edit, and exits 3",
+                       Code == 3 and {(1, "missing_notes"), (2, "spec_warning"), (3, "fit_line"), (3, "unwanted_wrap")}
+                       <= set(Found) and Found == sorted(Found, key=self.FirstOf)
+                       and all(P.get("edit") for P in Data.get("problems", [])) and "==== check:" in Out,
+                       f"exit {Code}: {Found} {Out[-300:]}")
+            HasLo = bool(shutil.which("soffice") and shutil.which("pdftoppm"))
+            self.Check("build_deck --check: the contact sheet is rendered when LibreOffice is installed",
+                       (not HasLo) or (bool(Data.get("sheet")) and os.path.exists(Data.get("sheet", ""))),
+                       str(Data.get("sheet")))
+            Plan = {"slides": [{"id": "long", "pattern": "statement", "notes": "n", "points": ["A", "B"],
+                                "title": "This title runs on and on about many different things at once, so that "
+                                         "no slide could ever hold it in two lines at forty points"}]}
+            Path = os.path.join(Edge, "plan.json")
+            self.WriteJson(Plan, Path)
+            Code, Out = self.RunScript("build_deck.py", Path, "--plan")
+            self.Check("build_deck --plan: pre-build checks measure the title and count words before building",
+                       "plan: slide 1 (long): the title" in Out and "pre-build finding" in Out, Out[-400:])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckAutoAndCheck")
+            return
+
+    @staticmethod
+    def FirstOf(Pair):
+        """Sort key: the first element."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            return Pair[0]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.FirstOf")
+            return 0
 
     def CheckThemeAndRenders(self):
         """extract_theme, diff_renders on synthetic images, render_lo where LibreOffice is installed."""
@@ -1919,6 +2029,7 @@ class kSelfTestApp:
             Test.CheckKickerRenderer()
             Test.CheckRound4()
             Test.CheckRound5()
+            Test.CheckAutoAndCheck()
             Test.CheckThemeAndRenders()
             Test.CheckErrorPattern()
             Test.CheckCom()

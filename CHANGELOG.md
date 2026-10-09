@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- **Speed round: fewer loops for an agent** (round 5: 205 s / 107k tokens / 26 tool calls for three decks, against
+  plain Claude's 165 s / 77k / 10 - the scripts take seconds, the cost was one problem class per build loop):
+  - *Automatic fixes* (`scripts/_autofix.py`, `kAutoFix`): when text does not fit, the builder changes the spec in
+    memory and rebuilds (up to six rounds): drops filler words, writes units short (`41 percent` → `41 %`,
+    `19.8 MUSD` → `19.8 M` with `(USD)` moved into the tile label when it has room), cuts the longest detail text
+    of the unfit shape at a clause boundary and puts the whole original in the notes as `MOVED FROM SLIDE:`, and
+    splits a `bullets` slide that says `"allow_split": true` (new spec field; also before the build when it has
+    more than seven items). Every change prints as `auto: slide N (id) field: ...`; `--no-auto` switches it off.
+    Exit 3 only when text still does not fit after the fixes.
+  - *One-call check*: `build_deck.py spec.json --out deck.pptx --check` = build + lint (in process) +
+    `render_lo --sheet` when LibreOffice is installed + one summary: every problem of every class (spec, fit,
+    every lint finding) sorted by slide, with the shape and an `edit:` line naming the spec field, the contact
+    sheet's path, and a `CHECK-JSON` line. Limit-only spec errors still build under `--check` so the rest is
+    reported in the same pass (exit 2). The builder records problems structured (`kDeckBuilder.Report`, `Issues`,
+    `LintItems`) instead of only as text.
+  - *`--plan` pre-checks* (`kPlanCheck`): visible words against the pattern's budget (advice) and the title
+    measured in the deck's heading font, as `plan:` lines, plus a one-line tally.
+  - *Lean `SKILL.md`* (18,655 → about 7,700 bytes, 169 → 84 lines): the New-deck path is a six-step checklist;
+    the long prose (new deck in detail, showcase-first, the iteration loop, the anti-patterns table) moved
+    verbatim to the new `reference/WORKFLOW.md`; BUILDER.md gains *Automatic fixes and --check*.
+  - Benchmark README: a *Speed* section (method and the measured time / tokens / tool calls) and a speed column in
+    every round's table.
+  - New self-test group `CheckAutoAndCheck` (11 checks); the three detection checks that expect exit 3 run with
+    `--no-auto`. Schema regenerated (`allow_split`).
+
 - **Rough edges from benchmark round 5** (thisskill9: each passed builder and lint and only the render showed it):
   - *A tile value wrapping onto its label* ('19.8 MUSD' on a kpi tile): `FitLine` measures a value in the theme
     font AND the face LibreOffice substitutes (`kDeckBuilder.LineWidth`) and reports `fit: … value does not fit on

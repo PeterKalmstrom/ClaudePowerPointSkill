@@ -176,6 +176,45 @@ the slide, and step cards are only as tall as their text with the text block cen
 raised to the floor first. If a slide still looks empty in the render, it is short of content, not of layout: add
 the evidence (a chart beside the numbers, the mitigation beside the risk) rather than enlarging what is there.
 
+## Automatic fixes and --check
+
+**Rule:** build with `--check` and fix everything it lists in one edit. Each extra build-lint-render loop costs
+an agent about 20 s and 5k tokens; the scripts themselves take about 7 s per deck.
+
+**Why:** in benchmark round 5 an unattended agent needed 26 tool calls and 205 s for three decks - it built,
+linted, rendered, found one class of problem (`fit:`, then an overlap, then a widow), edited, and looped.
+
+**How to apply:**
+
+- `build_deck.py spec.json --out deck.pptx --check` builds, lints (in the same process), renders with
+  LibreOffice and writes `<deck>-render/contact.png`, then prints one summary: every problem of every class -
+  spec errors and warnings, unfit text (`fit`, `fit_line`, `footer_band`), every lint finding (overlap, widow,
+  figure, floor, word budget, missing notes...) - sorted by slide, each with the shape and an `edit:` line naming
+  the spec field to change. The last line, `CHECK-JSON {...}`, holds the same as JSON (`problems`, `counts`,
+  `passes`, `auto_fixes`, `sheet`). When every spec error is a length or count limit, `--check` still builds so
+  the rest is reported too (exit 2). No LibreOffice: everything but the sheet.
+- `--plan` runs the cheap checks first: limits, figures, spec warnings, each slide's visible words against its
+  pattern's budget (an estimate, printed as advice) and each title measured in the deck's heading font
+  (`plan:` lines).
+- **Automatic fixes** (default; `--no-auto` switches them off). When text does not fit, the builder changes the
+  spec in memory and builds again, up to six rounds, one step per slide and round - the first that changes
+  something:
+  1. *tidy* - drop filler words (`very`, `really`, `actually`, `basically`, `in order to` → `to`, `that is,`,
+     `due to the fact that` → `because`...), write units short after a number (`41 percent` → `41 %`,
+     `3 million` → `3 M`), and a tile value `19.8 MUSD` → `19.8 M` when its label can carry the currency
+     (`Revenue` → `Revenue (USD)`, at most 28 characters; a label that already names another unit is left alone).
+     Numbers and their units are already joined with a no-break space.
+  2. *move* - the longest detail text of the shape that does not fit (a mitigation, a step's detail, points, a
+     caption, support...), and its siblings nearly as long, is cut at a clause boundary (sentence end, `;`, a dash,
+     `:`, `,`, then *with / before / by / and*...) to at most 75 %, keeping three words or more; the whole original
+     goes to the speaker notes as `MOVED FROM SLIDE (risks[0].mitigation): ...`. Titles, values and actions are
+     never cut.
+  3. *split* - a `bullets` slide with `"allow_split": true` becomes two (the second titled "... (continued)"). A
+     list over the seven-item limit is split before building. Without `allow_split` nothing is split.
+
+  Every change prints as `auto: slide N (id) field: what changed`. Exit 3 only when text still does not fit
+  after the fixes. Review the lines: a cut that reads badly is your cue to write the short version yourself.
+
 ## What the builder decides for you
 
 - **The visual system:** every content slide has the same furniture — a kicker above the title, the title,

@@ -4,7 +4,7 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 
 | Script | Needs | What it does |
 |---|---|---|
-| `build_deck.py` | `python-pptx`, `pillow` (any OS) | Builds a deck from a JSON/YAML spec: 21 patterns that fill the slide, design directions or a template, native charts, computed figures; `--lint`, `--plan`, `--slides 1,3` |
+| `build_deck.py` | `python-pptx`, `pillow` (any OS) | Builds a deck from a JSON/YAML spec: 21 patterns that fill the slide, design directions or a template, native charts, computed figures; `--check` (build + lint + render + one summary of every problem), `--plan` (story + pre-checks), automatic fixes for unfit text (`auto:` lines; `--no-auto`), `--lint`, `--slides 1,3` |
 | `directions.json` | — | The 20 design directions `build_deck.py` and DESIGN.md use |
 | `read_deck.py` | `python-pptx` (any OS) | Whole deck to JSON (ids, layouts, shapes with positions and sizes, charts, tables, notes) or a text outline |
 | `harvest_edits.py` | `python-pptx` (any OS) | Keeps people's hand edits (edited, added, deleted slides) when a generated deck is rebuilt |

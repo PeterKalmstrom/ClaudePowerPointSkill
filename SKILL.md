@@ -13,7 +13,7 @@ only the reference file the task needs.
 
 | Task | Read, in order |
 |---|---|
-| **New deck** | Audience → claim titles → word budgets ([CONTENT](reference/CONTENT.md), [LAYOUT](reference/LAYOUT.md)) · write a spec (`scripts/spec.schema.json`), show `--plan`, then build with `scripts/build_deck.py` — show the thing itself: `email`, `kpi_chart`, `cost_table`, `quiz`, `risks`, `metrics`, `next_steps` beat bullets; give the deck a `footer` and the ask a `decision` with the number it moves (`figure`); before/after numbers get a `trend` (they become a chart), a share a dot grid, a statement its `points` ([BUILDER](reference/BUILDER.md), looks in [DESIGN](reference/DESIGN.md)) · never compute a total, average, change or share by hand: put the brief's numbers in `facts` and write `{sum}` / `{change}` / `{share}` ([computed figures](reference/BUILDER.md#computed-figures)) · treat `spec warning:` lines (a figure that does not add up, vague targets, a skipped month, a sparse slide) as content to fix · look at all slides at once with `render_lo.py --sheet` · showcase-first (below) · the build loop (below) |
+| **New deck** | The [checklist below](#new-deck--the-checklist); detail in [WORKFLOW](reference/WORKFLOW.md#new-deck-in-detail), patterns in [BUILDER](reference/BUILDER.md) |
 | **Edit an existing deck** | Snapshot first · `scripts/read_deck.py` before judging ([AUDIT](reference/AUDIT.md)) · find the open deck by name ([COM](reference/COM.md)) · rebuilding a generated deck? `scripts/harvest_edits.py` first |
 | **Review / audit a deck** | `scripts/lint_deck.py` first (any OS) · `scripts/fix_deck.py deck.pptx --out fixed.pptx` (or `--in-place`, or `--dry-run`; one is required) for the mechanical fixes · then [AUDIT](reference/AUDIT.md): taste pass → anchor exceptions → contact sheet |
 | **Before a talk** | Audit clean first, then [PRESENTING](reference/PRESENTING.md) |
@@ -23,23 +23,27 @@ only the reference file the task needs.
 | **Company template / brand** | `scripts/extract_theme.py` → [LAYOUT](reference/LAYOUT.md) → *Building from a template* |
 | **Corporate / labelled deck** | [LABELS](reference/LABELS.md) before choosing a toolchain |
 
-## Reference files
 
-| File | Covers | Runs on |
-|---|---|---|
-| [SETUP.md](reference/SETUP.md) | Windows setup, driving PowerPoint from Python, troubleshooting | Windows + PowerPoint |
-| [mcp-app/](mcp-app/README.md) | PowerPoint Live: own MCP server with a live view of the current slide | Windows + PowerPoint |
-| [COM.md](reference/COM.md) | Snapshots, multi-deck safety, UTF-8, idempotent builds, keeping hand edits, shape filtering | Windows + PowerPoint |
-| [LAYOUT.md](reference/LAYOUT.md) | Slide size, pictures, text wrap, embedded fonts, word budgets, anchor types, layout patterns | Mostly any OS; rendering needs Windows |
-| [MEDIA.md](reference/MEDIA.md) | AI images, Remotion, Veo, compression, embedding, combined patterns | Generation any OS; embedding Windows |
-| [ANIMATION.md](reference/ANIMATION.md) | When motion earns its place, effect table, native timing traps | Any OS (COM/XML parts marked) |
-| [BUILDER.md](reference/BUILDER.md) | Spec-driven deck builder: patterns, limits, chart and type defaults | Any OS |
-| [DESIGN.md](reference/DESIGN.md) | Type scale for Full HD, spacing, chart and table defaults, 20 design directions | Any OS |
-| [CONTENT.md](reference/CONTENT.md) | Audience, claim titles, cognitive load, speaker notes, showcase-first | Any OS |
-| [AUDIT.md](reference/AUDIT.md) | Lint codes, reading a whole deck, defect catalogue with severities, full audit procedure | Scripts Windows; catalogue any OS |
-| [PRESENTING.md](reference/PRESENTING.md) | Timing markers, Q&A sheet, notes PDF, rehearsal | Windows + PowerPoint |
-| [AUTOMATION.md](reference/AUTOMATION.md) | Headless PowerPoint for checks, building .pptx without COM | Headless Windows; no-COM any OS |
-| [LABELS.md](reference/LABELS.md) | Sensitivity labels and what encryption breaks | Any OS |
+## New deck — the checklist
+
+```
+1. Spec      content first: audience, claim titles, notes; numbers in `facts` with {sum}/{change}/{share}
+2. --plan    python scripts/build_deck.py spec.json --plan          (story + pre-checks; fix `spec:` lines)
+3. --check   python scripts/build_deck.py spec.json --out deck.pptx --check
+4. Look      open the contact sheet it names - once, all slides together
+5. Fix once  make every edit the summary lists (sorted by slide, each with its spec edit), then step 3 again
+6. Done      exit 0 and a sheet that looks right; review the `auto:` lines it printed
+```
+
+- `--check` = build + lint + `render_lo.py --sheet` (when LibreOffice is installed) + one summary with a
+  `CHECK-JSON` line. Exit 0 clean, 2 spec error, 3 text that still does not fit.
+- Text that does not fit is fixed first (filler words, short units, detail moved to the notes as
+  `MOVED FROM SLIDE:`, a split where `"allow_split": true`); each change prints as `auto:`. `--no-auto` reports only.
+- Pick patterns that show the thing itself, give the deck a `footer` and the ask a `decision` with its `figure`
+  ([BUILDER](reference/BUILDER.md), [DESIGN](reference/DESIGN.md)). Treat `spec warning:` lines as content to fix.
+- **4+ slides in one design:** showcase-first - `--slides 1,3 --check`, look, then the rest; unattended, approve it
+  yourself and say so ([WORKFLOW](reference/WORKFLOW.md#showcase-first-for-multi-slide-sections)).
+- Three fixes on the same defect without success: escalate - [iteration loop](reference/WORKFLOW.md#iteration-loop--build-render-look-critique-fix).
 
 ## Core rules
 
@@ -55,63 +59,6 @@ These apply to every deck. Each links to its full explanation.
 8. **Crop pictures, never stretch them.** ([LAYOUT](reference/LAYOUT.md#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly))
 9. **The slide carries the punch, the notes carry the depth** — notes on every slide, written first, fixed order. Never invent facts beyond the brief: put anything you add in the notes' `assumptions` (written as `ASSUMPTIONS:`); when the brief is the only source, say so — deck-level `"sources": ["the brief"]`. An ask states its reasons and its cost or impact. ([CONTENT](reference/CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief), [ask](reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost))
 10. **Lint, then render and LOOK** before calling anything done — `scripts/lint_deck.py` catches what the file shows (overlaps, stretched pictures, small text, missing alt text) on any OS; the render catches the rest. Render via Save As JPEG on Windows, not `Slide.Export`; `scripts/render_lo.py` elsewhere (approximate). (Loop below; [LAYOUT](reference/LAYOUT.md#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg))
-
-## Showcase-first for multi-slide sections
-
-For any section of **4+ slides** that share a design, build the opener and one detail slide first, render both,
-and ask the user to approve before producing the rest. Iterating slide 1 of 6 is cheap; rebuilding all six in the
-wrong design is not.
-
-**Unattended runs** (no one to ask — a batch job, a benchmark, an agent told to finish alone): still build the
-opener and one detail slide first — `build_deck.py spec.json --out showcase.pptx --slides 1,3` builds only those
-from the full spec, with the deck's theme and page numbers — render them (`render_lo.py --sheet`) and look at
-them yourself against the brief and the design rules; fix what you see, then build the rest. Say in the final summary that the showcase was self-approved, and what you
-changed after looking.
-
-## Workflow
-
-The five-step iteration loop that catches silent rendering failures. Use it for every slide edit.
-
-### Iteration loop — build, render, LOOK, critique, fix
-
-**Rule:** every slide edit follows the same five-step loop. Step 3 is the one that gets skipped. Don't skip it.
-
-```
-1. Build / edit (idempotent script)
-2. Render via presentation.SaveCopyAs(folder, 17)  (Save As JPEG — scripts/render_slides.py)
-   slide.Export is fine ONLY when every font in the deck is installed; never for embedded fonts
-3. LOOK at the actual rendered image  ←  DO NOT SKIP
-4. Lint (scripts/lint_deck.py), then self-critique against the defect catalogue (reference/AUDIT.md)
-5. Fix → loop back to step 2,  OR  save → done
-```
-
-**Why step 3 matters:** PowerPoint COM properties lie about what you'll see. Rendered PNG is ground truth. Specific silent failures that only show in the render:
-
-- Text wraps to 2 lines despite "fitting" on paper
-- Backing rectangle and text desync after one is moved without the other
-- Shape stays behind another due to z-order, invisible in render
-- Image cache holds the old version after file replacement
-- Title placeholder appears empty in COM but renders white-on-white text
-- AutoShape rectangles match `HasTextFrame == True`, breaking filter logic
-
-The tool returning `success: true` is *the tool's claim*, not evidence. The PNG is evidence.
-
-**Loop budget:** if 3 fix attempts on the same defect haven't worked, escalate:
-
-- Check if the rule itself is wrong for this anchor type (gallery, knowledge graph, quote — see [Anchor types and word budgets](reference/LAYOUT.md#anchor-types-and-word-budgets))
-- Switch from patch to full rebuild — patches drift after the third one
-- Ask the user — the expected output may itself be wrong
-
-Never run more than 4 iterations on the same defect without escalating.
-
-**Anti-patterns to recognise:**
-
-- *Source-look-only iteration* — reading COM properties or script values, declaring success without exporting
-- *Patch on patch on patch* — each patch tweaks one element without considering layout interactions; backing rectangles drift, z-order shifts, third patch produces shape soup. **Three patches = rewrite the build script.**
-- *Tool-output as ground truth* — `{"success": true}` from a script or tool is not the same as a correctly rendered slide
-- *Optimistic font sizing* — "36pt should fit" is a guess until the PNG confirms it
-- *Caching trust* — replacing an image at the same path doesn't always update the embedded version; re-add the picture explicitly
-- *Active context drift* — see [Multi-presentation safety](reference/COM.md#multi-presentation-safety--never-trust-activepresentation); pin to a specific presentation by name, never trust `ActivePresentation`
 
 ## Error reports - always ask first
 
@@ -129,41 +76,9 @@ These depend on upstream releases. Re-check them when something that used to wor
 - `Slide.Export` shows fallback fonts for embedded fonts; `scripts/render_slides.py` does not.
 - python-pptx 1.0.2 behaviour is assumed in the slide-copy notes ([COM](reference/COM.md#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite)).
 
----
+## Anti-patterns
 
-## Anti-patterns (recurring COM / build traps)
-
-A consolidated catalog of the silent failures that have actually shipped broken slides. Skim this list whenever you're about to write a non-trivial COM patch — most of these fail without raising an error, so they don't show up in stack traces.
-
-| Anti-pattern | What goes wrong | See |
-|---|---|---|
-| Trusting `app.ActivePresentation` | Targets the wrong deck if another window has focus | [Multi-presentation safety](reference/COM.md#multi-presentation-safety--never-trust-activepresentation) |
-| `if not sh.HasTextFrame:` filter | Silently skips AutoShapes (they have empty text frames) | [Filtering shapes](reference/COM.md#filtering-shapes--hastextframe-is-not-is-this-a-text-shape) |
-| Moving text without moving its backing | Text floats outside its card or off-slide | [Move text and its backing together](reference/COM.md#move-text-and-its-backing-together) |
-| Patching a 5+ shape slide instead of rebuilding | Z-order drifts, conditional filters miss shapes, layout never quite matches | [Idempotent build scripts](reference/COM.md#idempotent-build-scripts) |
-| Skipping the LOOK step (step 3 of the loop) | Code "succeeds" but the rendered slide is wrong | [Iteration loop](#iteration-loop--build-render-look-critique-fix) |
-| Re-prompting an AI image after 2 text-baked attempts | Wastes budget; the model is locked into baking text | [Generate images WITHOUT text](reference/MEDIA.md#generate-images-without-text--overlay-text-in-powerpoint) |
-| Re-prompting Veo for a physics chain reaction | Diffusion video reliably fails dominoes / cradle / pool break | [Known limits — when not to use Veo](reference/MEDIA.md#known-limits--when-not-to-use-veo) |
-| Inline reimplementation of helper logic | Drifts from canonical version, no `--quiet` flag, no error stream propagation | [Wrapping Python helpers via subprocess + uvx](reference/MEDIA.md#wrapping-python-helpers-via-subprocess--uvx) |
-| Author-name marker for notes-append idempotency | Marker mismatches actual citation format ("X & Y" vs "X T., Y Q."), block gets appended every re-run | [Idempotent notes appending](reference/CONTENT.md#idempotent-notes-appending--use-the-doi-not-author-names) |
-| Missing UTF-8 stdout in scripts that `print()` Unicode | Script crashes *after* `target.Save()` succeeds; operator re-runs and double-applies append-style work | [Force UTF-8 stdout](reference/COM.md#force-utf-8-stdout-in-any-script-that-prints-unicode) |
-| Sentinel-text check uses a phrase from the pre-build slide | Idempotency check skips structural step (Duplicate / Insert), then rewrites text — destroys adjacent unrelated slides | [Idempotent build scripts](reference/COM.md#idempotent-build-scripts) (Sentinel rule) |
-| `AddPicture` to replace a picture inside a Group | New picture lands as a sibling outside the group; old picture remains; layout breaks | [Swapping a picture inside a Group](reference/MEDIA.md#swapping-a-picture-that-lives-inside-a-group) |
-| Hardcoded `OUT = r"C:\Users\<somebody>\..."` in chart scripts | Script does nothing useful on any other machine; PNG fails to update; embedded chart looks stale forever | [Portable OUT paths](reference/MEDIA.md#portable-out-paths-in-chart-scripts) |
-| Trusting `Slide.Export` for decks with embedded fonts | Renders a fallback font; real mid-word breaks look clean and pass review | [Embedded fonts](reference/LAYOUT.md#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg) |
-| Rebuilding a generated deck over a hand-edited one | A day of human edits silently erased | [Harvest before you overwrite](reference/COM.md#a-generated-deck-that-people-also-edit-in-powerpoint-harvest-before-you-overwrite) |
-| `Presentations.Add()` then `InsertFromFile` without setting the size | Whole deck silently scaled to 720p, all fonts a third smaller | [Slide size](reference/LAYOUT.md#slide-size--set-it-before-inserting-anything) |
-| `AddPicture` / `add_picture` with both width and height | Photos stretched by up to ~60 %, unnoticed | [Pictures stretch](reference/LAYOUT.md#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly) |
-| Validating a generated .pptx with `DisplayAlerts` off | PowerPoint silently repairs the broken file and the check passes | [Headless PowerPoint](reference/AUTOMATION.md#headless-powerpoint-for-checks) |
-| Embedding raw Veo / Remotion MP4s | Deck balloons by hundreds of MB; some installs won't play non-H.264 | [Embedding video](reference/MEDIA.md#embedding-video-remotion-output) |
-| Chaining effects with "After Previous" | One slow effect shifts every later one; builds drift | [Native animation traps](reference/ANIMATION.md#native-animation-traps) |
-| Rebuilding an encrypted / labelled deck with python-pptx or `Presentations.Add()` | Output carries no sensitivity label — confidential content leaks unlabelled | [Sensitivity labels](reference/LABELS.md#sensitivity-labels) |
-| Calling `ExportAsFixedFormat` positionally from pywin32 | `TypeError: The Python instance can not be converted to a COM object` — no PDF | [Presenter prep](reference/PRESENTING.md#presenter-prep) |
-| Inventing specifics the brief never gave (times, extensions, targets, "root cause fixed") | The room knows the real answer; credibility goes, and the notes can't defend it | [Never invent facts](reference/CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief) |
-| A bare "Approve X" ask slide | Reads as a slogan: no reasons, no cost, nothing to weigh | [The ask states its reasons and its cost](reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost) |
-| Two numbers in two tiles ("1.8 %", "1.2 %") for one before/after | Reads as two unrelated facts; the change is never shown | [Patterns and limits](reference/BUILDER.md#patterns-and-limits) (`trend`) |
-| Adding up or dividing by hand ("21.8 MUSD, sum of quarters" for 4.1 + 4.6 + 5.2 + 5.9 = 19.8) | One wrong figure and the board doubts every other number | [Compute derived figures](reference/CONTENT.md#compute-derived-figures-never-by-hand) |
-| A success target with no number ("Clearly lower", "No drop") | Nobody can say afterwards whether the pilot passed | [Success has a number](reference/CONTENT.md#success-has-a-number) |
-| `for p in app.Presentations: if ...: target = p` without `break` | Picks the *last* matching presentation in enumeration order (effectively random when multiple match the substring) | [Multi-presentation safety](reference/COM.md#multi-presentation-safety--never-trust-activepresentation) |
-
-When one of these bites, fix it and **add a row here** if it's a new variant. The signal is: "I lost an hour to a silent failure" → it belongs in this table.
+The catalogue of silent failures that have shipped broken slides - trusting `ActivePresentation`, the
+`HasTextFrame` filter, moving text without its backing, skipping the LOOK step, both sizes on `AddPicture`,
+inventing facts, adding up by hand and more - is in [WORKFLOW](reference/WORKFLOW.md#anti-patterns-recurring-com--build-traps).
+Skim it before a non-trivial COM patch; add a row there when a new one bites.

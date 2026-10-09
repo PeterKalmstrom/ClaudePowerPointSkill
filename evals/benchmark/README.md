@@ -13,11 +13,11 @@ layout correctness, data presentation, presenter support (speaker notes).
 
 ## Round 5 - after the computed-figure and font rounds (current)
 
-| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
-|---|---|---|---|---|---|---|---|
-| **This skill** | 8.7 | 7.7 | 9.0 | 9.0 | 8.3 | 8.7 | **8.56** |
-| Plain Claude | 7.7 | 8.0 | 6.7 | 8.0 | 7.7 | 6.0 | 7.33 |
-| Anthropic pptx skill | 7.0 | 7.0 | 5.7 | 7.7 | 7.3 | 2.0 | 6.11 |
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
+|---|---|---|---|---|---|---|---|---|
+| **This skill** | 8.7 | 7.7 | 9.0 | 9.0 | 8.3 | 8.7 | **8.56** | 205 s / 107k / 26 |
+| Plain Claude | 7.7 | 8.0 | 6.7 | 8.0 | 7.7 | 6.0 | 7.33 | not measured |
+| Anthropic pptx skill | 7.0 | 7.0 | 5.7 | 7.7 | 7.3 | 2.0 | 6.11 | not measured |
 
 Judge, in short: this skill - claim titles with **all arithmetic correct** (derived figures now come from the
 builder's `{sum}`/`{change}`/`{share}` tokens, not hand sums), notes with key fact / facts / assumptions / sources
@@ -28,11 +28,11 @@ notes and ~10-11 pt body text.
 
 ## Round 4 - after the data-presentation round
 
-| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
-|---|---|---|---|---|---|---|---|
-| **This skill** | 8.7 | 8.3 | 9.0 | 8.7 | 7.7 | 8.7 | **8.50** |
-| Plain Claude | 8.0 | 7.7 | 6.0 | 7.7 | 8.0 | 5.0 | 7.06 |
-| Anthropic pptx skill | 7.3 | 7.0 | 6.0 | 7.3 | 7.3 | 1.7 | 6.11 |
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
+|---|---|---|---|---|---|---|---|---|
+| **This skill** | 8.7 | 8.3 | 9.0 | 8.7 | 7.7 | 8.7 | **8.50** | 189 s / 100k / 18 |
+| Plain Claude | 8.0 | 7.7 | 6.0 | 7.7 | 8.0 | 5.0 | 7.06 | not measured |
+| Anthropic pptx skill | 7.3 | 7.0 | 6.0 | 7.3 | 7.3 | 1.7 | 6.11 | not measured |
 
 Judge, in short: this skill - claim titles, every deck ends on a decision with owner and deadline, the largest text
 and most consistent visual system, structured notes with every invention flagged. **But one factual error**: the QBR
@@ -43,11 +43,11 @@ text and the quiz answers printed on the slide.
 
 ## Round 3 - after the design round
 
-| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
-|---|---|---|---|---|---|---|---|
-| **This skill** | 8.7 | 7.7 | 9.0 | 7.7 | 6.3 | 9.0 | **8.06** |
-| Plain Claude | 8.7 | 8.0 | 7.0 | 8.0 | 7.7 | 6.7 | 7.67 |
-| Anthropic pptx skill | 8.0 | 7.0 | 5.7 | 7.7 | 7.3 | 1.7 | 6.22 |
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
+|---|---|---|---|---|---|---|---|---|
+| **This skill** | 8.7 | 7.7 | 9.0 | 7.7 | 6.3 | 9.0 | **8.06** | 173 s / 98k / 18 |
+| Plain Claude | 8.7 | 8.0 | 7.0 | 8.0 | 7.7 | 6.7 | 7.67 | not measured |
+| Anthropic pptx skill | 8.0 | 7.0 | 5.7 | 7.7 | 7.3 | 1.7 | 6.22 | not measured |
 
 Judge, in short: this skill - the most legible decks (big type, clearest contrast), honest notes on every slide
 with every assumption flagged, claim titles throughout; weakest on data presentation (a retention slide without a
@@ -57,11 +57,11 @@ a clean card system, but almost no speaker notes and small body text.
 
 ## Round 2 - after the builder quality round
 
-| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
-|---|---|---|---|---|---|---|---|
-| **This skill** | 8.7 | 6.7 | 7.7 | 8.7 | 7.3 | 8.7 | **7.94** |
-| Plain Claude | 8.3 | 8.7 | 8.0 | 8.3 | 7.7 | 5.3 | 7.72 |
-| Anthropic pptx skill | 8.0 | 8.0 | 7.0 | 8.0 | 7.7 | 2.0 | 6.78 |
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
+|---|---|---|---|---|---|---|---|---|
+| **This skill** | 8.7 | 6.7 | 7.7 | 8.7 | 7.3 | 8.7 | **7.94** | 179 s / 95k / 19 |
+| Plain Claude | 8.3 | 8.7 | 8.0 | 8.3 | 7.7 | 5.3 | 7.72 | not measured |
+| Anthropic pptx skill | 8.0 | 8.0 | 7.0 | 8.0 | 7.7 | 2.0 | 6.78 | not measured |
 
 Judge, in short: this skill - best speaker notes by far, claim titles, faithful to the brief with assumptions
 flagged, clean data slides; but the plainest design. Plain Claude - the most polished visuals and exec storytelling,
@@ -70,16 +70,44 @@ speaker notes and unflagged inventions.
 
 ## Round 1 - before (kept for honesty)
 
-| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** |
-|---|---|---|---|---|---|---|---|
-| Plain Claude | 9.0 | 8.0 | 7.0 | 8.0 | 7.7 | 5.7 | **7.56** |
-| Anthropic pptx skill | 8.0 | 8.0 | 7.0 | 8.0 | 7.7 | 1.7 | 6.72 |
-| This skill | 6.7 | 4.7 | 5.0 | 6.0 | 5.3 | 5.0 | 5.44 |
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
+|---|---|---|---|---|---|---|---|---|
+| Plain Claude | 9.0 | 8.0 | 7.0 | 8.0 | 7.7 | 5.7 | **7.56** | 165 s / 77k / 10 |
+| Anthropic pptx skill | 8.0 | 8.0 | 7.0 | 8.0 | 7.7 | 1.7 | 6.72 | 159 s / 92k / 12 |
+| This skill | 6.7 | 4.7 | 5.0 | 6.0 | 5.3 | 5.0 | 5.44 | 102 s / 91k / 12 |
 
 Round 1 found sparse slides, small text and generic visuals. The builder was changed in response (slides fill the
 space, five new patterns, content rules), and a fresh agent that had not seen the changes built the round-2 decks.
 The other two makers' decks are the same in both rounds; their scores moved by at most 0.16, which gives a feel for
 the judge's noise.
+
+## Speed
+
+Quality is not the only cost: an agent that loops build → lint → render → edit many times is slow and expensive.
+From round 5 on every round records, per maker, the **wall time, total tokens and tool calls** of the unattended
+agent that built the three decks (the *Time / tokens / calls* column above).
+
+**Method.** Each maker runs as one unattended agent with the same three briefs ([briefs.md](briefs.md)) and the
+same instruction to finish alone. The numbers are the agent run's own totals as the harness reports them when it
+ends (`duration`, `total_tokens`, `tool_uses`) - all three decks together, not per deck. One run per maker and
+round, so treat differences under about 15 % as noise. Script time is measured separately with `time` on the
+final specs: `build_deck.py --plan` 0.4 s, build ~1.8 s, `lint_deck.py` ~1.3 s, `render_lo.py --sheet` ~3.5 s
+per deck (round 5) - the scripts are not the bottleneck, the number of loops is.
+
+| Round | Plain Claude | Anthropic pptx skill | This skill |
+|---|---|---|---|
+| 1 | 165 s / 77k / 10 | 159 s / 92k / 12 | 102 s / 91k / 12 |
+| 2 | not measured | not measured | 179 s / 95k / 19 |
+| 3 | not measured | not measured | 173 s / 98k / 18 |
+| 4 | not measured | not measured | 189 s / 100k / 18 |
+| 5 | not measured | not measured | 205 s / 107k / 26 |
+
+**Reading it.** As the skill gained checks (rounds 2-5) its quality rose from 5.44 to 8.56, but the agent needed
+more loops: each check found one class of problem per build, so it built, rendered, fixed one thing and built
+again. The speed round answers that with one-call `build_deck.py --check` (build + lint + render + one summary of
+every problem, sorted by slide, each with its spec edit), automatic fixes for unfit text (`auto:` lines), `--plan`
+pre-checks and a checklist-shaped `SKILL.md` (18.7 KB → 7.7 KB). Target for round 6: at or under plain Claude's
+tool calls with the round-5 quality.
 
 ## Lint (this repo's own checker - home ground, read with care)
 

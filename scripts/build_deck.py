@@ -21,8 +21,10 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import time
 
 from lxml import etree
 from pptx import Presentation
@@ -139,7 +141,7 @@ FIELDS = {  # pattern: {field: kind}; kinds: text, int, number, list[text], list
     "kpi": {"metrics": {"value": "text", "label": "text", "note": "text", "trend": "list[number]",
                         "trend_labels": "list[text]"},
             "highlight": "int", "decision": "text", "decision_label": "text", "trend_chart": "bool"},
-    "bullets": {"items": "list[text]"},
+    "bullets": {"items": "list[text]", "allow_split": "bool"},
     "compare": {"columns": {"heading": "text", "points": "list[text]"}, "highlight": "int"},
     "process": {"steps": {"label": "text", "detail": "text"}, "highlight": "int"},
     "timeline": {"events": {"date": "text", "label": "text"}, "highlight": "int"},
@@ -221,6 +223,11 @@ NEEDED_LIST = {"kpi": "metrics", "process": "steps", "timeline": "events", "comp
                "next_steps": "steps"}
 LAYOUT_CODES = {"text_overflow", "kicker_title_overlap", "tile_text_below_floor", "unwanted_wrap",
                 "body_below_floor"}  # lint findings = unfit text (and every lint error: shape_overlap etc.)
+AUTO_PASSES = 6  # rounds of automatic fixes (filler words, units, detail to the notes, a split) before exit 3
+SEVERITY_ORDER = {"error": 0, "warn": 1, "info": 2}
+PLAN_SKIP = {"notes", "id", "pattern", "image", "type", "reveal", "visual", "likelihood", "impact", "categories",
+             "series", "header", "rows", "number_format", "alt", "highlight", "trend", "trend_labels", "kicker",
+             "allow_split", "decision_label"}
 NO_CHROME = {"title", "section"}            # no footer or page number on covers and dividers
 NO_KICKER = {"title", "section", "quote"}   # their own title treatment
 LEVELS = {"high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
@@ -934,6 +941,10 @@ class kDeckBuilder:
             self.Layout = None
             self.Major = self.Minor = None
             self.Problems = []    # text that could not be made to fit
+            self.Issues = []      # the same, structured: {spec, slide, id, shape, code, severity, message}
+            self.LintItems = []   # every lint finding on the built deck (with the spec slide it came from)
+            self.SpecOf = {}      # deck slide number -> spec slide number (a quiz answer slide shares its quiz's)
+            self.SpecNo = 0       # the spec slide being built
             self.NoNotes = []     # slides the spec gave no speaker notes
             self.SlideNo, self.SlideId = 0, ""
             self.Section = ""     # the current section's eyebrow: the default kicker
@@ -946,6 +957,20 @@ class kDeckBuilder:
             self._kx = self._ky = 1.0  # template mode: slide size / 1440 x 810, so the grid follows the template
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.__init__")
+
+    def Report(self, Shape, Code, Message):
+        """Record text that does not fit on the slide being built: a `fit:` line and a structured issue."""
+        if kS.ErrorMode:
+            return
+        try:
+            self.Problems.append(f"slide {self.SlideNo} ({self.SlideId}): {Message}")
+            Name = str(Shape or "").strip("'")
+            self.Issues.append({"spec": self.SpecNo, "slide": self.SlideNo, "id": self.SlideId,
+                                "shape": "" if Name in ("text", "title", "value") else Name, "code": Code,
+                                "severity": "error", "message": Message})
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.Report")
+            return
 
     def X(self, V):
         """A horizontal 1440-grid length in points on this deck."""
@@ -1010,7 +1035,7 @@ class kDeckBuilder:
                     break
                 Cur = max(Smallest, Cur - 2)
             if Need > Ht * self._ky * 1.08 or Widest > Wd * self._kx + 1:
-                self.Problems.append(f"slide {self.SlideNo} ({self.SlideId}): {What} does not fit even at {Cur:g} pt "
+                self.Report(What, "fit", f"{What} does not fit even at {Cur:g} pt "
                                      f"(needs ~{Need / self._ky:.0f} pt of {Ht:.0f}); cut words or split the slide")
             return Cur
         except Exception as e:
@@ -1042,7 +1067,7 @@ class kDeckBuilder:
                 Cur -= 2
             Widest = max(self.LineWidth(T, Cur, Heading, Bold) for T in Texts) if Texts else 0
             if Widest > Wd * self._kx:
-                self.Problems.append(f"slide {self.SlideNo} ({self.SlideId}): {What} does not fit on one line even "
+                self.Report(What, "fit_line", f"{What} does not fit on one line even "
                                      f"at {Cur:g} pt (needs ~{Widest / self._kx:.0f} pt of {Wd:.0f}); shorten it "
                                      "(e.g. '19.8 M' with the unit in the label)")
             return Cur
@@ -1303,7 +1328,7 @@ class kDeckBuilder:
             Size = self.Fit(Lines, Size, Wd, Ht, Heading=Heading, Bold=Bold, What=f"'{Name}'", Spacing=Spacing,
                             Floor=Floor)
             if self.Reserve and Ty + Ht > FOOTER_TOP - 4:
-                self.Problems.append(f"slide {self.SlideNo} ({self.SlideId}): '{Name}' reaches {Ty + Ht:.0f} pt, into "
+                self.Report(Name, "footer_band", f"'{Name}' reaches {Ty + Ht:.0f} pt, into "
                                      f"the footer band (content ends at {BODY_BOTTOM}); cut words or split the slide")
             Tb = S.shapes.add_textbox(self.X(Lx), self.Y(Ty), self.X(Wd), self.Y(Ht))
             Tb.name = Name
@@ -1500,7 +1525,7 @@ class kDeckBuilder:
             return
         try:
             Text = "\n\n".join(X for X in (kSlideText.NotesText(Sl.get("notes")), Extra, "\n".join(self.Extra),
-                                            self.DeckSources(Sl)) if X)
+                                            "\n".join(Sl.get("_moved") or []), self.DeckSources(Sl)) if X)
             self.Extra = []
             if Text.strip():
                 S.notes_slide.notes_text_frame.text = Text
@@ -1521,10 +1546,13 @@ class kDeckBuilder:
             from lint_deck import kLintDeck  # the same checks lint_deck.py runs, in this process
             _, Found = kLintDeck.Lint(Out, 18.0, 12)
             for I in (Found.Items if Found else []):
+                No = self.Numbers[I["slide"] - 1] if 0 < I["slide"] <= len(self.Numbers) else I["slide"]
+                Item = dict(I, slide=No, spec=self.SpecOf.get(No, 0), id="")
+                self.LintItems.append(Item)
                 if I["code"] in LAYOUT_CODES or I["severity"] == "error":  # an overlap, a clash: never ship it
                     Shape = f" [{I['shape']}]" if I.get("shape") else ""
-                    No = self.Numbers[I["slide"] - 1] if 0 < I["slide"] <= len(self.Numbers) else I["slide"]
                     self.Problems.append(f"slide {No}: {I['code']}{Shape} {I['message']}")
+                    self.Issues.append(dict(Item, severity="error"))
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.LayoutCheck")
             return
@@ -1569,6 +1597,7 @@ class kDeckBuilder:
                         N += 1
                     continue
                 self.Numbers.append(N)
+                self.SpecNo, self.SpecOf[N] = SpecNo, SpecNo
                 self.SlideNo, self.SlideId = N, Sl.get("id", f"s{N:02d}")
                 S = self.NewSlide(Sl, N)
                 self.TitleInk, self.KickerWidth = None, 0
@@ -1581,6 +1610,7 @@ class kDeckBuilder:
                 if Sl["pattern"] == "quiz" and Sl.get("reveal") == "slide":  # the answer on a slide of its own
                     N += 1
                     self.Numbers.append(N)
+                    self.SpecOf[N] = SpecNo
                     Answer = dict(Sl, id=f"{self.SlideId}-answer")
                     self.SlideNo, self.SlideId = N, Answer["id"]
                     S = self.NewSlide(Answer, N)
@@ -1819,7 +1849,7 @@ class kSlidePatterns:
             Cw = (Wd - GAP * (N - 1)) / N
             Ch = min(220, Ht)
             if Ch < 100:
-                B.Problems.append(f"slide {B.SlideNo} ({B.SlideId}): no room for the reasons under the decision "
+                B.Report("DecisionBox", "fit", f"no room for the reasons under the decision "
                                   f"({Ht:.0f} pt left); shorten the decision or support, or drop the figure")
                 return
             D, Pad = 48, 24
@@ -1960,7 +1990,7 @@ class kSlidePatterns:
                 elif Vs > 40:
                     Vs -= 4
                 else:
-                    B.Problems.append(f"slide {B.SlideNo} ({B.SlideId}): the metric tiles do not fit at the label "
+                    B.Report("Note", "fit", f"the metric tiles do not fit at the label "
                                       f"floor ({LABEL_MIN} pt); shorten labels or notes, or drop a metric")
                     break
             if Tr and Block < Room:  # room to spare: the trend takes it, so its bars read from the back
@@ -2728,7 +2758,7 @@ class kSlidePatterns:
                 Size -= 1
             BodyH = sum(B.Wrapped(X, Size, Iw) for X in Body) + 10 * (len(Body) - 1)
             if BodyH > Bottom - Y + 2:
-                B.Problems.append(f"slide {B.SlideNo} ({B.SlideId}): the email body does not fit even at {Size} pt "
+                B.Report("EmailBody", "fit", f"the email body does not fit even at {Size} pt "
                                   f"(needs ~{BodyH:.0f} pt of {Bottom - Y:.0f}); shorten its paragraphs or drop one")
             for I, Para in enumerate(Body):
                 Ph = B.Wrapped(Para, Size, Iw)
@@ -3199,8 +3229,280 @@ class kSlidePatterns:
             return
 
 
+class kPlanCheck:
+    """The cheap checks --plan runs before anything is built: each slide's visible words against its pattern's
+    budget, and a title measured in the deck's own heading font that needs three lines even at 40 pt."""
+
+    @staticmethod
+    def Words(Obj, Key=""):
+        """Visible words under Obj (a slide), estimated from the spec: notes, ids, data and settings left out."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            if Key in PLAN_SKIP:
+                return 0
+            if isinstance(Obj, dict):
+                return sum(kPlanCheck.Words(V, K) for K, V in Obj.items())
+            if isinstance(Obj, list):
+                return sum(kPlanCheck.Words(V, Key) for V in Obj)
+            return len(str(Obj).split()) if isinstance(Obj, str) else 0
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanCheck.Words")
+            return 0
+
+    @staticmethod
+    def Budget(Sl):
+        """The lint word budget of the slide's pattern (the variants with points or a decision included)."""
+        if kS.ErrorMode:
+            return 999
+        try:
+            from lint_deck import PATTERN_BUDGET  # the same table lint_deck.py judges the built slide by
+            Pat = Sl.get("pattern", "")
+            if Pat == "statement" and Sl.get("decision"):
+                Pat = "decision"
+            elif Pat in ("statement", "big_number") and Sl.get("points"):
+                Pat = f"{Pat}_points"
+            return PATTERN_BUDGET.get(Pat, 999)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanCheck.Budget")
+            return 999
+
+    @staticmethod
+    def Run(Spec):
+        """Every pre-build finding as messages 'slide N (id): ...' (warnings, not errors)."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Out = []
+            Builder = kDeckBuilder(Spec)
+            Builder.OpenDeck()
+            Builder.Major = kTheme(Builder.Prs.slide_master).Font("+mj-lt")
+            for N, Sl in enumerate(Spec.get("slides", []), 1):
+                Tag = f"slide {N} ({Sl.get('id', Sl.get('pattern'))})"
+                Words, Budget = kPlanCheck.Words(Sl), kPlanCheck.Budget(Sl)
+                if Words > Budget * 1.3 and Sl.get("pattern") not in NO_CHROME:
+                    Out.append(f"{Tag}: about {Words} visible words, budget {Budget} for this pattern - cut, or move "
+                               "detail to the notes (advice: fine on a chart, quote or reference slide)")
+                Title = Sl.get("title")
+                if Title and Sl.get("pattern") not in NO_CHROME:
+                    Full = Builder.TitleLines(str(Title), SIZE["title"], W - 2 * M - 15, Loose=True)
+                    Least = Builder.TitleLines(str(Title), 40, W - 2 * M - 15, Loose=True)
+                    if Least > 2:
+                        Out.append(f"{Tag}: the title takes {Least} lines even at 40 pt ({len(str(Title))} "
+                                   "characters) - shorten it to one claim")
+                    elif Full > 2:
+                        Out.append(f"{Tag}: the title wraps to {Full} lines at {SIZE['title']} pt and will be set "
+                                   f"smaller ({len(str(Title))} characters) - shorten it to one claim")
+            return Out
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanCheck.Run")
+            return []
+
+
+class kCheckReport:
+    """--check: every problem of every class (spec, fit, lint, notes) in one list sorted by slide, each with the
+    spec edit that fixes it, then the contact sheet - one round of edits fixes everything."""
+
+    def __init__(self):
+        try:
+            self.Items = []
+            self.Sheet = ""
+            self.Auto = []
+            self.Passes = []
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.__init__")
+
+    @staticmethod
+    def SlideOf(Message):
+        """The slide number a 'slide N ...' message starts with; 0 for a deck-level one."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            Hit = re.match(r"slide (\d+)", str(Message))
+            return int(Hit.group(1)) if Hit else 0
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.SlideOf")
+            return 0
+
+    @staticmethod
+    def Suggest(Code, Shape, Spec, Message):
+        """The spec edit that fixes one problem."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            from _autofix import kAutoFix
+            Where = f"slides[{Spec - 1}]" if Spec else "the spec"
+            Field = kAutoFix.FieldOf(Shape)
+            Target = f"{Where}.{Field}" if Field else (f"{Where} ({Shape})" if Shape else Where)
+            if Code in ("fit", "text_overflow", "body_below_floor", "tile_text_below_floor", "footer_band"):
+                return f"cut words in {Target}, move detail to the notes, or split the slide"
+            if Code in ("fit_line", "unwanted_wrap"):
+                return f"shorten the value in {Where} (e.g. '19.8 M' with the unit in the label)"
+            if Code == "shape_overlap":
+                return "usually follows from text that does not fit on this slide: fix that first, then rebuild"
+            if Code == "kicker_title_overlap":
+                return f"shorten {Where}.title or its kicker"
+            if Code == "title_widow":
+                return f"reword {Where}.title (a word more or less) so its last line is not one word"
+            if Code in ("word_budget", "plan_words"):
+                return f"cut words in {Where}, or move detail to {Where}.notes"
+            if Code == "plan_title":
+                return f"shorten {Where}.title to one claim"
+            if Code == "missing_notes":
+                return f"write {Where}.notes (what the speaker says)"
+            if Code in ("spec", "spec_warning"):
+                return f"edit {Where} as the message says"
+            return "see the message"
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.Suggest")
+            return ""
+
+    def Add(self, Slide, Spec, Severity, Code, Message, Shape=""):
+        """One problem."""
+        if kS.ErrorMode:
+            return
+        try:
+            self.Items.append({"slide": Slide, "spec_slide": Spec, "severity": Severity, "code": Code,
+                               "shape": Shape or "", "message": Message,
+                               "edit": kCheckReport.Suggest(Code, Shape, Spec, Message)})
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.Add")
+            return
+
+    def AddMessages(self, Messages, Severity, Code):
+        """Spec errors, spec warnings or plan findings ('slide N ...', spec numbering)."""
+        if kS.ErrorMode:
+            return
+        try:
+            for Msg in Messages:
+                No = kCheckReport.SlideOf(Msg)
+                self.Add(No, No, Severity, Code, Msg)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.AddMessages")
+            return
+
+    def AddBuild(self, Builder):
+        """The builder's own fit problems and every lint finding on the built deck (missing notes among them)."""
+        if kS.ErrorMode:
+            return
+        try:
+            for I in Builder.Issues:
+                if I["code"] in ("fit", "fit_line", "footer_band"):
+                    self.Add(I["slide"], I["spec"], "error", I["code"], f"slide {I['slide']} ({I['id']}): "
+                             f"{I['message']}", I["shape"])
+            for I in Builder.LintItems:
+                Sev = "error" if I["code"] in LAYOUT_CODES else I["severity"]
+                self.Add(I["slide"], I["spec"], Sev, I["code"], I["message"], I.get("shape") or "")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.AddBuild")
+            return
+
+    @staticmethod
+    def Key(Item):
+        """Sort key: slide, then severity, then code."""
+        if kS.ErrorMode:
+            return (0, 0, "")
+        try:
+            return (Item["slide"], SEVERITY_ORDER.get(Item["severity"], 3), Item["code"])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.Key")
+            return (0, 0, "")
+
+    def Print(self, Out, Slides, Seconds):
+        """The summary: counts, then every problem sorted by slide with its edit, the sheet, and one JSON line."""
+        if kS.ErrorMode:
+            return
+        try:
+            Items = sorted(self.Items, key=kCheckReport.Key)
+            Count = {"error": 0, "warn": 0, "info": 0}
+            for I in Items:
+                Count[I["severity"]] = Count.get(I["severity"], 0) + 1
+            print(f"\n==== check: {Out}  ({Slides} slides, {Seconds:.1f} s) ====")
+            print(f"auto-fixes: {len(self.Auto)}" + ("  (the auto: lines above; --no-auto to switch off)"
+                                                     if self.Auto else ""))
+            print(f"problems: {Count['error']} error(s), {Count['warn']} warning(s), {Count['info']} info")
+            for I in Items:
+                Where = f"slide {I['slide']}" if I["slide"] else "deck"
+                Shape = f" [{I['shape']}]" if I["shape"] else ""
+                print(f"  {Where:<9} {I['severity']:<5} {I['code']:<22}{Shape} {I['message']}")
+                print(f"  {'':<9} edit: {I['edit']}")
+            if self.Sheet:
+                print(f"sheet: {self.Sheet}  <- look at it once; fix everything listed above in one edit")
+            else:
+                print("sheet: (not rendered - LibreOffice or pdftoppm not found; render on Windows instead)")
+            print("CHECK-JSON " + json.dumps({"deck": Out, "slides": Slides, "seconds": round(Seconds, 1),
+                                              "counts": Count, "auto_fixes": len(self.Auto), "passes": self.Passes,
+                                              "sheet": self.Sheet, "problems": Items}, ensure_ascii=False))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.Print")
+            return
+
+
 class kBuildDeckApp:
     """Command line: --print-schema, --list-directions, --plan, or build (exit 2 spec errors, 3 unfit text)."""
+
+    @staticmethod
+    def LimitOnly(Errors):
+        """True when every spec error is a length or count limit, so --check can still build and report the rest."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return all(re.search(r"characters, max|characters; with|items, needs", E) for E in Errors)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBuildDeckApp.LimitOnly")
+            return False
+
+    @staticmethod
+    def BuildWithFixes(Spec, Out, Only, Auto, Report):
+        """Build; while text does not fit and Auto is on, apply kAutoFix to the slides with problems and build
+        again (at most AUTO_PASSES times). Prints each change as an `auto:` line. Returns the last builder."""
+        if kS.ErrorMode:
+            return None
+        try:
+            from _autofix import kAutoFix
+            Builder = None
+            for Pass in range(1, AUTO_PASSES + 2):
+                Builder = kDeckBuilder(Spec)
+                Builder.Build(Out, Only)
+                if kS.ErrorMode:
+                    return Builder
+                Report.Passes.append({"pass": Pass, "problems": len(Builder.Issues)})
+                if not Auto or not Builder.Issues or Pass > AUTO_PASSES:
+                    break
+                Changes = kAutoFix.Apply(Spec, Builder.Issues, AllowSplit=not Only)
+                if not Changes:
+                    break
+                for No, Id, Path, What in Changes:
+                    print(f"auto: slide {No} ({Id}) {Path}: {What}")
+                    Report.Auto.append({"spec_slide": No, "id": Id, "field": Path, "change": What, "pass": Pass})
+            return Builder
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBuildDeckApp.BuildWithFixes")
+            return None
+
+    @staticmethod
+    def Render(Out, Report):
+        """--check: render the deck with LibreOffice and make the contact sheet, when LibreOffice is installed."""
+        if kS.ErrorMode:
+            return
+        try:
+            if not (shutil.which("soffice") and shutil.which("pdftoppm")):
+                return
+            from contact_sheet import kContactSheet
+            from render_lo import kLoRenderer
+            Dir = os.path.splitext(Out)[0] + "-render"
+            Files = kLoRenderer.Render(Out, Dir)
+            if Files:
+                Report.Sheet = kContactSheet.Build(Files, 4, 480, os.path.join(Dir, "contact.png")) or ""
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBuildDeckApp.Render")
+            return
 
     def Run(self):
         if kS.ErrorMode:
@@ -3210,10 +3512,16 @@ class kBuildDeckApp:
             Ap.add_argument("spec", nargs="?")
             Ap.add_argument("--out")
             Ap.add_argument("--lint", action="store_true", help="run lint_deck.py on the result")
+            Ap.add_argument("--check", action="store_true",
+                            help="build + lint + render_lo --sheet, then one summary of every problem (sorted by "
+                                 "slide, each with its spec edit) and a CHECK-JSON line")
+            Ap.add_argument("--no-auto", action="store_true",
+                            help="report unfit text only; do not drop filler words, move detail to the notes or "
+                                 "split slides")
             Ap.add_argument("--force", action="store_true", help="build even if the spec breaks a pattern limit")
             Ap.add_argument("--list-directions", action="store_true")
             Ap.add_argument("--print-schema", action="store_true", help="print the spec's JSON Schema")
-            Ap.add_argument("--plan", action="store_true", help="print the story (titles and key facts) and stop")
+            Ap.add_argument("--plan", action="store_true", help="print the story and the pre-build checks, and stop")
             Ap.add_argument("--slides", help="build only these spec slides, e.g. 1,3 or 2-4 (the showcase-first "
                                              "step): same theme, page numbers and kickers as in the whole deck")
             Args = Ap.parse_args()
@@ -3227,31 +3535,50 @@ class kBuildDeckApp:
                 return 0
             if not Args.spec or not (Args.out or Args.plan):
                 Ap.error("spec and --out are required (or --plan)")
+            Started = time.time()
             Spec = kSpecLoader.Load(Args.spec)
             if Spec is None:
                 return 1
             Only = kSpecCheck.SlideSet(Args.slides, len(Spec.get("slides", []))) if Args.slides else None
             Schema = kSpecCheck.SchemaErrors(Spec)  # on the spec as written, before figure tokens are filled in
             Tokens = kFigures.Resolve(Spec, kSlidePatterns.Share)
+            Report = kCheckReport()
+            if not Args.no_auto and not Only:  # "allow_split": true and more bullets than the limit: split first
+                from _autofix import kAutoFix
+                for No, Id, Path, What in kAutoFix.PreSplit(Spec, LIMITS["bullets"]["items"][1]):
+                    print(f"auto: slide {No} ({Id}) {Path}: {What}")
+                    Report.Auto.append({"spec_slide": No, "id": Id, "field": Path, "change": What, "pass": 0})
+                if Report.Auto:
+                    Schema = kSpecCheck.SchemaErrors(Spec)
             Errors = kSpecCheck.ForSlides(kSpecCheck.CheckSpec(Spec) + Schema + Tokens, Only)
             Warnings = kSpecCheck.ForSlides(kSpecCheck.Warnings(Spec) + kFigures.SpecWarnings(Spec), Only)
             if Args.plan:
                 kSpecLoader.PrintPlan(Spec)
+                Pre = kPlanCheck.Run(Spec) if not Errors or self.LimitOnly(Errors) else []
                 for E in Errors:
                     print(f"spec: {E}")
                 for Wn in Warnings:
                     print(f"spec warning: {Wn}")
+                for Pc in Pre:
+                    print(f"plan: {Pc}")
+                print(f"\nplan: {len(Errors)} spec error(s), {len(Warnings)} warning(s), {len(Pre)} pre-build "
+                      "finding(s)" + (" - fix the spec lines, weigh the plan lines, then build with --check"
+                                     if Errors or Warnings or Pre else " - build with --check"))
                 return 2 if Errors else 0
             for E in Errors:
                 print(f"spec: {E}", file=sys.stderr)
             for Wn in Warnings:
                 print(f"spec warning: {Wn}", file=sys.stderr)
-            if Errors and not Args.force:
+            Report.AddMessages(Errors, "error", "spec")
+            Report.AddMessages(Warnings, "warn", "spec_warning")
+            if Errors and not Args.force and not (Args.check and self.LimitOnly(Errors)):
+                if Args.check:
+                    Report.Print(Args.out, 0, time.time() - Started)
                 return 2  # spec mistakes (expected state): listed above, nothing written
-            Builder = kDeckBuilder(Spec)
-            N = Builder.Build(Args.out, Only)
-            if kS.ErrorMode:
+            Builder = self.BuildWithFixes(Spec, Args.out, Only, not Args.no_auto, Report)
+            if kS.ErrorMode or Builder is None:
                 return 1
+            N = len(Builder.Numbers)
             print(f"{N} slides -> {Args.out}" + (f" (spec slides {Args.slides} only)" if Only else ""))
             for Pr in Builder.Problems:
                 print(f"fit: {Pr}", file=sys.stderr)
@@ -3259,8 +3586,17 @@ class kBuildDeckApp:
                 print(f"notes: {Nn} has no speaker notes - write what the speaker says (reference/CONTENT.md)",
                       file=sys.stderr)
             Code = 0
-            if Args.lint:
+            if Args.lint and not Args.check:
                 Code = subprocess.run([sys.executable, os.path.join(HERE, "lint_deck.py"), Args.out]).returncode
+            if Args.check:
+                sys.stderr.flush()
+                Report.AddBuild(Builder)
+                self.Render(Args.out, Report)
+                if kS.ErrorMode:
+                    return 1
+                Report.Print(Args.out, N, time.time() - Started)
+            if Errors and not Args.force:
+                return 2
             return 3 if Builder.Problems else Code  # 3: text that does not fit (expected state), listed above
         except kToolException:
             raise

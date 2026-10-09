@@ -1,0 +1,134 @@
+{
+ "V": {
+  "qbr": {
+   "message": 8,
+   "design": 8,
+   "legibility": 5,
+   "layout": 7,
+   "data": 7,
+   "notes": 2,
+   "lint_errors": 3,
+   "lint_warnings": 26,
+   "comment": "Strong action titles and ask; small body text; churn chart invents interpolated Q2/Q3 points (labelled); notes on 3/8 slides."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 8,
+   "legibility": 5,
+   "layout": 7,
+   "data": 9,
+   "notes": 2,
+   "lint_errors": 0,
+   "lint_warnings": 35,
+   "comment": "Covers all brief items with good example email and quiz; text small; notes sparse."
+  },
+  "fourday": {
+   "message": 8,
+   "design": 8,
+   "legibility": 5,
+   "layout": 8,
+   "data": 9,
+   "notes": 1,
+   "lint_errors": 1,
+   "lint_warnings": 28,
+   "comment": "Clear narrative, good timeline and cost table with per-engineer figure; small text; no notes."
+  },
+  "mean": {
+   "message": 8.0,
+   "design": 8.0,
+   "legibility": 5.0,
+   "layout": 7.33,
+   "data": 8.33,
+   "notes": 1.67,
+   "overall": 6.39
+  }
+ },
+ "W": {
+  "qbr": {
+   "message": 8,
+   "design": 7,
+   "legibility": 5,
+   "layout": 7,
+   "data": 8,
+   "notes": 1,
+   "lint_errors": 0,
+   "lint_warnings": 42,
+   "comment": "Complete, covers hiring and ask; generic card look, lots of empty card space, small text; notes on 1 slide."
+  },
+  "phishing": {
+   "message": 7,
+   "design": 6,
+   "legibility": 4,
+   "layout": 6,
+   "data": 8,
+   "notes": 1,
+   "lint_errors": 7,
+   "lint_warnings": 48,
+   "comment": "All topics present; tiny text, oversized empty cards, unsourced '9 in 10' stat; 7 lint errors."
+  },
+  "fourday": {
+   "message": 8,
+   "design": 7,
+   "legibility": 5,
+   "layout": 6,
+   "data": 8,
+   "notes": 1,
+   "lint_errors": 0,
+   "lint_warnings": 37,
+   "comment": "Thorough (metrics table, risks, cost) but timeline extends Dec-Aug, sparse empty cards, small text; no notes."
+  },
+  "mean": {
+   "message": 7.67,
+   "design": 6.67,
+   "legibility": 4.67,
+   "layout": 6.33,
+   "data": 8.0,
+   "notes": 1.0,
+   "overall": 5.72
+  }
+ },
+ "X": {
+  "qbr": {
+   "message": 9,
+   "design": 8,
+   "legibility": 9,
+   "layout": 8,
+   "data": 9,
+   "notes": 9,
+   "lint_errors": 0,
+   "lint_warnings": 0,
+   "comment": "Headline-led, decision on slide 2, large legible type, risk likelihood/impact; rich notes with Q&A and sources."
+  },
+  "phishing": {
+   "message": 9,
+   "design": 8,
+   "legibility": 9,
+   "layout": 8,
+   "data": 9,
+   "notes": 8,
+   "lint_errors": 0,
+   "lint_warnings": 0,
+   "comment": "Practical, quiz with reveal slide, annotated example email; minor callout misordering; good notes."
+  },
+  "fourday": {
+   "message": 9,
+   "design": 9,
+   "legibility": 9,
+   "layout": 8,
+   "data": 9,
+   "notes": 9,
+   "lint_errors": 0,
+   "lint_warnings": 0,
+   "comment": "Polished, bounded pilot with stop rule, dot-grid burnout visual, clean cost table; full notes with assumptions."
+  },
+  "mean": {
+   "message": 9.0,
+   "design": 8.33,
+   "legibility": 9.0,
+   "layout": 8.0,
+   "data": 9.0,
+   "notes": 8.67,
+   "overall": 8.67
+  }
+ }
+}

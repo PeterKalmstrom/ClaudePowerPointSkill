@@ -11,7 +11,23 @@ All 27 slides per maker were rendered with LibreOffice and scored **blind** by a
 only anonymous labels (keys: `round*-key.json`), on six criteria from 1 to 10: message, visual design, legibility,
 layout correctness, data presentation, presenter support (speaker notes).
 
-## Round 5 - after the computed-figure and font rounds (current)
+## Round 6 - after the speed round (current)
+
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
+|---|---|---|---|---|---|---|---|---|
+| **This skill** | 9.0 | 8.3 | 9.0 | 8.0 | 9.0 | 8.7 | **8.67** | 131 s / 91k / 13 |
+| Anthropic pptx skill | 8.0 | 8.0 | 5.0 | 7.3 | 8.3 | 1.7 | 6.39 | 159 s / 90k / 12 |
+| Plain Claude | 7.7 | 6.7 | 4.7 | 6.3 | 8.0 | 1.0 | 5.72 | 124 s / 73k / 9 |
+
+All three makers ran fresh, at the same time, so speed is comparable. The speed round cut this skill's agent from
+205 s / 107k / 26 calls (round 5) to 131 s / 91k / 13 - now level with the other two - while quality rose.
+Judge, in short: this skill - conclusion first, large type, rated risks, a separate quiz answer slide, a stop rule,
+0 lint errors and warnings, structured notes on every slide; minor flaws (callout numbers out of order on the
+example email). pptx skill - good-looking, strong titles, data right (interpolated churn points labelled), but
+9-11 pt body text and notes on few or no slides. Plain Claude - covers each brief but generic, sparse cards, tiny
+type, 7 lint errors in one deck, an unsourced statistic and a timeline past the pilot; almost no notes.
+
+## Round 5 - after the computed-figure and font rounds
 
 | Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
 |---|---|---|---|---|---|---|---|---|
@@ -101,6 +117,7 @@ per deck (round 5) - the scripts are not the bottleneck, the number of loops is.
 | 3 | not measured | not measured | 173 s / 98k / 18 |
 | 4 | not measured | not measured | 189 s / 100k / 18 |
 | 5 | not measured | not measured | 205 s / 107k / 26 |
+| 6 | 124 s / 73k / 9 | 159 s / 90k / 12 | 131 s / 91k / 13 |
 
 **Reading it.** As the skill gained checks (rounds 2-5) its quality rose from 5.44 to 8.56, but the agent needed
 more loops: each check found one class of problem per build, so it built, rendered, fixed one thing and built

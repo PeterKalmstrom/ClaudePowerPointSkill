@@ -76,9 +76,9 @@ skill lost: [evals/benchmark](evals/benchmark/README.md)):
 
 | Maker | Overall (1-10) | Legibility | Layout | Speaker notes | Lint errors / warnings (3 decks) |
 |---|---|---|---|---|---|
-| **This skill** | **8.56** | **9.0** | **9.0** | **8.7** | **0 / 0** |
-| Plain Claude | 7.33 | 6.7 | 8.0 | 6.0 | 30 / 135 |
-| Anthropic pptx skill | 6.11 | 5.7 | 7.7 | 2.0 | 15 / 81 |
+| **This skill** | **8.67** | **9.0** | **8.0** | **8.7** | **0 / 0** |
+| Anthropic pptx skill | 6.39 | 5.0 | 7.3 | 1.7 | 4 / 89 |
+| Plain Claude | 5.72 | 4.7 | 6.3 | 1.0 | 7 / 127 |
 
 ## What runs where
 

@@ -75,7 +75,6 @@ LOOSE_LINE = 1.28          # line height of the loosest renderer (LibreOffice, s
 LABEL_FLOOR_PT = 16.0      # the label floor on a 960-pt slide (24 pt on Full HD); text in metric tiles stays above it
 DATA_LABELS = re.compile(r"Trend\d+(?:First|Last|From|To)|ShareLabel")
 TILE_TEXT = re.compile(r"(?:Label|Note)\d+|Trend\d+(?:First|Last|From|To)|Lead(?:Label|Note)|ShareLabel")
-MEASURABLE = re.compile(r"\d|[<>\u2264\u2265=\u00b1]")  # a target needs a number, date or comparison
 COVER_PATTERNS = {"title", "section"}  # no figure_without_source: a cover's numbers are the talk's own headline
 
 GROUP_TF = {}  # shape_id -> (sx, tx, sy, ty): child coordinates -> slide coordinates (pt)
@@ -471,6 +470,7 @@ class kLintDeck:
                 if getattr(S, "has_table", False) and S.has_table and S.name == "MetricsTable":
                     kLintDeck.TargetCheck(N, S, F)
             Pattern = kLintDeck.PatternOf(Shapes)
+            kLintDeck.AskCostCheck(N, Shapes, F)
             Words, Colours, RawFills, Shadows, Accents = 0, set(), 0, 0, set()
             Sizes, BigTokens, ContrastDone = [], Counter(), False
             Content = [S for S in Shapes if not kLintDeck.IsTitle(S) and S.shape_type != MSO_SHAPE_TYPE.GROUP]
@@ -520,7 +520,7 @@ class kLintDeck:
                     Paras = [P for P in S.text_frame.paragraphs if P.text.strip()]
                     Chrome = S.name in CHROME_NAMES
                     Data = bool(DATA_LABELS.fullmatch(S.name or ""))  # a trend's figures and periods: chart labels
-                    Words += 0 if Chrome or Data else sum(len(P.text.split()) for P in Paras)
+                    Words += 0 if Chrome or Data else sum(kRules.WordCount(P.text) for P in Paras)
                     Text = S.text_frame.text
                     if len(Paras) > MAX_BULLETS:
                         F.Add(N, "warn", "too_many_bullets", f"{len(Paras)} paragraphs (> {MAX_BULLETS}); split the "
@@ -907,6 +907,26 @@ class kLintDeck:
             return
 
     @staticmethod
+    def AskCostCheck(N, Shapes, F):
+        """A slide with a decision box (the builder's 'Decision' shape) states what the ask costs somewhere on the
+        slide: money, time or FTE, or the word 'cost' (reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost)."""
+        if kS.ErrorMode:
+            return
+        try:
+            Ask = [S for S in Shapes if S.name == "Decision" and S.has_text_frame and S.text_frame.text.strip()]
+            if not Ask:
+                return
+            Text = " ".join(S.text_frame.text for S in Shapes if S.has_text_frame and not kLintDeck.IsTitle(S)
+                            and S.name not in CHROME_NAMES)
+            if not kRules.StatesCost(Text):
+                F.Add(N, "warn", "ask_without_cost", f"The ask '{Ask[0].text_frame.text.strip()[:50]}' does not say "
+                      "what it costs (money, time, FTE); add it to the decision, a reason or a figure beside it.",
+                      Ask[0].name)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kLintDeck.AskCostCheck(slide={N})")
+            return
+
+    @staticmethod
     def TargetCheck(N, S, F):
         """A success-metrics table: every target needs a number, percent, date or comparison to be judged by."""
         if kS.ErrorMode:
@@ -919,10 +939,11 @@ class kLintDeck:
             Col = Head.index("target")
             for R in Rows[1:]:
                 Text = R.cells[Col].text.strip()
-                if Text and not MEASURABLE.search(Text):
+                if Text and not kRules.Measurable(Text, R.cells[0].text.strip()):
                     F.Add(N, "warn", "target_not_measurable", f"Target '{Text}' ({R.cells[0].text.strip()[:30]}) has "
-                          "no number, percent, date or comparison; write it so the result can be judged (e.g. "
-                          "'below 30 %', '>= 95 % of Q4').", S.name)
+                          "no number with a unit or comparator for a named metric (a time window alone such as "
+                          "'<= last 6 months' is not one); write it so the result can be judged (e.g. 'below 30 %', "
+                          "'>= 95 % of Q4').", S.name)
         except Exception as e:
             kS.GlobalErrorHandler(e, f"kLintDeck.TargetCheck(slide={N})")
             return

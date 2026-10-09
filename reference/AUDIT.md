@@ -24,11 +24,12 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `title_is_label` | info | 1–2 words, no verb, not a question — a topic, not a claim |
 | `body_below_floor` | warn | A paragraph of 4+ words between the label ceiling and the floor. Both scale with slide width: 12 / 18 pt on a 960-pt slide, **18 / 27 pt on Full HD**; `--room-depth` raises the floor |
 | `too_many_bullets` | warn | More than 7 paragraphs in one shape |
-| `word_budget` | info | More than 12 visible words — or, on a slide `build_deck.py` made, more than its pattern's budget (bullets 30, compare 32, process 36, email 130, risks 64…; `--budget` scales them) — accept for gallery, matrix, chart, quote, reference slides |
+| `word_budget` | info | More than 12 visible words — or, on a slide `build_deck.py` made, more than its pattern's budget (bullets 30, compare 32, process 36, email 130, risks 64…; `--budget` scales them). Words are tokens with a letter or digit; in `build_deck.py --check` a built slide is counted from its spec, by the same function as `--plan` — accept for gallery, matrix, chart, quote, reference slides |
 | `text_overflow` | warn / error > 1.5× | Text needs more height than its box (estimated from real font metrics, measured against LibreOffice to the line), or a text box that starts on a card or frame (a tile, a risk card, a mocked email) runs past its bottom — as drawn or once grown to its text |
 | `tile_text_below_floor` | warn | A label, note or trend figure in a `build_deck.py` metric tile below the label floor (16 pt on a 960-pt slide, 24 pt on Full HD) |
 | `figure_mismatch` | warn | A total, average, change or share in the text (or an equation in the notes) that the deck's own chart series and table columns contradict - close but wrong, e.g. "21.8, sum of four quarters" beside 4.1 + 4.6 + 5.2 + 5.9 = 19.8; compute it with a `build_deck.py` token |
-| `target_not_measurable` | warn | A target in a `build_deck.py` metrics table with no number, percent, date or comparison ("Clearly lower", "No drop") |
+| `target_not_measurable` | warn | A target in a `build_deck.py` metrics table without a number that has a unit or a comparator for a named metric ("Clearly lower", "No drop"); a time window alone does not count ("<= last 6 months", "by Q3") |
+| `ask_without_cost` | warn | A slide with a decision box that nowhere says what the ask costs - money, time, FTE or the word "cost" ([CONTENT.md](CONTENT.md#the-ask-states-its-reasons-and-its-cost)); `build_deck.py` warns on the spec too |
 | `text_shrinks` | info | The box is set to shrink text on overflow — check the shrunk size stays above the floor |
 | `word_breaks` | warn | A single word is wider than its box and will break mid-word (on Windows, `check_word_breaks.py` gives the exact answer) |
 | `offslide_shape` | warn | A shape sticks out past the slide edge (2 pt tolerance) |

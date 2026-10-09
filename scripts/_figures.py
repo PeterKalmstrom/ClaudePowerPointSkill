@@ -9,7 +9,8 @@ figure that matches nothing but is close to one of them (a slip, not a different
 
 It also computes figures for the spec: {sum}, {total}, {average}, {change}, {share}, {first}, {last} and {count} in
 any text become the number, from the metric's trend, the slide's chart series or cost rows, the big number's share,
-or a named deck fact ({sum:revenue_q}); {name} is a scalar deck fact. Used by build_deck.py (spec warnings, tokens)
+or a named deck fact ({sum:revenue_q}); {name} is a scalar deck fact. "|abs" drops the sign ({change|abs},
+{change:revenue_q|abs}) for text that already says the direction ("up {change|abs}"). Used by build_deck.py (spec warnings, tokens)
 and lint_deck.py (figure_mismatch on a built deck).
 """
 import ast
@@ -35,7 +36,7 @@ DOWN_WORDS = ("down", "fell", "fall", "falls", "fallen", "drop", "dropped", "dro
               "declines", "decrease", "decreased", "lower", "less", "fewer", "cut", "cuts", "shrank", "lost",
               "reduced", "reduction")
 FILLER = ("by", "about", "nearly", "almost", "roughly", "around", "some", "over", "~", "just", "only")
-TOKEN_RE = re.compile(r"\{(sum|total|average|change|share|first|last|count)(?::([A-Za-z_][\w.-]*))?\}|"
+TOKEN_RE = re.compile(r"\{(sum|total|average|change|share|first|last|count)(?::([A-Za-z_][\w.-]*))?(\|abs)?\}|"
                       r"\{([A-Za-z_][\w.-]*)\}")
 NEAR = {"total": 0.35, "average": 0.35, "change": 0.12, "share": 0.35}  # 'close but wrong': a slip, not another figure
 
@@ -624,7 +625,7 @@ class kFigures:
         try:
             Out, Last = [], 0
             for Mt in TOKEN_RE.finditer(Text):
-                Op, Name, Scalar = Mt.group(1), Mt.group(2), Mt.group(3)
+                Op, Name, Abs, Scalar = Mt.group(1), Mt.group(2), Mt.group(3), Mt.group(4)
                 if Scalar is not None:
                     Val = Facts.get(Scalar)
                     if not isinstance(Val, (int, float)):
@@ -638,6 +639,8 @@ class kFigures:
                     Value = kFigures.Compute(Op, Facts[Name], None)
                 else:
                     Value = kFigures.Compute(Op, Source, Share)
+                if Value is not None and Abs:
+                    Value = Value.lstrip("+" + MINUS)  # {change|abs}: "up {change|abs}" reads "up 44 %"
                 if Value is None:
                     Errors.append(f"{Where}: '{Mt.group(0)}' has nothing to compute from - give the metric a "
                                   "'trend', the slide a 'series' (or cost rows), a big number that is a share for "

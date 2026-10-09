@@ -28,6 +28,29 @@ ORDINAL_RE = (r"^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?$|^q[
               r"|^(19|20)\d{2}$|^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?$|^h[12]$|^week\s?\d+$")
 
 
+# A success target is measurable when, after any time window ("last 6 months", "by Q3", "in 2027") is set aside,
+# a number remains with a unit or a comparator - and the row (or the target) names what is measured.
+TIME_WINDOW = re.compile(r"\b(?:(?:the\s+)?(?:last|past|next|first|coming|within|in|over|for|after|before|by|until|"
+                         r"from|per|each|every)\s+(?:the\s+)?)(?:\d+(?:[.,]\d+)?\s*)?(?:days?|weeks?|wks?|months?|"
+                         r"mos?|quarters?|years?|yrs?|sprints?)\b|\b(?:(?:by|in|until|before|after|from|end of|"
+                         r"start of)\s+)?(?:q[1-4]|h[12]|fy\s?\d{2,4}|(?:19|20)\d{2}|\d{1,2}\s+(?:jan|feb|mar|apr|may|"
+                         r"jun|jul|aug|sep|oct|nov|dec)[a-z]*|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*"
+                         r"(?:\s+\d{1,4})?)\b", re.I)
+TARGET_UNIT = re.compile(r"\d\s*(?:%|\u2030|pp\b|pts?\b|x\b|[kKMB]\b|bn\b|ms\b|s\b|sec\w*|min\w*|h\b|hours?\b|"
+                         r"[kM]?(?:USD|EUR|SEK|GBP|NOK|DKK|kr)\b|\w{3,})|[$\u20ac\u00a3\u00a5]\s*\d", re.I)
+TARGET_COMPARATOR = re.compile(r"[<>\u2264\u2265=\u00b1]|\b(?:below|above|under|over|at least|at most|less than|"
+                               r"more than|fewer than|up to|no more than|max(?:imum)?|min(?:imum)?|within|from|to|"
+                               r"down|up|reduce\w*|cut|raise|increase\w*|decrease\w*)\b", re.I)
+TARGET_FILLER = set("""below above under over least most less more fewer than up to no max maximum min minimum within
+from down reduce reduced cut raise increase decrease the a an of and or at by in on per vs target goal level same
+current clearly lower higher better improved""".split())
+# An ask states its cost: money, people or time, or the word itself.
+COST_CUE = re.compile(r"\b(?:costs?|costing|budget\w*|spend\w*|price\w*|invest\w*|funding|funds?|fte|headcount|"
+                      r"salar\w*|man-?days?|person-?(?:days?|weeks?|months?))\b|[$\u20ac\u00a3\u00a5]\s*\d|"
+                      r"\d\s*(?:[kKM]|bn)?\s*(?:USD|EUR|SEK|GBP|NOK|DKK|kr|kSEK|MSEK|kUSD|MUSD|kEUR|MEUR)\b|"
+                      r"\d\s*(?:hours?|days?|weeks?|months?)\b", re.I)
+
+
 class kRules:
     """Stateless rule helpers shared by lint_deck.py and build_deck.py."""
 
@@ -167,3 +190,47 @@ class kRules:
         except Exception as e:
             kS.GlobalErrorHandler(e, "kRules.TintRamp")
             return []
+
+    @staticmethod
+    def WordCount(Text):
+        """Visible words in Text: tokens with a letter or a digit (a bullet, a dash or a lone '%' is not a word).
+        The one count both build_deck.py --plan and lint_deck.py (--check) judge the word budget by."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            return sum(1 for Tok in str(Text).split() if any(Ch.isalnum() for Ch in Tok))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kRules.WordCount")
+            return 0
+
+    @staticmethod
+    def Measurable(Target, Metric=""):
+        """True when a success target can be judged: once time windows are set aside, a number with a unit or a
+        comparator is left, and the target or its row's Metric names what is measured ('Churn' + 'below 30 %').
+        'Clearly lower' and '<= last 6 months' are not measurable."""
+        if kS.ErrorMode:
+            return True
+        try:
+            Rest = TIME_WINDOW.sub(" ", str(Target))
+            if not re.search(r"\d", Rest):
+                return False
+            if re.search(r"\d\s*(?:of|out of|/)\s*\d", Rest):  # a count against a total: '4 of 4', '18/20'
+                return True
+            if not (TARGET_UNIT.search(Rest) or TARGET_COMPARATOR.search(Rest)):
+                return False
+            Nouns = [W for W in re.findall(r"[^\W\d_]{3,}", f"{Rest} {Metric}".lower()) if W not in TARGET_FILLER]
+            return bool(Nouns) or bool(re.search(r"\d\s*(?:%|\u2030|[$\u20ac\u00a3\u00a5])", Rest))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kRules.Measurable")
+            return True
+
+    @staticmethod
+    def StatesCost(Text):
+        """True when the text of an ask says what it costs: money, people or time, or the word 'cost' itself."""
+        if kS.ErrorMode:
+            return True
+        try:
+            return bool(COST_CUE.search(str(Text)))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kRules.StatesCost")
+            return True

@@ -449,6 +449,24 @@ class kSelfTest:
             self.Check("rules: 'Decisions' is a label", kRules.LooksLikeLabel("Decisions"))
             self.Check("rules: 'The check comes first' is a claim", not kRules.LooksLikeLabel("The check comes first"))
             self.Check("rules: a question is not flagged", not kRules.LooksLikeLabel("Why Claude?"))
+            self.Check("rules: a time window alone is not a measurable target",
+                       not kRules.Measurable("<= last 6 months", "Churn") and not kRules.Measurable("Clearly lower")
+                       and not kRules.Measurable("by Q3", "Delivery"))
+            self.Check("rules: targets with a unit, comparator or count are measurable",
+                       kRules.Measurable("Below 30 %", "Burnout") and kRules.Measurable(">= 95 % of Q4", "Delivery")
+                       and kRules.Measurable("4 of 4", "Weekly reviews held")
+                       and kRules.Measurable("< 2 days lead time"))
+            self.Check("rules: an ask states its cost in money, time or FTE",
+                       kRules.StatesCost("Approve a pilot, 200 kSEK") and kRules.StatesCost("2 FTE for 6 months")
+                       and not kRules.StatesCost("Approve three sales engineers"))
+            self.Check("rules: word count ignores bullets and dashes", kRules.WordCount("- Revenue grew 44 % – fast") == 4)
+            from _figures import kFigures
+            Facts = {"rev": [4.1, 4.6, 5.2, 5.9]}
+            Errs = []
+            Text = kFigures.Replace("up {change:rev|abs}, {change:rev}", None, None, Facts, "t", Errs)
+            Plain = " ".join(str(Text).replace(" ", " ").split())
+            self.Check("figures: {change|abs} drops the sign", Plain == "up 44 %, +44 %" and not Errs,
+                       f"{Text} {Errs}")
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckBasics")
             return
@@ -1028,7 +1046,7 @@ class kSelfTest:
                  "metrics": [{"value": "112 %", "label": "Net retention"},
                              {"value": "\u221233%", "label": "Churn", "trend": [1.8, 1.6, 1.4, 1.2]},
                              {"value": "5.9 M", "label": "Q4 revenue"}],
-                 "decision": "Approve three sales engineers"},
+                 "decision": "Approve three sales engineers, 2.4 MSEK a year"},
                 {"id": "success", "pattern": "metrics", "kicker": "Success", "title": "Success has a target",
                  "notes": Notes, "rows": [{"metric": "Burnout", "baseline": "41 %", "target": "Below 30 %",
                                            "owner": "HR", "date": "June"},
@@ -1200,7 +1218,7 @@ class kSelfTest:
                               "trend_labels": ["Q1", "Q4"]},
                              {"value": "112 %", "label": "Net retention"},
                              {"value": "1.2 %", "label": "Churn", "trend": [1.8, 1.2]}],
-                 "decision": "Approve three sales engineers"},
+                 "decision": "Approve three sales engineers, 2.4 MSEK a year"},
                 {"id": "share", "pattern": "big_number", "title": "41 % of engineers report burnout",
                  "number": "41", "unit": "%", "caption": "Burnout survey, engineering",
                  "points": ["Burnout drives the retention risk"], "notes": {"key_fact": "41 %."}},
@@ -1219,7 +1237,7 @@ class kSelfTest:
                  "rows": [{"metric": "Burnout", "baseline": "41 %", "target": "Clearly lower"},
                           {"metric": "Delivery", "baseline": "Q4", "target": ">= 95 % of Q4"}]},
                 {"id": "ask", "pattern": "statement", "title": "Add sales capacity to keep growing",
-                 "notes": {"key_fact": "The ask."}, "decision": "Approve 3 extra sales engineers",
+                 "notes": {"key_fact": "The ask."}, "decision": "Approve 3 extra sales engineers (2.4 MSEK)",
                  "owner": "Executive team", "date": "Today", "support": "Enterprise deals wait on technical help.",
                  "figure": {"value": "60", "label": "New customers in Q4", "trend": [38, 41, 52, 60],
                             "trend_labels": ["Q1", "Q4"]}},
@@ -1593,7 +1611,7 @@ class kSelfTest:
                                             {"label": "Measure output"}, {"label": "Board decides"}]},
                 {"id": "ask", "pattern": "statement", "title": "Approve the pilot", "notes": "n",
                  "decision": "Approve a six-month four-day-week pilot for engineering", "owner": "The board",
-                 "points": ["Burnout is at 41 %", "Bounded and reversible", "Measured against a baseline"]},
+                 "points": ["Burnout is at 41 %", "Costs 200 kSEK, reversible", "Measured against a baseline"]},
                 {"id": "what", "pattern": "statement", "title": "Phishing tricks you into helping", "notes": "n",
                  "support": "One click is enough", "points": ["A fake sender", "A link", "A deadline"]}]}
             Path = os.path.join(Edge, "round5.json")

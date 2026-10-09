@@ -232,7 +232,6 @@ NO_CHROME = {"title", "section"}            # no footer or page number on covers
 NO_KICKER = {"title", "section", "quote"}   # their own title treatment
 LEVELS = {"high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
 MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
-MEASURABLE = re.compile(r"\d|[<>\u2264\u2265=\u00b1]")  # a success target needs a number, date or comparison
 UNIT_GLUE = re.compile(r"(?<=\d) (?=(?:%|\u2030|pp\b|pt\b|[kKMB]\b|bn\b|[kM]?(?:USD|EUR|SEK|GBP)\b|x\b))")
 
 
@@ -570,10 +569,12 @@ class kSpecCheck:
                 if Pat == "metrics":
                     for R, Row in enumerate(Sl.get("rows", [])):
                         Target = str(Row.get("target", "")) if isinstance(Row, dict) else ""
-                        if Target and not MEASURABLE.search(Target):
-                            Out.append(f"slide {I} (metrics): target '{Target}' of '{Row.get('metric', R)}' is not "
-                                       "measurable - give a number, percent, date or comparison (e.g. 'below 30 %', "
-                                       "'>= 95 % of Q4', '<= current rate')")
+                        Metric = str(Row.get("metric", "")) if isinstance(Row, dict) else ""
+                        if Target and not kRules.Measurable(Target, Metric):
+                            Out.append(f"slide {I} (metrics): target '{Target}' of '{Metric or R}' is not "
+                                       "measurable - give a number with a unit or comparator and say what is "
+                                       "measured (e.g. 'below 30 %', '>= 95 % of Q4', '< 2 days lead time'); a time "
+                                       "window alone ('<= last 6 months', 'by Q3') is not a target")
                 if Pat == "statement" and not Sl.get("decision") and not Sl.get("points") and I > 1:
                     Out.append(f"slide {I} (statement): a claim with " + ("only a support line" if Sl.get("support")
                                else "nothing under it") + " reads as sparse - add 'points' (2-3 short facts, "
@@ -581,6 +582,22 @@ class kSpecCheck:
                 if Pat == "big_number" and not Sl.get("points") and not kSlidePatterns.Share(Sl) and I > 1:
                     Out.append(f"slide {I} (big_number): one number and one caption - add 'points' (what it costs, "
                                "what drives it) or state it as a share ('41' + '%', '14/20') for a dot grid")
+                if Pat == "quiz" and Sl.get("reveal") == "slide":
+                    Answer = str(Sl.get("answer_title") or "")
+                    if not Answer or re.match(r"^\s*(?:the\s+)?(?:right\s+|correct\s+)?answers?\b\s*(?:is|are)?\s*[:\-"
+                                              r"\u2013\u2014]?\s*[A-D](?:\s*(?:,|and|&)\s*[A-D])*\s*[.!]?\s*$",
+                                              Answer, re.I) or kRules.LooksLikeLabel(Answer):
+                        Out.append(f"slide {I} (quiz): the answer slide's title is " + (f"'{Answer}'" if Answer else
+                                   "the default 'Answer: <letter>'") + " - a label, not a claim; set 'answer_title' "
+                                   "to what the answer teaches (e.g. 'A look-alike sender is the first red flag')")
+                if Pat in ("statement", "kpi", "next_steps") and Sl.get("decision"):
+                    Ask = " ".join(str(X) for X in [Sl.get("decision"), Sl.get("support"), Sl.get("points"),
+                                                    Sl.get("figure")] if X)
+                    if not kRules.StatesCost(Ask):
+                        Out.append(f"slide {I} ({Pat}): the ask does not state its cost - say what it costs or "
+                                   "takes (money, time, FTE) in 'decision', a point or a 'figure' (e.g. '200 kSEK', "
+                                   "'2 FTE for 6 months'); if the brief gives none, say the figure comes from "
+                                   "Finance (reference/CONTENT.md)")
                 if Pat == "timeline":
                     Months = [kSpecCheck.MonthIndex(E.get("date", "")) for E in Sl.get("events", [])
                               if isinstance(E, dict)]
@@ -1220,6 +1237,17 @@ class kDeckBuilder:
             kS.GlobalErrorHandler(e, "kDeckBuilder.Widow")
             return False
 
+    def MaxTitleLines(self, Size):
+        """The most lines lint_deck.py accepts for a title at Size (1440 grid): 3 for a display title (40 pt or
+        more on a 960-pt slide, 60 pt on Full HD), else 2 - so a wide theme font (Verdana) shrinks it to fit."""
+        if kS.ErrorMode:
+            return 3
+        try:
+            return 3 if Size * self.TypeScale() >= 40 * 1.5 * self._kx else 2
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.MaxTitleLines")
+            return 3
+
     def TitleFits(self, Room, Size, Lines):
         """True when Lines title lines at Size fit Room (1440 grid; None = any height)."""
         if kS.ErrorMode:
@@ -1296,6 +1324,10 @@ class kDeckBuilder:
                     Wd = min(Box, self.BalancedWidth(Text, Size, Box - 15) + 15)
                 Lines = self.TitleLines(Text, Size, Wd, True)
                 Bottom = Top + Height + (TITLE_DROP if Lines > 1 else 0)
+            while Size > 36 and self.TitleLines(Text, Size, Wd) > self.MaxTitleLines(Size):
+                Size -= 2  # lint's headline_too_long: a display title takes at most 3 lines, any other 2
+                Wd = min(Box, self.BalancedWidth(Text, Size, Box - 15) + 15)
+                Lines = self.TitleLines(Text, Size, Wd, Head)
             T = S.shapes.title
             T.left, T.top, T.width, T.height = self.X(M), self.Y(Top), self.X(Wd), self.Y(Bottom - Top)
             self.TitleInk = Bottom - 4 - Lines * Size * LOOSE_LINE - KICKER_GAP if Head else None
@@ -1545,14 +1577,30 @@ class kDeckBuilder:
         try:
             from lint_deck import kLintDeck  # the same checks lint_deck.py runs, in this process
             _, Found = kLintDeck.Lint(Out, 18.0, 12)
+            Counted = set()
             for I in (Found.Items if Found else []):
                 No = self.Numbers[I["slide"] - 1] if 0 < I["slide"] <= len(self.Numbers) else I["slide"]
                 Item = dict(I, slide=No, spec=self.SpecOf.get(No, 0), id="")
+                if I["code"] == "word_budget" and Item["spec"]:
+                    continue  # a built slide's words are counted from its spec below, as --plan counts them
                 self.LintItems.append(Item)
                 if I["code"] in LAYOUT_CODES or I["severity"] == "error":  # an overlap, a clash: never ship it
                     Shape = f" [{I['shape']}]" if I.get("shape") else ""
                     self.Problems.append(f"slide {No}: {I['code']}{Shape} {I['message']}")
                     self.Issues.append(dict(Item, severity="error"))
+            for No in self.Numbers:
+                SpecNo = self.SpecOf.get(No, 0)
+                if not SpecNo or SpecNo in Counted or SpecNo > len(self.Spec["slides"]):
+                    continue
+                Counted.add(SpecNo)
+                Sl = self.Spec["slides"][SpecNo - 1]
+                Words, Budget = kPlanCheck.Words(Sl), kPlanCheck.Budget(Sl)
+                if Words > Budget and Sl.get("pattern") not in NO_CHROME:
+                    self.LintItems.append({"slide": No, "spec": SpecNo, "id": "", "severity": "info",
+                                           "code": "word_budget", "shape": "", "message":
+                                           f"about {Words} visible words (budget {Budget} for a {Sl.get('pattern')} "
+                                           "slide; counted from the spec as --plan counts them). Fine for chart, "
+                                           "quote and reference slides; otherwise cut or move to the notes."})
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.LayoutCheck")
             return
@@ -3245,7 +3293,7 @@ class kPlanCheck:
                 return sum(kPlanCheck.Words(V, K) for K, V in Obj.items())
             if isinstance(Obj, list):
                 return sum(kPlanCheck.Words(V, Key) for V in Obj)
-            return len(str(Obj).split()) if isinstance(Obj, str) else 0
+            return kRules.WordCount(Obj) if isinstance(Obj, str) else 0  # the count lint_deck.py uses
         except Exception as e:
             kS.GlobalErrorHandler(e, "kPlanCheck.Words")
             return 0

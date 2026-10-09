@@ -150,9 +150,10 @@ Never compute a derived figure by hand. Write a token and the builder computes i
 | `{sum}` / `{total}` | 19.8 | the metric's `trend`, else the slide's first chart series, else its cost rows |
 | `{average}` | 4.95 | the same (one decimal more than the data when it does not come out even) |
 | `{change}` | +44 % | first to last value of the same, rounded to a whole percent |
+| `{change\|abs}` | 44 % | the same without the sign, for text that already says the direction ("up {change\|abs}") |
 | `{first}`, `{last}`, `{count}` | 4.1, 5.9, 4 | the same |
 | `{share}` | 70 % | a `big_number` that is a share (`14/20`, `41` + `%`) |
-| `{sum:revenue_q}` (any op) | 19.8 | the deck-level `facts` list `revenue_q` |
+| `{sum:revenue_q}` (any op; `{change:revenue_q\|abs}`) | 19.8 | the deck-level `facts` list `revenue_q` |
 | `{roles_planned}` | 20 | a deck-level fact that is one number |
 
 Tokens work in any text — a metric's `value` (`"{sum} MUSD"`), a caption, a point, the notes. A token with

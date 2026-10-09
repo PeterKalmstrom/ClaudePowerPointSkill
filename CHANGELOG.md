@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **Rough edges from benchmark round 6:**
+  - *One word count*: `--plan` and lint count visible words the same way (`kRules.WordCount`: tokens with a letter
+    or digit); `--check` counts a built slide's words from its spec, as `--plan` does.
+  - *Measurable targets*: a time window alone ("<= last 6 months", "by Q3") is not a target; a number needs a unit,
+    a comparator or a count ("4 of 4") and a named metric (`kRules.Measurable`, spec warning and
+    `target_not_measurable`).
+  - *The ask states its cost*: new lint `ask_without_cost` and a spec warning when a decision box nowhere says
+    what it costs (money, time, FTE).
+  - *Quiz answer slides*: a spec warning when `answer_title` is missing or only a letter ("Answer: B").
+  - *`{change|abs}`*: the change without its sign, for text that already says the direction ("up {change|abs}").
+  - *Titles in wide theme fonts*: the builder shrinks a title until it takes no more lines than lint accepts
+    (3 for a display title, else 2) - Verdana on Windows made a statement title 4 lines.
+  - *Windows: a closed stdout pipe* (`--plan | head`) raises EINVAL there, not BrokenPipeError; it is now a
+    quiet normal end on Windows too.
+  - Self-test: rule checks for the above (173 checks).
+
 - **Speed round: fewer loops for an agent** (round 5: 205 s / 107k tokens / 26 tool calls for three decks, against
   plain Claude's 165 s / 77k / 10 - the scripts take seconds, the cost was one problem class per build loop):
   - *Automatic fixes* (`scripts/_autofix.py`, `kAutoFix`): when text does not fit, the builder changes the spec in

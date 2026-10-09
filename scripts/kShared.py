@@ -38,6 +38,7 @@ The rules, the same as the C#, TypeScript and PowerShell code this skill's autho
 tools/check_kpattern.py audits every method for the four parts; the self-test and CI run it.
 """
 import datetime
+import errno
 import json
 import os
 import platform
@@ -335,7 +336,7 @@ class kS:
         """Report an unexpected error once, loudly, then halt every guarded method. Never raises - except to pass
         on a BrokenPipeError when stdout's reader has gone (`build_deck.py --plan | head`): that is the normal end
         of the output, not an error, so it is not reported; it travels up to kRun.Main, which exits quietly."""
-        if isinstance(Error, BrokenPipeError) and kS.OutputGone():
+        if kS.IsPipeGone(Error):
             raise Error
         try:
             Halted = kS.ErrorMode
@@ -357,6 +358,18 @@ class kS:
                     Log.write(repr(Record) + "\n")
         except Exception as Inner:  # ERROR-SUPPRESSED-JUSTIFIED: the handler must never raise or recurse
             sys.stderr.write(f"error handler failed: {Inner!r} while reporting {Location}\n")
+
+    @staticmethod
+    def IsPipeGone(Error):
+        """True when Error is stdout's reader having gone: a BrokenPipeError, or on Windows the OSError 'Invalid
+        argument' (EINVAL) that a write to a closed pipe raises there instead."""
+        try:
+            if isinstance(Error, BrokenPipeError):
+                return kS.OutputGone()
+            return (os.name == "nt" and isinstance(Error, OSError) and Error.errno == errno.EINVAL
+                    and kS.OutputGone())
+        except Exception:  # ERROR-SUPPRESSED-JUSTIFIED: not decidable means not a closed pipe: report it normally
+            return False
 
     @staticmethod
     def OutputGone():
@@ -398,7 +411,7 @@ class kS:
         if issubclass(ExcType, (KeyboardInterrupt, SystemExit)):
             sys.__excepthook__(ExcType, Error, Tb)
             return
-        if issubclass(ExcType, BrokenPipeError) and kS.OutputGone():  # the reader of stdout left: a normal end
+        if kS.IsPipeGone(Error):  # the reader of stdout left: a normal end
             kRun.QuietEnd(0)
             return
         kS.GlobalErrorHandler(Error, "[unhandled] main thread")
@@ -412,6 +425,8 @@ class kS:
 
     @staticmethod
     def OnUnraisable(Unraisable):
+        if kS.IsPipeGone(Unraisable.exc_value):  # the interpreter's last flush found stdout's reader gone
+            return
         kS.GlobalErrorHandler(Unraisable.exc_value, f"[unhandled] {Unraisable.err_msg or 'unraisable'}")
 
     @staticmethod
@@ -456,6 +471,8 @@ class kRun:
         except BrokenPipeError:  # stdout's reader left (`--plan | head`): the normal end of the output, no report
             kRun.QuietEnd(Code)
         except Exception as e:
+            if kS.IsPipeGone(e):  # Windows raises EINVAL, not BrokenPipeError, for a closed pipe
+                kRun.QuietEnd(Code)
             kS.GlobalErrorHandler(e, "kRun.Main")
         kRun.Finish(Code)
 
@@ -477,8 +494,8 @@ class kRun:
         was saved for Claude to ask the user about, 1 when the handler fired, otherwise Code."""
         try:
             sys.stdout.flush()
-        except BrokenPipeError:  # the last buffered lines found stdout's reader gone: still a normal end
-            if not kS.OutputGone():
+        except OSError as e:  # the last buffered lines found stdout's reader gone: still a normal end
+            if not kS.IsPipeGone(e):
                 raise
             kRun.QuietEnd(1 if kS.ErrorMode else Code)
         kErrorReport.OfferOnce()

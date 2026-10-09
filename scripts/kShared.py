@@ -41,6 +41,7 @@ import datetime
 import json
 import os
 import platform
+import select
 import sys
 import tempfile
 import threading
@@ -331,7 +332,11 @@ class kS:
 
     @staticmethod
     def GlobalErrorHandler(Error, Location, AdditionalMessage=""):
-        """Report an unexpected error once, loudly, then halt every guarded method. Never raises."""
+        """Report an unexpected error once, loudly, then halt every guarded method. Never raises - except to pass
+        on a BrokenPipeError when stdout's reader has gone (`build_deck.py --plan | head`): that is the normal end
+        of the output, not an error, so it is not reported; it travels up to kRun.Main, which exits quietly."""
+        if isinstance(Error, BrokenPipeError) and kS.OutputGone():
+            raise Error
         try:
             Halted = kS.ErrorMode
             Record = {"time": datetime.datetime.now().isoformat(timespec="seconds"), "location": Location,
@@ -352,6 +357,19 @@ class kS:
                     Log.write(repr(Record) + "\n")
         except Exception as Inner:  # ERROR-SUPPRESSED-JUSTIFIED: the handler must never raise or recurse
             sys.stderr.write(f"error handler failed: {Inner!r} while reporting {Location}\n")
+
+    @staticmethod
+    def OutputGone():
+        """True when nobody reads stdout any more (the reader of a pipe closed it, as `head` does): poll reports an
+        error on the write end. Where poll is missing (Windows) a BrokenPipeError is taken to be stdout's."""
+        try:
+            if not hasattr(select, "poll"):
+                return True
+            Poll = select.poll()
+            Poll.register(sys.__stdout__.fileno(), select.POLLOUT)
+            return any(Ev & (select.POLLERR | select.POLLHUP) for _, Ev in Poll.poll(0))
+        except Exception:  # ERROR-SUPPRESSED-JUSTIFIED: no stdout to poll (closed, replaced): treat it as gone
+            return True
 
     @staticmethod
     def Reset():
@@ -379,6 +397,9 @@ class kS:
     def OnUnhandled(ExcType, Error, Tb):
         if issubclass(ExcType, (KeyboardInterrupt, SystemExit)):
             sys.__excepthook__(ExcType, Error, Tb)
+            return
+        if issubclass(ExcType, BrokenPipeError) and kS.OutputGone():  # the reader of stdout left: a normal end
+            kRun.QuietEnd(0)
             return
         kS.GlobalErrorHandler(Error, "[unhandled] main thread")
         kRun.Finish(1)
@@ -432,15 +453,34 @@ class kRun:
         except kToolException as e:
             sys.stderr.write(f"{e}\n")
             Code = e.ExitCode
+        except BrokenPipeError:  # stdout's reader left (`--plan | head`): the normal end of the output, no report
+            kRun.QuietEnd(Code)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kRun.Main")
         kRun.Finish(Code)
 
     @staticmethod
+    def QuietEnd(Code):
+        """Exit with Code after stdout's reader has gone: point stdout at devnull first (as the Python docs advise
+        for SIGPIPE), so the interpreter's last flush cannot raise a second BrokenPipeError."""
+        try:
+            Null = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(Null, sys.stdout.fileno())
+        except Exception:  # ERROR-SUPPRESSED-JUSTIFIED: stdout already closed - nothing is left to flush into it
+            pass
+        sys.stderr.flush()
+        sys.exit(Code)
+
+    @staticmethod
     def Finish(Code):
         """Offer any reported error to the support flow, then exit: EXIT_REPORT_PENDING (4) when an error report
         was saved for Claude to ask the user about, 1 when the handler fired, otherwise Code."""
-        sys.stdout.flush()
+        try:
+            sys.stdout.flush()
+        except BrokenPipeError:  # the last buffered lines found stdout's reader gone: still a normal end
+            if not kS.OutputGone():
+                raise
+            kRun.QuietEnd(1 if kS.ErrorMode else Code)
         kErrorReport.OfferOnce()
         sys.stderr.flush()
         if kErrorReport.SavedPath:

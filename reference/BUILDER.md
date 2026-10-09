@@ -121,8 +121,10 @@ fact — without building it: show that to the user first, then build.
   only. `kpi_chart` without `categories` / `series` charts a metric's trend the same way.
 - **`figure`** on a `statement` with `decision`: the number the ask moves, or what it costs, in a tile beside the
   decision box (with its `trend` as labelled bars); owner and date then sit inside the box.
-- **`points`** on a `statement` (without `decision`): two or three short facts, steps or reasons as numbered cards
-  in a column beside the claim. Without points the claim and its support are anchored by an accent bar. The
+- **`points`** on a `statement`: two or three short facts, steps or reasons as numbered cards in a column beside
+  the claim. With `decision` they are the reasons: numbered cards in a row under the ask (and its owner, date and
+  support). Points, support lines and captions never go below the 27 pt floor, however short. Without points the
+  claim and its support are anchored by an accent bar. The
   kicker sits above the claim on every statement, as on every other content slide.
 - **`timeline` without dates** — `events` with a `label` only — draws undated sequential stages: a numbered badge
   on the rail for each, the labels alternating above and below. Use it for "what happens next" sequences; do not
@@ -200,11 +202,15 @@ the evidence (a chart beside the numbers, the mitigation beside the risk) rather
   every other bar quiet; several series as shades of the accent. Alt text is generated from the data
   unless you give `alt`.
 - **Type:** sizes for a 1440-pt slide (body 34 growing to 44, captions 28, labels 24 for one-to-three-word
-  labels only); any text of four or more words is at or above the 27 pt Full HD floor; headings use the theme's
+  labels only); any text of four or more words - and every point, support line and caption, however short - is at
+  or above the 27 pt Full HD floor; headings use the theme's
   heading font, everything else the body font.
-- **Unfit text is never silent:** a box whose text does not fit at the floor, tiles that do not fit at the label
-  floor, and every `text_overflow`, `kicker_title_overlap` or `tile_text_below_floor` that `lint_deck.py` finds in
-  the built deck (text running past its card or the email frame) is printed as `fit: …` and the build exits **3**.
+- **Unfit text is never silent:** a box whose text does not fit at the floor (measured in the theme font AND the
+  face LibreOffice substitutes for it), a tile value that would wrap onto its label, tiles that do not fit at the
+  label floor, a box reaching into the footer band (content ends at 730 pt; the footer and page number own the
+  band below), and every `text_overflow`, `kicker_title_overlap`, `tile_text_below_floor`, `unwanted_wrap`,
+  `body_below_floor` - and every lint **error** such as `shape_overlap` - that `lint_deck.py` finds in the built
+  deck is printed as `fit: …` and the build exits **3**.
 - **Spec warnings** (`spec warning: …`, exit code unchanged): a derived figure the deck's data contradicts
   (`spec warning: figure: …`, see *Computed figures*); a `metrics` target with no number, percent, date or
   comparison; a monthly timeline that skips one month; a `statement` with nothing but a support line, or a

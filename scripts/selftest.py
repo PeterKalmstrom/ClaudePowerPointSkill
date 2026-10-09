@@ -20,6 +20,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1558,6 +1559,92 @@ class kSelfTest:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckKickerRenderer")
             return
 
+    def CheckRound5(self):
+        """The rough edges of benchmark round 5: a tile value that wraps, content over the footer, an undated
+        timeline's highlight, a decision with its reasons, body roles at the floor, and a closed stdout pipe."""
+        if kS.ErrorMode:
+            return
+        try:
+            Tmp, Edge = self.Tmp, self.Edge
+            Wide = {"direction": "consulting-blue", "footer": "QBR", "slides": [
+                {"id": "kpi", "pattern": "kpi", "title": "Growth accelerated every quarter", "notes": "n",
+                 "metrics": [{"value": "19.8 MUSD", "label": "Revenue"}, {"value": "112 %", "label": "Retention"},
+                             {"value": "1.2 %", "label": "Churn"}, {"value": "191", "label": "New customers"}],
+                 "decision": "Approve 3 extra sales engineers to offset the longer enterprise sales cycle"}]}
+            Path = os.path.join(Edge, "round5-wide.json")
+            self.WriteJson(Wide, Path)
+            Deck = os.path.join(Tmp, "round5-wide.pptx")
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Codes = {C for _, C, _, _ in self.LintFindings(Deck)}
+            self.Check("build_deck: a tile value that would wrap in either face is unfit text (exit 3, fit:) and lint "
+                       "flags it", Code == 3 and "fit: slide 1 (kpi): value does not fit on one line" in Out
+                       and "unwanted_wrap" in Codes, f"exit {Code}, {sorted(Codes)}: {Out[-300:]}")
+            Points = ["Burnout drives attrition in every team we asked", "Keeping engineers beats rehiring them",
+                      "Six roles still open"]
+            Spec = {"direction": "boardroom", "footer": "Four-day week pilot · Board proposal", "slides": [
+                {"id": "why", "pattern": "big_number", "title": "41 % of our engineers report burnout", "notes": "n",
+                 "number": "41", "unit": "%", "caption": "Engineers reporting burnout in our latest survey",
+                 "points": Points},
+                {"id": "tl", "pattern": "timeline", "title": "The board decides in July", "notes": "n",
+                 "highlight": 6, "events": [{"date": M, "label": "Pulse survey across all engineering"}
+                                            for M in ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul")]},
+                {"id": "steps", "pattern": "timeline", "title": "Four steps take us to a decision", "notes": "n",
+                 "highlight": 3, "events": [{"label": "Survey staff"}, {"label": "Run the pilot"},
+                                            {"label": "Measure output"}, {"label": "Board decides"}]},
+                {"id": "ask", "pattern": "statement", "title": "Approve the pilot", "notes": "n",
+                 "decision": "Approve a six-month four-day-week pilot for engineering", "owner": "The board",
+                 "points": ["Burnout is at 41 %", "Bounded and reversible", "Measured against a baseline"]},
+                {"id": "what", "pattern": "statement", "title": "Phishing tricks you into helping", "notes": "n",
+                 "support": "One click is enough", "points": ["A fake sender", "A link", "A deadline"]}]}
+            Path = os.path.join(Edge, "round5.json")
+            self.WriteJson(Spec, Path)
+            Deck = os.path.join(Tmp, "round5.pptx")
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck, "--lint")
+            Found = self.LintFindings(Deck)
+            Bad = [f"{Sl}:{C}" for Sl, C, _, Sev in Found if Sev in ("error", "warn")]
+            self.Check("build_deck: a big number with points, a 7-event timeline, stages and a decision with reasons "
+                       "build and lint clean (nothing on the footer)", Code == 0 and not Bad,
+                       f"exit {Code}, " + ", ".join(Bad) + Out[-400:])
+            self.Check("lint_deck: no grid_monotony on undated stages with a highlight",
+                       not any(Sl == 3 and C == "grid_monotony" for Sl, C, _, _ in Found), str(Found))
+            Slides = list(Presentation(Deck).slides) if os.path.exists(Deck) else []
+            if len(Slides) < 5:
+                return
+            Low = []
+            for Slide in Slides:
+                for Shape in Slide.shapes:
+                    if Shape.name in ("Footer", "PageNumber") or not Shape.has_text_frame:
+                        continue
+                    if (Shape.top + Shape.height) / 12700 > 756:
+                        Low.append(f"{Shape.name} ends at {(Shape.top + Shape.height) / 12700:.0f}")
+                    if re.fullmatch(r"Points|StatementPoint\d|Support|Caption|Reason\d", Shape.name):
+                        Low += [f"{Shape.name} {R.font.size.pt:g} pt" for P in Shape.text_frame.paragraphs
+                                for R in P.runs if R.font.size and R.font.size.pt < 27]
+            self.Check("build_deck: no content in the footer band; points, support, captions and reasons at the "
+                       "27 pt floor or above, however short", not Low, ", ".join(Low))
+            Names = {Shape.name for Shape in Slides[3].shapes}
+            self.Check("build_deck: a statement with a decision takes points: the ask, then numbered reason cards",
+                       {"DecisionBox", "Reason1", "Reason2", "Reason3", "ReasonNo1"} <= Names, str(sorted(Names)))
+            Hand = Presentation()
+            Hand.slide_width, Hand.slide_height = Pt(1440), Pt(810)
+            Slide = self.AddSlide(Hand, Hand.slide_layouts[5], "Short points are body text too")
+            self.AddText(Slide, "Six roles open", 16, Name="Points")
+            HandPath = os.path.join(Tmp, "round5-floor.pptx")
+            Hand.save(HandPath)
+            self.Check("lint_deck: body_below_floor sees short body roles (a 3-word point at 16 pt)",
+                       any(C == "body_below_floor" for _, C, _, _ in self.LintFindings(HandPath)))
+            Read, Write = os.pipe()
+            os.close(Read)  # the reader is gone before the first line, as with `--plan | head -0`
+            Process = subprocess.run([sys.executable, os.path.join(HERE, "build_deck.py"), Path, "--plan"],
+                                     stdout=Write, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+            os.close(Write)
+            self.Check("kShared: a closed stdout pipe (`--plan | head`) is a quiet normal end - exit 0, no error "
+                       "report", Process.returncode == 0 and "ERROR" not in Process.stderr,
+                       f"exit {Process.returncode}: {Process.stderr[-300:]}")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckRound5")
+            return
+
     def CheckRound4(self):
         """The other rough edges of benchmark round 4: a two-metric kpi, the email measured by its real wrapped
         height, undated stages, a kicker on a statement with points, and --slides for the showcase step."""
@@ -1831,6 +1918,7 @@ class kSelfTestApp:
             Test.CheckFigures()
             Test.CheckKickerRenderer()
             Test.CheckRound4()
+            Test.CheckRound5()
             Test.CheckThemeAndRenders()
             Test.CheckErrorPattern()
             Test.CheckCom()

@@ -62,6 +62,7 @@ PATTERN_MARKERS = [("DecisionBox+Support", "decision"), ("DecisionBox+OwnerValue
                    ("Subtitle", "title"), ("Eyebrow", "section"), ("Support", "statement"),
                    ("DecisionBox", "decision"), ("SectionPanel", "section"), ("CoverPanel", "title"),
                    ("AccentRule", "statement"), ("AnchorBar", "statement")]
+BODY_ROLES = re.compile(r"Points|StatementPoint\d+|Support|Caption|Reason\d+")  # body text: the floor, any length
 CHROME_NAMES = {"Footer", "PageNumber", "Kicker", "CoverFooter"}  # the builder's deck furniture: not content
 SINGLE_LINE_WORDS = 3      # a box this short (words) whose height holds one line is a single-line role
 WRAP_MARGIN = 0.96         # measure single-line roles against 96 % of the width: other renderers set wider
@@ -526,9 +527,12 @@ class kLintDeck:
                               "slide or reveal one at a time.", S.name)
                     if re.search(r"\blorem ipsum\b|\bdolor sit amet\b", Text, re.I):
                         F.Add(N, "error", "lorem_ipsum", "Placeholder 'lorem ipsum' text left in.", S.name)
+                    Role = bool(BODY_ROLES.fullmatch(S.name or ""))  # the builder's body text: any size, 2+ words
                     for P in Paras:
                         Size = kLintDeck.ParaSize(S, P)
-                        if Size and kLintDeck.LabelMaxPt < Size < Floor and len(P.text.split()) >= BODY_MIN_WORDS:
+                        Wc = len(P.text.replace("\u2022", " ").split())
+                        if Size and Size < Floor and ((Role and Wc >= 2) or (kLintDeck.LabelMaxPt < Size
+                                                                          and Wc >= BODY_MIN_WORDS)):
                             F.Add(N, "warn", "body_below_floor", f"{Size:g} pt body text (floor {Floor:g} pt): "
                                   f"'{P.text.strip()[:40]}'", S.name)
                             break
@@ -656,11 +660,16 @@ class kLintDeck:
 
             # grid monotony: 4+ body boxes, 3+ of them the same width and top as the first
             Area = Sw * Sh_
-            Body = [Rect(S) for S in TextShapes if not kLintDeck.IsTitle(S) and Rect(S)[2] > 1 and Rect(S)[3] > 1
-                    and Rect(S)[2] * Rect(S)[3] < 0.92 * Area]
-            if len(Body) >= 4:
-                Same = sum(1 for Rc in Body[1:] if abs(Rc[2] - Body[0][2]) <= 4 and abs(Rc[1] - Body[0][1]) <= 4)
-                if Same >= 3:
+            # (a builder timeline's stages are a sequence, not a grid; a row where one box differs in fill, weight
+            # or size already has a lead - the highlight)
+            BodyShapes = [S for S in TextShapes if not kLintDeck.IsTitle(S) and Rect(S)[2] > 1 and Rect(S)[3] > 1
+                          and Rect(S)[2] * Rect(S)[3] < 0.92 * Area]
+            Body = [Rect(S) for S in BodyShapes]
+            if len(Body) >= 4 and Pattern != "timeline":
+                Row = [S for S, Rc in zip(BodyShapes, Body)
+                       if abs(Rc[2] - Body[0][2]) <= 4 and abs(Rc[1] - Body[0][1]) <= 4]
+                Same = len(Row) - 1
+                if Same >= 3 and len({kLintDeck.Emphasis(S, Theme) for S in Row}) == 1:
                     F.Add(N, "info", "grid_monotony", f"{Same + 1} identical boxes in a row; vary size or emphasis so "
                           "one item leads.")
 
@@ -692,6 +701,20 @@ class kLintDeck:
             return TitleText
         except Exception as e:
             kS.GlobalErrorHandler(e, f"kLintDeck.LintSlide(slide={N})")
+            return None
+
+    @staticmethod
+    def Emphasis(S, Theme):
+        """(fill, bold, size) of a text box's first run: boxes that differ in it do not read as identical."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Para = S.text_frame.paragraphs[0]
+            Run = next((R for R in Para.runs if R.text.strip()), None)
+            Bold = bool(Run.font.bold) if Run is not None and Run.font.bold is not None else False
+            return (kLintDeck.ShapeFill(S, Theme), Bold, kLintDeck.ParaSize(S, Para))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintDeck.Emphasis")
             return None
 
     @staticmethod
@@ -822,7 +845,8 @@ class kLintDeck:
     @staticmethod
     def SpillCheck(N, S, Shapes, F):
         """Text that starts on a card (or a frame such as a mocked email) but runs past its bottom: the box
-        itself, or the box once grown to its text, ends below the card. The tightest card that holds the box's
+        itself, or the box once grown to its text, ends below the card - or a part named after the frame
+        ('EmailBody4' of 'Email') was pushed below it altogether. The tightest card that holds the box's
         top is the one it belongs to."""
         if kS.ErrorMode:
             return
@@ -833,7 +857,8 @@ class kLintDeck:
                 if O is S or (O.has_text_frame and O.text_frame.text.strip()) or not kLintDeck.IsCard(O):
                     continue
                 Ol, Ot, Ow, Oh = kLintDeck.Rect(O)
-                if Oh < 40 or not (Ol - 2 <= L and L + W <= Ol + Ow + 2 and Ot - 2 <= T < Ot + Oh - 2):
+                Part = bool(O.name) and (S.name or "").startswith(O.name) and T >= Ot  # 'EmailBody4' of 'Email'
+                if Oh < 40 or not (Ol - 2 <= L and L + W <= Ol + Ow + 2 and (Ot - 2 <= T < Ot + Oh - 2 or Part)):
                     continue
                 if Best is None or Ow * Oh < Best[2] * Best[3]:
                     Best = (Ol, Ot, Ow, Oh, O.name)
@@ -932,7 +957,9 @@ class kLintDeck:
                 Bold = bool(Run.font.bold) if Run is not None and Run.font.bold is not None else Heading
                 Before = P.space_before.pt if P.space_before is not None else 0
                 Paras.append((P.text, Family, Size, Bold, Before))
-            Need, Widest, Lines = kMeasure.TextHeight(Paras, Width)
+            # in the taller of the theme font and the face LibreOffice substitutes for it, as the builder fits
+            Need, Widest, Lines = kMeasure.LooseHeight(Paras, Width) if not Heading else kMeasure.TextHeight(Paras,
+                                                                                                         Width)
             kLintDeck.WrapCheck(N, S, Paras, Width, Height, Heading, F)
             if Grows:  # "resize shape to fit text": the box will be as tall as its text; overlap/off-slide use that
                 Grown = Need + Ins(Bp, "tIns", 3.6) + Ins(Bp, "bIns", 3.6)
@@ -971,8 +998,13 @@ class kLintDeck:
                 Words = Text.split()
                 OneLine = Height < Size * 1.2 * 1.7  # the box only has room for one line
                 if Words and len(Words) <= SINGLE_LINE_WORDS and OneLine and len(Text.strip()) > 1:
+                    # in its own font with a margin for other renderers, and in the face LibreOffice substitutes for
+                    # a missing theme font (that IS the wider renderer: measured against the full width)
                     Need = kMeasure.SafeWidth(Text.strip(), Family, Size, Bold)
-                    if Need > Width * WRAP_MARGIN + 1:
+                    Sub = kMeasure.Substitute(Family)
+                    Loose = kMeasure.SafeWidth(Text.strip(), Sub, Size, Bold) if Sub else 0
+                    if Need > Width * WRAP_MARGIN + 1 or Loose > Width + 1:
+                        Need = max(Need, Loose)
                         F.Add(N, "warn", "unwanted_wrap", f"'{Text.strip()[:30]}' needs ~{Need:.0f} pt on one line but "
                               f"its box is {Width:.0f} pt wide; it will wrap (e.g. a unit under its number). Lower "
                               "the size, widen the box, or join number and unit with a no-break space.", S.name)

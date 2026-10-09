@@ -56,7 +56,7 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `gradient_high_chroma` | warn | A gradient with a saturated (> 0.45) hard-coded stop |
 | `repeated_word` | warn | The same word 3+ times in display (≥ 30 pt on a 960-pt slide, 45 pt on Full HD) type |
 | `weak_focal_hierarchy` | info | The two largest text sizes are within 1.08–1.6× of each other — nothing clearly leads |
-| `grid_monotony` | info | 4+ identical boxes in a row |
+| `grid_monotony` | info | 4+ identical boxes in a row (not when one differs in fill, weight or size - a highlight - nor on a built timeline) |
 | `stock_or_cartoon_image` | info | Picture name, alt text or link points at a stock or generic-illustration site |
 | `missing_notes` | info | No speaker notes |
 | `figure_without_source` | info | The slide shows numbers (%, currency, a chart or table figures) but the notes name no source (not on the cover or a section divider). `SOURCES: the brief` counts; `build_deck.py` writes a deck-level `sources` into every slide without its own |

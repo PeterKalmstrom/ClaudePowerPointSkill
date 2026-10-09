@@ -237,3 +237,22 @@ class kMeasure:
         except Exception as e:
             kS.GlobalErrorHandler(e, "kMeasure.TextHeight")
             return 0.0, 0.0, 0
+
+    @staticmethod
+    def LooseHeight(Paras, Width):
+        """TextHeight in the widest renderer: the taller of the paragraphs set in their own fonts and in the faces
+        LibreOffice substitutes for them (kMeasure.Substitute) - so text measured to fit its box in the theme font
+        does not run past it in a LibreOffice render. The widest word is the own font's."""
+        if kS.ErrorMode:
+            return 0.0, 0.0, 0
+        try:
+            Own = kMeasure.TextHeight(Paras, Width)
+            Subbed = [(Text, kMeasure.Substitute(Family) or Family, Size, Bold, Before)
+                      for Text, Family, Size, Bold, Before in Paras]
+            if all(A[1] == B[1] for A, B in zip(Paras, Subbed)):
+                return Own
+            Loose = kMeasure.TextHeight(Subbed, Width)
+            return (Own if Own[0] >= Loose[0] else (Loose[0], Own[1], Loose[2]))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kMeasure.LooseHeight")
+            return 0.0, 0.0, 0

@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- **Rough edges from benchmark round 5** (thisskill9: each passed builder and lint and only the render showed it):
+  - *A tile value wrapping onto its label* ('19.8 MUSD' on a kpi tile): `FitLine` measures a value in the theme
+    font AND the face LibreOffice substitutes (`kDeckBuilder.LineWidth`) and reports `fit: … value does not fit on
+    one line` (exit 3) when even the smallest size wraps; lint's `unwanted_wrap` measures the substitute too.
+  - *A risk mitigation running past its card*: `Fit` measures every box with `kMeasure.LooseHeight` (the taller of
+    the theme font and its substitute), and lint's `text_overflow` measures body text the same way.
+  - *Content on the footer*: the footer band is reserved - a text box reaching into it is `fit:` (exit 3); a big
+    number with points shrinks the number, then the points (to the floor) to end above it; a timeline's labels fit
+    the room below the rail as well as above. The builder's layout check now reports every lint **error** of its
+    own output (`shape_overlap` etc.), plus `unwanted_wrap` and `body_below_floor`, as unfit text: `--lint` printing
+    errors with exit 0 cannot happen any more.
+  - *`build_deck.py --plan | head` filed an error report*: a BrokenPipeError on a stdout whose reader has gone
+    (`kS.OutputGone`) is the normal end of the output - the handler passes it on unreported, `kRun.Main` /
+    `kRun.Finish` point stdout at devnull and exit quietly with the code so far (`kRun.QuietEnd`).
+  - `grid_monotony` no longer fires on a built timeline or on a row where one box differs in fill, weight or size
+    (the highlight).
+  - A `statement` with `decision` takes `points`, as the docs promised: the ask, then the reasons as numbered cards
+    in a row (`ReasonCards`).
+  - Points, support lines and captions (under a big number, beside a statement, under a decision) never go below
+    the 27 pt floor however short (`Fit(..., Floor=)`), and lint's `body_below_floor` checks these roles at any
+    length and size.
+  - New self-test check group `CheckRound5` (7 checks).
+
 - **No title widow in the substitute face either**: `kDeckBuilder.BalancedWidth` now balances the theme font AND
   the face LibreOffice substitutes for it (`kMeasure.Substitute`, new helper `AnyWidow`), `Title` drops up to 8 pt
   when no width balances both, and lint's `title_widow` measures both faces (naming the substitute). The round-4

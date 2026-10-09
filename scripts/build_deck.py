@@ -219,7 +219,8 @@ HIGHLIGHT_ITEMS = {"kpi": "metrics", "compare": "columns", "process": "steps", "
 NEEDED_LIST = {"kpi": "metrics", "process": "steps", "timeline": "events", "compare": "columns",
                "matrix": "quadrants", "chart": "series", "table": "rows", "bullets": "items", "email": "body", "cost_table": "rows", "quiz": "options", "risks": "risks", "metrics": "rows",
                "next_steps": "steps"}
-LAYOUT_CODES = {"text_overflow", "kicker_title_overlap", "tile_text_below_floor"}  # lint findings = unfit text
+LAYOUT_CODES = {"text_overflow", "kicker_title_overlap", "tile_text_below_floor", "unwanted_wrap",
+                "body_below_floor"}  # lint findings = unfit text (and every lint error: shape_overlap etc.)
 NO_CHROME = {"title", "section"}            # no footer or page number on covers and dividers
 NO_KICKER = {"title", "section", "quote"}   # their own title treatment
 LEVELS = {"high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
@@ -455,9 +456,6 @@ class kSpecCheck:
                 if Pat == "statement" and Sl.get("figure") and not Sl.get("decision"):
                     Errors.append(f"slide {I} (statement): 'figure' goes beside a 'decision'; without one use "
                                   "'points' or a big_number slide")
-                if Pat == "statement" and Sl.get("points") and Sl.get("decision"):
-                    Errors.append(f"slide {I} (statement): 'points' are for a statement without 'decision'; a "
-                                  "decision takes 'support' and 'figure'")
                 if Pat == "kpi_chart" and "series" not in Sl and not any(
                         isinstance(Mt, dict) and Mt.get("trend") for Mt in Sl.get("metrics", [])):
                     Errors.append(f"slide {I} (kpi_chart): give 'categories' and 'series', or a 'trend' on a metric "
@@ -943,6 +941,7 @@ class kDeckBuilder:
             self.Kicker = ""      # the kicker of the slide being built, so the title leaves room for it
             self.Extra = []       # notes a pattern adds while it lays the slide out (a trend it had no room for)
             self.Numbers = []     # the deck's slide number of each slide built (--slides builds only some)
+            self.Reserve = False  # the slide being built has a footer band (content must end above it)
             self.KickerWidth = 0  # a pattern with a column beside its claim (a statement's points) narrows the kicker
             self._kx = self._ky = 1.0  # template mode: slide size / 1440 x 810, so the grid follows the template
         except Exception as e:
@@ -988,23 +987,25 @@ class kDeckBuilder:
             kS.GlobalErrorHandler(e, "kDeckBuilder.F")
             return Pt(0)
 
-    def Fit(self, Lines, Size, Wd, Ht, Heading=False, Bold=False, What="text", Spacing=0.5):
+    def Fit(self, Lines, Size, Wd, Ht, Heading=False, Bold=False, What="text", Spacing=0.5, Floor=None):
         """Largest size <= Size at which Lines fit a Wd x Ht box (1440-grid points), never below the
-        floor. Sentences (4+ words) start at the floor at least, so a small role size can't put them below it.
+        floor. Sentences (4+ words) start at the floor at least, so a small role size can't put them below it;
+        Floor (a body role: points, support, caption) holds every line, however short, at that floor.
         Records a problem when even the floor doesn't fit."""
         if kS.ErrorMode:
             return Size
         try:
             Sentences = any(len(str(X).split()) >= 4 for X in Lines)
-            if Sentences and not Heading:
-                Size = max(Size, FLOOR)
+            if (Sentences and not Heading) or Floor:
+                Size = max(Size, Floor or FLOOR)
             Smallest = (min(Size, 40) if Heading else (FLOOR if Sentences else LABEL_MIN)) if Size > LABEL_MIN else Size
+            Smallest = max(Smallest, Floor) if Floor else Smallest
             Family = self.Major if Heading else self.Minor
             K = self.TypeScale()
             Cur = Size
             while True:
                 Paras = [(str(X), Family, Cur * K, Bold or Heading, Cur * K * Spacing) for X in Lines]
-                Need, Widest, _ = kMeasure.TextHeight(Paras, (Wd - 1) * self._kx)
+                Need, Widest, _ = kMeasure.LooseHeight(Paras, (Wd - 1) * self._kx)  # LibreOffice's face too
                 if (Need <= Ht * self._ky * 1.02 and Widest <= Wd * self._kx) or Cur <= Smallest:
                     break
                 Cur = max(Smallest, Cur - 2)
@@ -1016,33 +1017,53 @@ class kDeckBuilder:
             kS.GlobalErrorHandler(e, "kDeckBuilder.Fit")
             return Size
 
-    def FitAll(self, Groups, Size, Wd, Ht, Heading=False, Bold=False, What="text", Spacing=0.5):
+    def FitAll(self, Groups, Size, Wd, Ht, Heading=False, Bold=False, What="text", Spacing=0.5, Floor=None):
         """One size for sibling boxes (cards in a row): the smallest of each group's own fit, so they match."""
         if kS.ErrorMode:
             return Size
         try:
-            Sizes = [self.Fit(G if isinstance(G, list) else [G], Size, Wd, Ht, Heading, Bold, What, Spacing)
+            Sizes = [self.Fit(G if isinstance(G, list) else [G], Size, Wd, Ht, Heading, Bold, What, Spacing, Floor)
                      for G in Groups if G]
             return min(Sizes) if Sizes else Size
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.FitAll")
             return Size
 
-    def FitLine(self, Texts, Size, Wd, Heading=True, Bold=True, Smallest=40):
-        """Largest size <= Size at which every text in Texts stays on one line Wd wide (big values, numbers)."""
+    def FitLine(self, Texts, Size, Wd, Heading=True, Bold=True, Smallest=40, What="value"):
+        """Largest size <= Size at which every text in Texts stays on one line Wd wide (big values, numbers), in
+        its own font AND in the face LibreOffice substitutes for it. A text still wider than Wd at Smallest would
+        wrap (the unit onto the label below): reported as unfit text."""
         if kS.ErrorMode:
             return Size
         try:
-            K = self.TypeScale()
-            Family = self.Major if Heading else self.Minor
             Cur = Size
-            while Cur > Smallest and max(kMeasure.SafeWidth(str(T), Family, Cur * K, Bold or Heading)
-                                         for T in Texts) > Wd * 0.9 * self._kx:  # room for renderers' wider fonts
+            while Cur > Smallest and max(self.LineWidth(T, Cur, Heading, Bold) for T in Texts) \
+                    > Wd * 0.9 * self._kx:  # room for renderers' wider fonts
                 Cur -= 2
+            Widest = max(self.LineWidth(T, Cur, Heading, Bold) for T in Texts) if Texts else 0
+            if Widest > Wd * self._kx:
+                self.Problems.append(f"slide {self.SlideNo} ({self.SlideId}): {What} does not fit on one line even "
+                                     f"at {Cur:g} pt (needs ~{Widest / self._kx:.0f} pt of {Wd:.0f}); shorten it "
+                                     "(e.g. '19.8 M' with the unit in the label)")
             return Cur
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.FitLine")
             return Size
+
+    def LineWidth(self, Text, Size, Heading=True, Bold=True):
+        """Width (points on this deck) of Text set on one line at Size: the wider of its theme font and the face
+        LibreOffice substitutes for it (kMeasure.Substitute), as glued by Text() (a unit stays with its number)."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            K = self.TypeScale()
+            Family = self.Major if Heading else self.Minor
+            Txt = UNIT_GLUE.sub(NBSP, str(Text))
+            Sub = kMeasure.Substitute(Family)
+            return max(kMeasure.SafeWidth(Txt, Face, Size * K, Bold or Heading) for Face in (Family, Sub) if Face)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.LineWidth")
+            return 0.0
 
     def Need(self, Lines, Size, Wd, Heading=False, Bold=False, Spacing=0.5):
         """Height (1440-grid points) that Lines take at Size in a box Wd wide, with a little room for renderers
@@ -1054,7 +1075,7 @@ class kDeckBuilder:
             K = self.TypeScale()
             Family = self.Major if Heading else self.Minor
             Paras = [(str(X), Family, Size * K, Bold or Heading, Size * K * Spacing) for X in Lines]
-            Height, _, _ = kMeasure.TextHeight(Paras, (Wd - 1) * 0.92 * self._kx)  # slack for other renderers
+            Height, _, _ = kMeasure.LooseHeight(Paras, (Wd - 1) * 0.92 * self._kx)  # slack, and LibreOffice's face
             return Height / self._ky + Size * 0.3
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.Need")
@@ -1271,14 +1292,19 @@ class kDeckBuilder:
             return None
 
     def Text(self, S, Name, Txt, Lx, Ty, Wd, Ht, Size, Colour=TEXT, Bold=False, Align=PP_ALIGN.LEFT,
-             Anchor=MSO_ANCHOR.TOP, Heading=False, Spacing=0.5):
+             Anchor=MSO_ANCHOR.TOP, Heading=False, Spacing=0.5, Floor=None):
         """A named text box, its size fitted to the box (Size is the ceiling; Spacing is the gap before each
-        paragraph after the first, as a fraction of the size)."""
+        paragraph after the first, as a fraction of the size; Floor holds a body role at the floor however short
+        its lines). A box that reaches into the footer band of a slide with a footer is reported as unfit."""
         if kS.ErrorMode:
             return None
         try:
             Lines = [UNIT_GLUE.sub(NBSP, str(X)) for X in (Txt if isinstance(Txt, list) else [Txt])]
-            Size = self.Fit(Lines, Size, Wd, Ht, Heading=Heading, Bold=Bold, What=f"'{Name}'", Spacing=Spacing)
+            Size = self.Fit(Lines, Size, Wd, Ht, Heading=Heading, Bold=Bold, What=f"'{Name}'", Spacing=Spacing,
+                            Floor=Floor)
+            if self.Reserve and Ty + Ht > FOOTER_TOP - 4:
+                self.Problems.append(f"slide {self.SlideNo} ({self.SlideId}): '{Name}' reaches {Ty + Ht:.0f} pt, into "
+                                     f"the footer band (content ends at {BODY_BOTTOM}); cut words or split the slide")
             Tb = S.shapes.add_textbox(self.X(Lx), self.Y(Ty), self.X(Wd), self.Y(Ht))
             Tb.name = Name
             Tf = Tb.text_frame
@@ -1407,6 +1433,17 @@ class kDeckBuilder:
             kS.GlobalErrorHandler(e, "kDeckBuilder.Chrome")
             return
 
+    def HasFooter(self, Sl):
+        """True when Chrome will draw a footer or page number on this slide: its band is reserved."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return Sl.get("pattern") not in NO_CHROME and bool(self.Spec.get("footer")
+                                                                or self.Spec.get("page_numbers", True))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kDeckBuilder.HasFooter")
+            return False
+
     def Rect(self, S, Name, Lx, Ty, Wd, Ht, Colour=QUIET, Shape=MSO_SHAPE.RECTANGLE, Line=None):
         """A named, theme-filled shape with no shadow; no outline unless Line (a theme colour) is given."""
         if kS.ErrorMode:
@@ -1475,7 +1512,8 @@ class kDeckBuilder:
 
     def LayoutCheck(self, Out):
         """Lint the saved deck for the layout findings the builder answers for - text running out of its card,
-        a kicker on the title, tile text below the label floor - and report each one as unfit text (exit 3),
+        a kicker on the title, tile text below the label floor, a value that wraps, body text under the floor - and
+        every lint error (shapes that overlap, content on the footer) - and report each one as unfit text (exit 3),
         so the builder and lint_deck.py never disagree about a box."""
         if kS.ErrorMode:
             return
@@ -1483,7 +1521,7 @@ class kDeckBuilder:
             from lint_deck import kLintDeck  # the same checks lint_deck.py runs, in this process
             _, Found = kLintDeck.Lint(Out, 18.0, 12)
             for I in (Found.Items if Found else []):
-                if I["code"] in LAYOUT_CODES:
+                if I["code"] in LAYOUT_CODES or I["severity"] == "error":  # an overlap, a clash: never ship it
                     Shape = f" [{I['shape']}]" if I.get("shape") else ""
                     No = self.Numbers[I["slide"] - 1] if 0 < I["slide"] <= len(self.Numbers) else I["slide"]
                     self.Problems.append(f"slide {No}: {I['code']}{Shape} {I['message']}")
@@ -1535,7 +1573,9 @@ class kDeckBuilder:
                 S = self.NewSlide(Sl, N)
                 self.TitleInk, self.KickerWidth = None, 0
                 self.Kicker = self.KickerFor(Sl)
+                self.Reserve = self.HasFooter(Sl)
                 getattr(Patterns, PATTERNS[Sl["pattern"]])(S, Sl)
+                self.Reserve = False  # the footer and page number themselves sit in the band
                 self.Chrome(S, Sl, N)
                 self.Notes(S, Sl, kSlidePatterns.ExtraNotes(Sl))
                 if Sl["pattern"] == "quiz" and Sl.get("reveal") == "slide":  # the answer on a slide of its own
@@ -1546,7 +1586,9 @@ class kDeckBuilder:
                     S = self.NewSlide(Answer, N)
                     self.TitleInk, self.KickerWidth = None, 0
                     self.Kicker = self.KickerFor(Answer)
+                    self.Reserve = self.HasFooter(Answer)
                     Patterns.QuizAnswer(S, Answer)
+                    self.Reserve = False
                     self.Chrome(S, Answer, N)
                     self.Notes(S, Answer, kSlidePatterns.ExtraNotes(Sl))
             if kS.ErrorMode:
@@ -1669,7 +1711,7 @@ class kSlidePatterns:
             LooseH = B.TitleLines(Sl["title"], Ts, Tw + 1, True) * Ts * LOOSE_LINE + 8  # the loosest renderer's wrap
             Th = min(max(300, LooseH), max(B.Need([Sl["title"]], Ts, Tw - 15, Heading=True) + 10, LooseH))
             Support = str(Sl.get("support") or "")
-            Ss = B.Fit([Support], 44 if Pw else 48, Wd, 170) if Support else 0
+            Ss = B.Fit([Support], 44 if Pw else 48, Wd, 170, Floor=FLOOR) if Support else 0
             Sh = B.Need(Support, Ss, Wd) if Support else 0
             Kh = KICKER_H + 12 if B.Kicker else 0  # the kicker sits between the rule and the claim, as on every slide
             Lead = 46 + Kh
@@ -1683,7 +1725,7 @@ class kSlidePatterns:
             if B.Kicker:  # Chrome draws it ending here: above the claim's box, whatever the renderer's line height
                 B.TitleInk, B.KickerWidth = Top + Lead - 6, Wd
             if Support:
-                B.Text(S, "Support", Support, M, Top + Lead + Th + 34, Wd, Sh, Ss, MUTED)
+                B.Text(S, "Support", Support, M, Top + Lead + Th + 34, Wd, Sh, Ss, MUTED, Floor=FLOOR)
             if Pw:
                 self.PointCards(S, Points, W - M - Pw, 120, Pw, BODY_BOTTOM - 120)
         except Exception as e:
@@ -1755,15 +1797,43 @@ class kSlidePatterns:
             Y0 = Ty + (Ht - Ch * N - GAP * (N - 1)) / 2
             D, Pad = 56, 28
             Tw = Wd - EDGE - Pad * 3 - D
-            Size = B.FitAll(Points, 36, Tw, Ch - 2 * 20)
+            Size = B.FitAll(Points, 36, Tw, Ch - 2 * 20, Floor=FLOOR)
             for I, Pt_ in enumerate(Points):
                 Y = Y0 + I * (Ch + GAP)
                 B.Card(S, f"PointCard{I + 1}", Lx, Y, Wd, Ch, False, "left")
                 self.Badge(S, f"PointNo{I + 1}", str(I + 1), Lx + EDGE + Pad, Y + (Ch - D) / 2, D, ACCENT, BG, 26)
                 B.Text(S, f"StatementPoint{I + 1}", Pt_, Lx + EDGE + Pad * 2 + D, Y + 20, Tw, Ch - 40, Size, TEXT,
-                       Anchor=MSO_ANCHOR.MIDDLE)
+                       Anchor=MSO_ANCHOR.MIDDLE, Floor=FLOOR)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.PointCards")
+            return
+
+    def ReasonCards(self, S, Points, Lx, Ty, Wd, Ht):
+        """The reasons under a decision: two or three numbered cards side by side (tint, accent edge on top, a
+        badge beside the text), sharing one text size that never goes below the floor."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            N = len(Points)
+            Cw = (Wd - GAP * (N - 1)) / N
+            Ch = min(220, Ht)
+            if Ch < 100:
+                B.Problems.append(f"slide {B.SlideNo} ({B.SlideId}): no room for the reasons under the decision "
+                                  f"({Ht:.0f} pt left); shorten the decision or support, or drop the figure")
+                return
+            D, Pad = 48, 24
+            Tw = Cw - Pad * 3 - D
+            Size = B.FitAll(Points, 34, Tw, Ch - EDGE - 2 * Pad, What="the reasons", Floor=FLOOR)
+            for I, Pt_ in enumerate(Points):
+                X = Lx + I * (Cw + GAP)
+                B.Card(S, f"ReasonCard{I + 1}", X, Ty, Cw, Ch, False, "top")
+                self.Badge(S, f"ReasonNo{I + 1}", str(I + 1), X + Pad, Ty + EDGE + (Ch - EDGE - D) / 2, D, ACCENT,
+                           BG, 24)
+                B.Text(S, f"Reason{I + 1}", Pt_, X + Pad * 2 + D, Ty + EDGE + Pad, Tw, Ch - EDGE - 2 * Pad, Size,
+                       TEXT, Anchor=MSO_ANCHOR.MIDDLE, Floor=FLOOR)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.ReasonCards")
             return
 
     def BigNumber(self, S, Sl):
@@ -1789,23 +1859,33 @@ class kSlidePatterns:
                     return
             Vw = 0 if Kind == "none" or not Share else SHARE_W  # the visual's column on the right
             Lw = W - 2 * M - (Vw + 2 * GAP if Vw else 0)
-            Ns = B.FitLine([Num], SIZE["hero"], Lw, Smallest=96)
-            Hh = Ns * 1.15
+            Ns = B.FitLine([Num], SIZE["hero"], Lw, Smallest=96, What="the number")
             Cap = str(Sl.get("caption") or "")
-            Cs = B.Fit([Cap], 40, Lw - EDGE - 32, 130) if Cap else 0
+            Cs = B.Fit([Cap], 40, Lw - EDGE - 32, 130, Floor=FLOOR) if Cap else 0
             Ch = B.Need(Cap, Cs, Lw - EDGE - 32) if Cap else 0
-            Ps = B.FitAll(Points, 34, Lw - 40, 200) if Points else 0
-            Ph = B.Need(["\u2022 " + X for X in Points], Ps, Lw - 40) if Points else 0
+            Bul = ["\u2022 " + X for X in Points]
+            Avail = BODY_BOTTOM - BODY_TOP  # the column ends above the footer band: the number gives way first
+            Rest = (24 + Ch if Cap else 0) + 36
+            Ps = B.FitAll(Points, 34, Lw - 40, 200, Floor=FLOOR) if Points else 0
+            Ph = B.Need(Bul, Ps, Lw - 40) if Points else 0
+            while Points and Ns * 1.15 + Rest + Ph > Avail and Ns > 160:
+                Ns -= 8
+            while Points and Ns * 1.15 + Rest + Ph > Avail and Ps > FLOOR:
+                Ps = max(FLOOR, Ps - 2)
+                Ph = B.Need(Bul, Ps, Lw - 40)
+            while Points and Ns * 1.15 + Rest + Ph > Avail and Ns > 96:
+                Ns -= 8
+            Hh = Ns * 1.15
             Block = Hh + (24 + Ch if Cap else 0) + (36 + Ph if Points else 0)
             Y = BODY_TOP + max(0, (BODY_BOTTOM - BODY_TOP - Block) / 2)  # the column sits in the body's middle
             B.Text(S, "HeroNumber", Num, M, Y, Lw, Hh, Ns, ACCENT, Bold=True, Heading=True)
             Y += Hh + 24
             if Cap:
                 B.Rect(S, "CaptionEdge", M, Y, EDGE, Ch, ACCENT)
-                B.Text(S, "Caption", Cap, M + EDGE + 32, Y, Lw - EDGE - 32, Ch, Cs, TEXT)
+                B.Text(S, "Caption", Cap, M + EDGE + 32, Y, Lw - EDGE - 32, Ch, Cs, TEXT, Floor=FLOOR)
                 Y += Ch + 36
             if Points:
-                B.Text(S, "Points", ["\u2022 " + X for X in Points], M, Y, Lw - 40, Ph, Ps, TEXT)
+                B.Text(S, "Points", Bul, M, Y, Lw - 40, Ph, Ps, TEXT, Floor=FLOOR)
             if Vw:
                 self.ShareVisual(S, Share[0], Share[1], Kind, W - M - Vw, BODY_TOP + 10, Vw,
                                  BODY_BOTTOM - BODY_TOP - 10)
@@ -2107,9 +2187,9 @@ class kSlidePatterns:
             Widths = [min(Lw, 2 * (Cx - M), 2 * (W - M - Cx)) for Cx in Centres]  # centred on the dot, on the slide
             Ds = min(B.Fit([str(E["date"])], 54, Widths[I], 70, Heading=True, Bold=True) for I, E in enumerate(Ev))
             Dh = max(B.Need(str(E["date"]), Ds, Widths[I], Heading=True) for I, E in enumerate(Ev))
-            Room = Ry - 30 - Dh - 8 - BODY_TOP
+            Room = min(Ry - 30 - Dh - 8 - BODY_TOP, BODY_BOTTOM - (Ry + 30 + Dh + 8))  # above AND below the rail
             Ls = min(B.Fit([str(E["label"])], 40, Widths[I], Room) for I, E in enumerate(Ev))
-            Lh = max(B.Need(str(E["label"]), Ls, Widths[I]) for I, E in enumerate(Ev))
+            Lh = min(Room, max(B.Need(str(E["label"]), Ls, Widths[I]) for I, E in enumerate(Ev)))
             B.Rect(S, "Rail", M, Ry - 4, W - 2 * M, 8, QUIET)
             for I, E in enumerate(Ev):
                 Cx, Wd = Centres[I], Widths[I]
@@ -2147,9 +2227,9 @@ class kSlidePatterns:
             Centres = [M + Step * I + Step / 2 for I in range(N)]
             Widths = [min(Lw, 2 * (Cx - M), 2 * (W - M - Cx)) for Cx in Centres]
             D = 88
-            Room = Ry - D / 2 - 24 - BODY_TOP
+            Room = min(Ry - D / 2 - 24 - BODY_TOP, BODY_BOTTOM - (Ry + D / 2 + 24))  # above AND below the rail
             Ls = min(B.Fit([str(E["label"])], 48, Widths[I], Room) for I, E in enumerate(Ev))
-            Lh = max(B.Need(str(E["label"]), Ls, Widths[I]) for I, E in enumerate(Ev))
+            Lh = min(Room, max(B.Need(str(E["label"]), Ls, Widths[I]) for I, E in enumerate(Ev)))
             B.Rect(S, "Rail", M, Ry - 4, W - 2 * M, 8, QUIET)
             for I, E in enumerate(Ev):
                 Cx, Wd = Centres[I], Widths[I]
@@ -2633,7 +2713,7 @@ class kSlidePatterns:
             Y += 4 + Sh + 8
             Att = Sl.get("attachment")
             if Att:  # where mail programs show it: under the subject
-                Cw = kMeasure.SafeWidth(f"Attachment: {Att}", B.Minor, 26 * B.TypeScale()) / B._kx + 56
+                Cw = B.LineWidth(f"Attachment: {Att}", 26, Heading=False, Bold=False) / B._kx + 56  # both faces
                 Chip = B.Rect(S, "EmailAttachment", Lx + Pad, Y, min(Iw, Cw), 48, QUIET, Line=MUTED)
                 B.ShapeText(Chip, f"Attachment: {Att}", 26, TEXT, Bold=False, Heading=False, Inset=14)
                 RowY[("attachment", 0)] = Y + 24
@@ -2879,12 +2959,20 @@ class kSlidePatterns:
                            Vw, 54, 36, TEXT, Bold=True, Heading=True)
                     X += max(Vw, 300) + 80
                 Y += KICKER_H + 4 + 54 + 30
+            Points = [str(X) for X in Sl.get("points") or []]
             if Sl.get("support"):
                 Support = str(Sl["support"])
                 Sw = Lw - 200
-                Ss = B.Fit([Support], 40, Sw, BODY_BOTTOM - Y - 24, What="the support line")
+                Room = BODY_BOTTOM - Y - 24
+                if Points:  # the reasons follow: the support line takes only the height it needs
+                    Room = min(Room, B.Need(Support, B.Fit([Support], 36, Sw, Room, What="the support line",
+                                                           Floor=FLOOR), Sw))
+                Ss = B.Fit([Support], 36 if Points else 40, Sw, Room, What="the support line", Floor=FLOOR)
                 B.Rect(S, "SupportRule", M, Y, Lw, 2, QUIET)
-                B.Text(S, "Support", Support, M, Y + 24, Sw, BODY_BOTTOM - Y - 24, Ss, MUTED)
+                B.Text(S, "Support", Support, M, Y + 24, Sw, Room, Ss, MUTED, Floor=FLOOR)
+                Y += 24 + Room + 12
+            if Points:  # then the reasons: numbered cards in a row under the ask
+                self.ReasonCards(S, Points, M, Y + 12, Lw, BODY_BOTTOM - Y - 12)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Decision")
             return

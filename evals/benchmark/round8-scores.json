@@ -1,0 +1,116 @@
+{
+  "X": {
+    "qbr": {
+      "message": 9,
+      "design": 8,
+      "legibility": 8,
+      "layout": 8,
+      "data": 9,
+      "notes": 6,
+      "comment": "Claim titles throughout and a clear decision slide (s8) with owner/date; figures all correct (44 %, 19.8, 191). s2 bar chart drops Q2/Q3 labels and duplicates s3/s5 content; notes are templated KEY FACT/ASSUMPTIONS blocks rather than a talk track."
+    },
+    "phishing": {
+      "message": 9,
+      "design": 8,
+      "legibility": 8,
+      "layout": 8,
+      "data": 9,
+      "notes": 6,
+      "comment": "Covers every brief item incl. annotated example email (s4) and quiz with reveal (s7-8); large, legible type. s2 and s9 titles sit low beside a narrow list, leaving dead space; notes are terse fact stubs."
+    },
+    "fourday": {
+      "message": 9,
+      "design": 9,
+      "legibility": 8,
+      "layout": 9,
+      "data": 9,
+      "notes": 6,
+      "comment": "Strongest deck: claim titles, 41-in-100 dot chart (s2), metric table with stop rule (s5), cost table summing to 200 (s7), decision box (s8). Timeline shows only 4 milestones; notes are boilerplate."
+    },
+    "mean": {
+      "message": 9.0,
+      "design": 8.33,
+      "legibility": 8.0,
+      "layout": 8.33,
+      "data": 9.0,
+      "notes": 6.0,
+      "overall": 8.11
+    }
+  },
+  "Y": {
+    "qbr": {
+      "message": 6,
+      "design": 4,
+      "legibility": 4,
+      "layout": 6,
+      "data": 8,
+      "notes": 4,
+      "comment": "Data correct (QoQ, annualised churn ~20 %->13.5 % checks out) but s2, s6, s7 cards hold tiny grey text in tall mostly-empty boxes, unreadable when projected. Titles are not real title placeholders; notes only on 3 slides."
+    },
+    "phishing": {
+      "message": 6,
+      "design": 4,
+      "legibility": 4,
+      "layout": 5,
+      "data": 8,
+      "notes": 4,
+      "comment": "Content is complete and practical, but s3 card 3 title overlaps its body text and s5/s7 cards are near-empty with tiny type; s2, s6, s8 are plain bullet slides. Quiz answers only in notes, notes sparse."
+    },
+    "fourday": {
+      "message": 6,
+      "design": 4,
+      "legibility": 4,
+      "layout": 6,
+      "data": 8,
+      "notes": 2,
+      "comment": "All brief elements present and costs sum to 200 (s7), but tables and cards (s2, s5, s6, s8) use small type and leave big empty areas; topic titles, not claims. Essentially no speaker notes."
+    },
+    "mean": {
+      "message": 6.0,
+      "design": 4.0,
+      "legibility": 4.0,
+      "layout": 5.67,
+      "data": 8.0,
+      "notes": 3.33,
+      "overall": 5.17
+    }
+  },
+  "Z": {
+    "qbr": {
+      "message": 8,
+      "design": 8,
+      "legibility": 6,
+      "layout": 8,
+      "data": 7,
+      "notes": 8,
+      "comment": "Good arc with ask previewed (s2) and closing decision (s8); clean charts (s3, s4, s7 donut). Body text is small for projection; s4 invents a channel explanation and s5 says '7 fewer per 1,000' when 1.8->1.2 % is 6. Notes are useful presenter cues."
+    },
+    "phishing": {
+      "message": 8,
+      "design": 8,
+      "legibility": 6,
+      "layout": 8,
+      "data": 9,
+      "notes": 8,
+      "comment": "Friendly, well-structured deck with icons, process arrow (s6) and phish-or-fine quiz (s7); the example email (s4) is realistic. Supporting text is too small; notes give genuine facilitation tips and quiz answers."
+    },
+    "fourday": {
+      "message": 8,
+      "design": 8,
+      "legibility": 6,
+      "layout": 8,
+      "data": 9,
+      "notes": 3,
+      "comment": "Polished: 41 % donut (s2), KPI tiles (s3), milestone timeline (s4), cost table plus bar chart (s7). Small body type on s3/s5/s6; speaker notes only on the title slide."
+    },
+    "mean": {
+      "message": 8.0,
+      "design": 8.0,
+      "legibility": 6.0,
+      "layout": 8.0,
+      "data": 8.33,
+      "notes": 6.33,
+      "overall": 7.44
+    }
+  }
+}

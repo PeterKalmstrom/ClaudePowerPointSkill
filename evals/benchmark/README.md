@@ -11,7 +11,38 @@ All 27 slides per maker were rendered with LibreOffice and scored **blind** by a
 only anonymous labels (keys: `round*-key.json`), on six criteria from 1 to 10: message, visual design, legibility,
 layout correctness, data presentation, presenter support (speaker notes).
 
-## Round 7 - after the round-6 rough edges, on Windows (current)
+## Round 8 - round 7's method, makers can see LibreOffice renders (current)
+
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
+|---|---|---|---|---|---|---|---|---|
+| **This skill** | 9.0 | 8.3 | 8.0 | 8.3 | 9.0 | 6.0 | **8.11** | 328 s / 97k / 21 |
+| Anthropic pptx skill | 8.0 | 8.0 | 6.0 | 8.0 | 8.3 | 6.3 | 7.44 | 279 s / 94k / 12 |
+| Plain Claude | 6.0 | 4.0 | 4.0 | 5.7 | 8.0 | 3.3 | 5.17 | 68 s / 64k / 3 |
+
+**Method:** same as round 7 - the same briefs, one unattended agent per maker run in parallel, slides rendered in real
+PowerPoint (`render_slides.py`) into contact sheets, one separate blind judge with new labels (X/Y/Z,
+`round8-key.json`). **One difference:** LibreOffice is now installed on the PC, so every maker could render and look
+at its own decks (round 7's makers could not). The judge also read the slide text and notes, as in round 7.
+Lint (this skill's own, not neutral): this skill 0 errors / 0 warnings on all three decks; plain Claude 7-12 errors
+per deck; pptx skill 1-4.
+
+Judge, in short: this skill - claim titles throughout, decisions with owner and date, every figure right (+44 %,
+19.8 MUSD, 191 customers, 200 kSEK); the four-day deck (dot chart of 41 in 100, metrics with a stop rule, cost
+table) was the best of the nine. Weaknesses: notes read as fill-in blocks (KEY FACT / ASSUMPTIONS / SOURCES) rather
+than something to say; the QBR's slide-2 chart lacks Q2/Q3 labels and repeats slides 3 and 5; empty space on two
+phishing slides. pptx skill - modern, polished (cards, donuts, timeline), good flow, quiz answers in the notes; but
+small body text, notes only on the four-day title slide, an unsourced growth explanation and a churn slip (7 instead
+of 6 per 1,000). Plain Claude - arithmetic right, but topic titles, tiny grey text in mostly empty cards, an
+overlapping card heading, bullet slides and almost no notes.
+
+**Compared with round 7.** Design, the round-7 weakness, rose from 7.0 to 8.3 and is now the highest of the three
+(pptx skill 7.3 -> 8.0, plain 8.0 -> 4.0). Layout rose 7.3 -> 8.3. Notes fell 9.0 -> 6.0: same notes structure,
+but this judge marked it down as a template rather than a script - the top fix for next round. Overall 8.22 -> 8.11,
+within the half-point judge noise. Plain Claude's swing (6.78 -> 5.17) on a 3-call, 68 s run shows how much
+single-run variance the other makers carry. This skill's agent was slower (212 s / 11 calls -> 328 s / 21), likely
+because it now could and did loop on renders.
+
+## Round 7 - after the round-6 rough edges, on Windows
 
 | Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
 |---|---|---|---|---|---|---|---|---|
@@ -138,6 +169,8 @@ per deck (round 5) - the scripts are not the bottleneck, the number of loops is.
 | 4 | not measured | not measured | 189 s / 100k / 18 |
 | 5 | not measured | not measured | 205 s / 107k / 26 |
 | 6 | 124 s / 73k / 9 | 159 s / 90k / 12 | 131 s / 91k / 13 |
+| 7 | 162 s / 75k / 3 | 189 s / 84k / 6 | 212 s / 100k / 11 |
+| 8 | 68 s / 64k / 3 | 279 s / 94k / 12 | 328 s / 97k / 21 |
 
 **Reading it.** As the skill gained checks (rounds 2-5) its quality rose from 5.44 to 8.56, but the agent needed
 more loops: each check found one class of problem per build, so it built, rendered, fixed one thing and built

@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 _scratch/
+out/
 
 # PowerPoint
 ~$*.pptx

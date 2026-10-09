@@ -1,0 +1,116 @@
+{
+ "P": {
+  "qbr": {
+   "message": 9,
+   "design": 8,
+   "legibility": 7,
+   "layout": 6,
+   "data": 9,
+   "notes": 3,
+   "comment": "Strong claim titles and clear ask (s8); arithmetic correct (19.8, +44 %, QoQ 12/13/13.5 %, churn ~20%->~13%/yr). s6 risk card titles collide with body text, cards mostly empty; s2/s5/s6 body text small. Notes only on s1."
+  },
+  "phishing": {
+   "message": 9,
+   "design": 8,
+   "legibility": 6,
+   "layout": 5,
+   "data": 8,
+   "notes": 4,
+   "comment": "Covers every brief item, friendly tone, good quiz (s7). s4 callout markers overlap email text ('termination' covered by 5) and marker 4 missing; s3 five narrow columns with small cramped text and a wrapping heading. Notes only on s1 and s7."
+  },
+  "fourday": {
+   "message": 9,
+   "design": 8,
+   "legibility": 6,
+   "layout": 7,
+   "data": 9,
+   "notes": 1,
+   "comment": "Complete argument: why, design, timeline with checkpoints, metrics table, risk table, cost table summing to 200 kSEK, 5 kSEK/engineer correct, crisp decision slide. Tables and card text small (s3,s5,s6). Zero speaker notes; 2027 dates and metric targets are assumptions not flagged."
+  },
+  "mean": {
+   "message": 9.0,
+   "design": 8.0,
+   "legibility": 6.33,
+   "layout": 6.0,
+   "data": 8.67,
+   "notes": 2.67,
+   "overall": 6.78
+  }
+ },
+ "Q": {
+  "qbr": {
+   "message": 8,
+   "design": 7,
+   "legibility": 7,
+   "layout": 5,
+   "data": 6,
+   "notes": 5,
+   "comment": "Ask stated upfront and at end. s2 '5.9 MUSD' wraps and overprints its label; s3 claims '+0.6 MUSD Q4 alone added more than any prior quarter' - Q4 added +0.7 (notes even say +0.5/+0.6/+0.7). 9 slides incl. filler 'Thank you'. Some titles are topics ('Executive summary'). Notes on 4 of 9 slides."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 8,
+   "legibility": 7,
+   "layout": 7,
+   "data": 6,
+   "notes": 5,
+   "comment": "Clean consistent palette, good example email with flags. s2 '9 in 10 breaches start with a human clicking' is an unsourced statistic presented as fact. Small body text on s3/s6. Quiz answers shown on the same slide (no reveal). Notes on 4 slides."
+  },
+  "fourday": {
+   "message": 7,
+   "design": 7,
+   "legibility": 6,
+   "layout": 7,
+   "data": 8,
+   "notes": 2,
+   "comment": "Covers all brief items, cost table + pie correct (200). Titles mostly topic labels ('Success metrics','Risks and mitigations'); s3 100-80-100 nice. Small table/card text (s5,s6), timeline text tiny on s4; decision slide is a sparse title slide. Notes only on s8."
+  },
+  "mean": {
+   "message": 7.67,
+   "design": 7.33,
+   "legibility": 6.67,
+   "layout": 6.33,
+   "data": 6.67,
+   "notes": 4.0,
+   "overall": 6.45
+  }
+ },
+ "R": {
+  "qbr": {
+   "message": 9,
+   "design": 7,
+   "legibility": 9,
+   "layout": 8,
+   "data": 9,
+   "notes": 9,
+   "comment": "Every title is a claim; correct numbers (19.8, +44 %, +58 %, 191); decision box with owner/timing. Large readable text. Design plainer, s3/s5 charts small with lots of white space; s6 risk ratings invented but flagged in notes. Notes on every slide with facts, assumptions, sources."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 6,
+   "legibility": 9,
+   "layout": 6,
+   "data": 8,
+   "notes": 9,
+   "comment": "Big readable text, claim titles, quiz split into question/answer reveal (s7-8). s3 plain bullet list for red flags; s6 staggered labels awkward and uneven ('Security team reviews it' wraps into 3 lines); s2 unbalanced left. Notes thorough, example flagged as invented."
+  },
+  "fourday": {
+   "message": 9,
+   "design": 8,
+   "legibility": 8,
+   "layout": 8,
+   "data": 9,
+   "notes": 9,
+   "comment": "Strong claim titles, timeline with go/no-go, metrics with stop rule, likelihood/impact risks, cost table 120/30/50=200, decision box with owner. Timeline shows Jul evaluation outside Jan-Jun pilot (flagged as assumption). Notes on every slide with assumptions flagged."
+  },
+  "mean": {
+   "message": 8.67,
+   "design": 7.0,
+   "legibility": 8.67,
+   "layout": 7.33,
+   "data": 8.67,
+   "notes": 9.0,
+   "overall": 8.22
+  }
+ }
+}

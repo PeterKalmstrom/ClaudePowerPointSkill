@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- A cost table's large total keeps a short unit on the same line ("410 k"); a lone "k" under the number read as a
+  stray letter in PowerPoint (Windows test session).
+- Benchmark round 7 on Windows (real-PowerPoint renders): this skill first, 8.22 vs 6.78 vs 6.45.
+- `build_deck.py` with a spec path that does not exist exits 2 with "spec not found: <path>" instead of halting
+  with an error report (found by the Windows test session, step 4).
 - **PowerPoint Live: no Fix button for a picture's alt text.** `deck_lint` marks `a11y_missing_alt_text` fixable
   only on a chart or a table (`kLintBridge.IsFixable`); a picture offers only Ask Claude. Any change now re-lints,
   so a fixed alt text no longer stays listed from the cache.

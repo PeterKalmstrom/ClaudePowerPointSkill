@@ -11,7 +11,27 @@ All 27 slides per maker were rendered with LibreOffice and scored **blind** by a
 only anonymous labels (keys: `round*-key.json`), on six criteria from 1 to 10: message, visual design, legibility,
 layout correctness, data presentation, presenter support (speaker notes).
 
-## Round 6 - after the speed round (current)
+## Round 7 - after the round-6 rough edges, on Windows (current)
+
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
+|---|---|---|---|---|---|---|---|---|
+| **This skill** | 8.7 | 7.0 | 8.7 | 7.3 | 8.7 | 9.0 | **8.22** | 212 s / 100k / 11 |
+| Plain Claude | 9.0 | 8.0 | 6.3 | 6.0 | 8.7 | 2.7 | 6.78 | 162 s / 75k / 3 |
+| Anthropic pptx skill | 7.7 | 7.3 | 6.7 | 6.3 | 6.7 | 4.0 | 6.45 | 189 s / 84k / 6 |
+
+**Different method from rounds 1-6, so compare within the round, not with round 6:** the makers ran on the Windows
+PC without LibreOffice (no maker could look at its own renders), the slides were rendered in real PowerPoint, and the
+judge worked mostly from contact sheets. Lint (this skill's own, so not neutral): this skill 0 errors / 0 warnings on
+all three decks; plain Claude 7-19 errors per deck; pptx skill 1-3.
+Judge, in short: this skill - notes with facts, assumptions and sources on every slide, the largest type, claim
+titles, decisions with owner and date, all figures right; plainer design, a plain bullet slide and staggered stage
+labels in the phishing deck, small charts on two QBR slides, a pilot timeline that runs into July (flagged as an
+assumption in the notes). Plain Claude - the strongest story and most polished look, figures right, but almost no
+notes, small crowded text, colliding risk-card headings and a misplaced email callout. pptx skill - clean and
+consistent but a wrong figure (+0.6 for +0.7 MUSD), an unsourced statistic, topic titles, the quiz answers on the
+quiz slide, a "Thank you" closer and few notes.
+
+## Round 6 - after the speed round
 
 | Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
 |---|---|---|---|---|---|---|---|---|

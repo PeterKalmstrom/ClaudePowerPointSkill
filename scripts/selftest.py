@@ -2001,6 +2001,11 @@ class kSelfTest:
                        Code == 2 and "this input is wrong on purpose" in Err and "ERROR in" not in Err,
                        f"exit {Code}: {Err[-400:]}")
 
+            Code, Out = self.RunScript("build_deck.py", os.path.join(self.Tmp, "no-such-spec.json"), "--out",
+                                       os.path.join(self.Tmp, "no-such.pptx"))
+            self.Check("build_deck: a missing spec is an expected state - exit 2, no error report",
+                       Code == 2 and "spec not found" in Out and "ERROR in" not in Out, f"exit {Code}: {Out[-300:]}")
+
             # no terminal + an address: the report is saved, nothing is sent, exit 4 tells Claude to ask the user
             Env = dict(os.environ, KPS_ERROR_REPORT="1", KPS_ERROR_WEBHOOK="http://127.0.0.1:9/never-called")
             Run = subprocess.run([sys.executable, HaltScript, Marker], capture_output=True, text=True,

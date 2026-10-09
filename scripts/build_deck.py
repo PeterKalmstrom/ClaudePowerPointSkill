@@ -688,6 +688,8 @@ class kSpecLoader:
         if kS.ErrorMode:
             return None
         try:
+            if not os.path.isfile(Path):  # a mistyped spec path is the caller's input, not a bug: exit 2, no report
+                raise ToolInputException(f"spec not found: {os.path.abspath(Path)}")
             with open(Path, encoding="utf-8") as Fh:
                 if Path.lower().endswith((".yml", ".yaml")):
                     import yaml  # uvx --with pyyaml
@@ -702,6 +704,8 @@ class kSpecLoader:
             if Spec.get("template") and not os.path.isabs(Spec["template"]):
                 Spec["template"] = os.path.join(Base, Spec["template"])
             return Spec
+        except kToolException:
+            raise
         except Exception as e:
             kS.GlobalErrorHandler(e, f"kSpecLoader.Load(path={Path})")
             return None
@@ -2709,17 +2713,20 @@ class kSlidePatterns:
             Px = M + Tw + 56
             Pw = W - M - Px
             Big = self.Amount(Total, Decimals)
+            Inline = bool(Unit) and len(str(Unit)) <= 4  # a short unit ('k', 'MSEK') reads with the number
+            if Inline:
+                Big = f"{Big}{NBSP}{Unit}"  # one line: a lone 'k' under '410' reads as a stray letter
             Bs = B.FitLine([Big], 110, Pw)
             Bh = B.Need(Big, Bs, Pw, Heading=True)
             Note = Sl.get("note", "")
             Ns = B.Fit([Note], 32, Pw, 260) if Note else 0
             Nh = B.Need(Note, Ns, Pw) if Note else 0
-            Uh = 52 if Unit else 0
+            Uh = 52 if Unit and not Inline else 0
             Block = 40 + 8 + Bh + Uh + (24 + Nh if Note else 0)
             Top = Ty + max(0, (RowH * Rows - Block) / 2)
             B.Text(S, "TotalLabel", Sl.get("total_label", "Total"), Px, Top, Pw, 40, 28, MUTED, Bold=True)
             B.Text(S, "TotalValue", Big, Px, Top + 48, Pw, Bh, Bs, ACCENT, Bold=True, Heading=True)
-            if Unit:
+            if Unit and not Inline:
                 B.Text(S, "TotalUnit", Unit, Px, Top + 48 + Bh, Pw, Uh, 36, ACCENT, Bold=True, Heading=True)
             if Note:
                 B.Text(S, "CostNote", Note, Px, Top + 48 + Bh + Uh + 24, Pw, Nh, Ns, TEXT)

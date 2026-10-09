@@ -49,6 +49,7 @@ EDGE_TOLERANCE_PT = 2.0
 STRETCH_TOLERANCE = 0.03
 SCALE = 1.0                # slide width / 960 pt (set per deck: kLintDeck.Scale)
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".emf", ".wmf", ".svg", ".webp")
+DEFAULT_NAME_RE = re.compile(r"^(picture|image|graphic|chart|table|object|content placeholder)\s*\d*$")
 C_NS = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 SEVERITY_ORDER = {"error": 0, "warn": 1, "info": 2}
 IDENTITY_TF = (1.0, 0.0, 1.0, 0.0)
@@ -303,13 +304,17 @@ class kLintDeck:
 
     @staticmethod
     def AltText(Sh):
-        """Alt text, treating a bare file name (python-pptx and some tools write one) as missing."""
+        """Alt text, treating a bare file name ("photo.jpg") or a default shape name ("Picture 3", "image1")
+        as missing: python-pptx and some tools write one, and it tells a screen-reader user nothing."""
         if kS.ErrorMode:
             return ""
         try:
             Nv = Sh._element.find(".//p:cNvPr", NS)
             Text = (Nv.get("descr") or Nv.get("title") or "").strip() if Nv is not None else ""
-            return "" if Text.lower().endswith(IMAGE_EXT) and " " not in Text else Text
+            Lower = Text.lower()
+            if Lower.endswith(IMAGE_EXT) and " " not in Text:
+                return ""
+            return "" if DEFAULT_NAME_RE.match(Lower) else Text
         except Exception as e:
             kS.GlobalErrorHandler(e, "kLintDeck.AltText")
             return ""
@@ -591,8 +596,9 @@ class kLintDeck:
                             if ContrastDone:
                                 break
 
-                # pictures and charts
-                if S.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART) or getattr(S, "has_chart", False):
+                # pictures, charts and tables
+                if (S.shape_type in (MSO_SHAPE_TYPE.PICTURE, MSO_SHAPE_TYPE.CHART) or getattr(S, "has_chart", False)
+                        or getattr(S, "has_table", False)):
                     if not kLintDeck.AltText(S) and not kLintDeck.IsDecorative(S):
                         F.Add(N, "warn", "a11y_missing_alt_text", "No alt text (and not marked decorative).", S.name)
                 if getattr(S, "has_table", False) and S.has_table:

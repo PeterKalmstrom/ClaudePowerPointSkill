@@ -38,6 +38,7 @@ from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Pt
 
 from kShared import ToolReportableException, kRun, kS, kToolException
+from render_lo import kLoRenderer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
@@ -555,8 +556,33 @@ class kSelfTest:
             Code2, Out2 = self.RunScript("lint_deck.py", Fixed)
             self.Check("lint_deck --fix: removes the empty placeholder",
                        os.path.exists(Fixed) and "unused_placeholder" not in Out2, Out2)
+            self.CheckAltTextGaps()
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckLintDeck")
+            return
+
+    def CheckAltTextGaps(self):
+        """lint_deck: a table with no alt text, and a picture whose alt text is a default name, are both missing."""
+        if kS.ErrorMode:
+            return
+        try:
+            Path = os.path.join(self.Tmp, "alt_gaps.pptx")
+            Deck = Presentation()
+            Blank = Deck.slide_layouts[6]
+            Deck.slides.add_slide(Blank).shapes.add_table(2, 2, Pt(50), Pt(50), Pt(300), Pt(100))
+            Pic = Deck.slides.add_slide(Blank).shapes.add_picture(self.Photo, Pt(50), Pt(50), Pt(300), Pt(200))
+            Pic._element.nvPicPr.cNvPr.set("descr", "Picture 3")
+            Good = Deck.slides.add_slide(Blank).shapes.add_picture(self.Photo, Pt(50), Pt(50), Pt(300), Pt(200))
+            Good._element.nvPicPr.cNvPr.set("descr", "Team photo at the 2026 kickoff")
+            Deck.save(Path)
+            Code, Out = self.RunScript("lint_deck.py", Path, "--json")
+            Missing = {Item["slide"] for Item in json.loads(Out.split("\nfixed")[0])["findings"]
+                       if Item["code"] == "a11y_missing_alt_text"}
+            self.Check("lint_deck: a table with no alt text is reported", 1 in Missing, Out[:400])
+            self.Check("lint_deck: alt text 'Picture 3' counts as missing", 2 in Missing, Out[:400])
+            self.Check("lint_deck: real alt text is not reported", 3 not in Missing, Out[:400])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckAltTextGaps")
             return
 
     def CheckLintTaste(self):
@@ -1051,7 +1077,7 @@ class kSelfTest:
             self.Check("fix_deck --in-place: fixes the input and keeps the original as .bak",
                        os.path.exists(InPlace + ".bak") and "-> " + InPlace in Out
                        and open(InPlace, "rb").read() != open(InPlace + ".bak", "rb").read(), Out[-400:])
-            if shutil.which("soffice") and shutil.which("pdftoppm"):
+            if kLoRenderer.Available():
                 Code, Out = self.RunScript("render_lo.py", Rich, "--out", os.path.join(Tmp, "rich-lo"), "--sheet")
                 self.Check("render_lo --sheet: renders and a contact sheet", Code == 0 and os.path.exists(
                     os.path.join(Tmp, "rich-lo", "contact.png")), Out)
@@ -1802,6 +1828,123 @@ class kSelfTest:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckRound4")
             return
 
+    @staticmethod
+    def Round7Spec():
+        """Benchmark round 7's criticised slides: five red flags as bullets, undated stages with a long label, a
+        dated pilot timeline, a column chart with a short caption, a claim beside points, six short bullets."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            return {"direction": "teaching-friendly", "footer": "Round 7", "slides": [
+                {"id": "flags", "pattern": "bullets", "title": "Five red flags give most phishing away", "notes": "n",
+                 "items": ["Urgent or threatening tone", "Sender address that does not match",
+                           "Unexpected link or attachment", "Requests for passwords or payment",
+                           "Generic greeting, odd spelling"]},
+                {"id": "after", "pattern": "timeline", "title": "Your report protects everyone within minutes",
+                 "notes": "n", "events": [{"label": "Security team reviews it"},
+                                          {"label": "Copies removed from all inboxes"}, {"label": "Sender blocked"},
+                                          {"label": "You get a thank-you reply"}]},
+                {"id": "plan", "pattern": "timeline", "title": "January to June, with a go/no-go at the midpoint",
+                 "notes": "n", "highlight": 1, "events": [
+                     {"date": "Jan", "label": "Pilot starts"}, {"date": "Mar", "label": "Midpoint review"},
+                     {"date": "Apr", "label": "Adjust or stop"}, {"date": "Jun", "label": "Pilot ends"},
+                     {"date": "Jul", "label": "Evaluation to the board"}]},
+                {"id": "rev", "pattern": "chart", "type": "column", "title": "Every quarter beat the last",
+                 "notes": "n", "categories": ["Q1", "Q2", "Q3", "Q4"], "highlight": "Q4",
+                 "series": [{"name": "Revenue", "values": [4.1, 4.6, 5.2, 5.9]}],
+                 "caption": "Quarterly revenue, MUSD, 2026."},
+                {"id": "what", "pattern": "statement", "notes": "n",
+                 "title": "Phishing is a fake message that wants you to act fast",
+                 "support": "Email, text or call that pretends to be someone you trust.",
+                 "points": ["Steals passwords", "Installs malware", "Tricks you into paying"]},
+                {"id": "six", "pattern": "bullets", "title": "Six habits keep the inbox safe", "notes": "n",
+                 "items": ["Check the sender", "Hover before you click", "Never share a password",
+                           "Report, do not delete", "Verify payment requests", "Update when asked"]}]}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.Round7Spec")
+            return {}
+
+    def CheckRound7(self):
+        """Benchmark round 7's criticisms: bullets get numbered bands (never a bare list), stage and timeline labels
+        sit level in one row, a short chart caption leaves the chart the full width, a claim outranks its support,
+        and a timeline month outside the pilot's stated range is a spec warning."""
+        if kS.ErrorMode:
+            return
+        try:
+            Spec = self.Round7Spec()
+            Path, Deck = os.path.join(self.Edge, "round7.json"), os.path.join(self.Tmp, "round7.pptx")
+            self.WriteJson(Spec, Path)
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Bad = [f"{Sl}:{C}" for Sl, C, _, Sev in self.LintFindings(Deck) if Sev in ("error", "warn")]
+            self.Check("build_deck: the round-7 slides build and lint clean", Code == 0 and not Bad,
+                       ", ".join(Bad) + Out[-300:])
+            Slides = list(Presentation(Deck).slides) if os.path.exists(Deck) else []
+            Names = [{Shape.name: Shape for Shape in Slide.shapes} for Slide in Slides]
+            if len(Names) < 6:
+                return
+            self.Check("build_deck: five short bullets are numbered bands, not a bare list",
+                       {f"BulletNo{I}" for I in range(1, 6)} <= set(Names[0]) and "Points" not in Names[0]
+                       and Names[0]["BulletNo3"].text_frame.text == "3", str(sorted(Names[0])))
+            Grid = Names[5]
+            self.Check("build_deck: six short bullets are numbered cards in two columns",
+                       "BulletNo6" in Grid and Grid["PointBand4"].left > Grid["PointBand1"].left
+                       and Grid["PointBand4"].top == Grid["PointBand1"].top, str(sorted(Grid)))
+            Tops = {Names[1][f"Event{I}"].top for I in range(1, 5) if f"Event{I}" in Names[1]}
+            Below = all(f"EventCard{I}" in Names[1] and Names[1][f"EventCard{I}"].top > Names[1][f"Stage{I}"].top
+                        for I in range(1, 5))
+            self.Check("build_deck: undated stages put every label level, in a card under its badge (no stagger)",
+                       len(Tops) == 1 and Below, str(sorted(Names[1])))
+            Dated = Names[2]
+            self.Check("build_deck: a dated timeline has every date above the rail and every label level below it",
+                       len({Dated[f"Event{I}"].top for I in range(1, 6)}) == 1
+                       and len({Dated[f"Date{I}"].top for I in range(1, 6)}) == 1
+                       and Dated["Date1"].top < Dated["Rail"].top < Dated["Event1"].top, str(sorted(Dated)))
+            self.CheckRound7Chart(Names[3], Slides[4], Out)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckRound7")
+            return
+
+    def CheckRound7Chart(self, Chart, Claim, Out):
+        """The chart, claim and pilot-window parts of CheckRound7."""
+        if kS.ErrorMode:
+            return
+        try:
+            Gf, Note = Chart.get("Chart"), Chart.get("ChartNote")
+            self.Check("build_deck: a short chart caption sits above a full-width chart",
+                       Gf is not None and Note is not None and Gf.width >= Pt(1270)
+                       and Note.top + Note.height <= Gf.top, str(sorted(Chart)))
+            Sizes = {Shape.name: Shape.text_frame.paragraphs[0].runs[0].font.size.pt for Shape in Claim.shapes
+                     if Shape.has_text_frame and Shape.text_frame.paragraphs[0].runs}
+            self.Check("build_deck: a claim beside points is never smaller than its support line",
+                       Sizes.get("Title 1", 0) > Sizes.get("Support", 99), str(Sizes))
+            self.Check("build_deck: a timeline month past the range the deck states (Jan-Jun) is a spec warning",
+                       "'Jul: Evaluation to the board' falls outside Jan-Jun" in Out, Out[-400:])
+            Spec = self.Round7Spec()
+            Spec["slides"] = [Spec["slides"][2]]
+            Spec["slides"][0]["window"] = "Jan-Jun"
+            Spec["slides"][0]["events"][4]["label"] = "After the pilot: board review"
+            Path = os.path.join(self.Edge, "round7-window.json")
+            self.WriteJson(Spec, Path)
+            Code, Quiet = self.RunScript("build_deck.py", Path, "--plan")
+            Spec["slides"][0]["events"][4]["label"] = "Evaluation to the board"
+            self.WriteJson(Spec, Path)
+            Code2, Loud = self.RunScript("build_deck.py", Path, "--plan")
+            self.Check("build_deck: a timeline 'window' is checked; an event labelled 'After ...' passes",
+                       "falls outside" not in Quiet and "falls outside Jan-Jun (its 'window')" in Loud,
+                       Quiet[-200:] + " | " + Loud[-300:])
+            Spec["slides"] = [{"id": "long", "pattern": "bullets", "title": "Long points stay a list", "notes": "n",
+                               "items": ["A point that runs well past eighty characters because it explains every "
+                                         "detail inline", "Short one"]}]
+            self.WriteJson(Spec, Path)
+            Deck = os.path.join(self.Tmp, "round7-long.pptx")
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Shapes = {S.name for S in Presentation(Deck).slides[0].shapes} if os.path.exists(Deck) else set()
+            self.Check("build_deck: a point over 80 characters is a spec warning and its list sits on an accent rule",
+                       "a point over 80 characters" in Out and {"Points", "PointsRule"} <= Shapes, Out[-300:])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckRound7Chart")
+            return
+
     def CheckAutoAndCheck(self):
         """Speed round: automatic fixes for unfit text (filler words, units, detail to the notes, a split), --no-auto,
         build --check (every problem of every class in one summary, sorted by slide) and --plan's pre-checks."""
@@ -1885,7 +2028,7 @@ class kSelfTest:
                        <= set(Found) and Found == sorted(Found, key=self.FirstOf)
                        and all(P.get("edit") for P in Data.get("problems", [])) and "==== check:" in Out,
                        f"exit {Code}: {Found} {Out[-300:]}")
-            HasLo = bool(shutil.which("soffice") and shutil.which("pdftoppm"))
+            HasLo = kLoRenderer.Available()
             self.Check("build_deck --check: the contact sheet is rendered when LibreOffice is installed",
                        (not HasLo) or (bool(Data.get("sheet")) and os.path.exists(Data.get("sheet", ""))),
                        str(Data.get("sheet")))
@@ -1937,7 +2080,7 @@ class kSelfTest:
             self.Check("diff_renders: unchanged slide reported same", "s001.png   same" in Out, Out)
             self.Check("diff_renders: changed slide reported", "s002.png   CHANGED" in Out and Code == 1, Out)
 
-            if shutil.which("soffice") and shutil.which("pdftoppm"):
+            if kLoRenderer.Available():
                 Code, Out = self.RunScript("render_lo.py", self.Deck, "--out", os.path.join(Tmp, "lo"))
                 Count = len([Word for Word in Out.split() if Word.endswith(".png")])
                 self.Check("render_lo: one PNG per visible slide", Code == 0 and Count >= 4, Out)
@@ -2110,6 +2253,7 @@ class kSelfTestApp:
             Test.CheckKickerRenderer()
             Test.CheckRound4()
             Test.CheckRound5()
+            Test.CheckRound7()
             Test.CheckAutoAndCheck()
             Test.CheckThemeAndRenders()
             Test.CheckErrorPattern()

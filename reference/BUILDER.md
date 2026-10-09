@@ -87,7 +87,7 @@ fact — without building it: show that to the user first, then build.
 | `bullets` | `title`, `items[]` | 1–7 items, ≤ 100 chars | Asks, agendas, short lists |
 | `compare` | `title`, `columns[{heading, points[]}]`, `highlight` | 2–3 columns, heading ≤ 40 (≤ 24 with 3 columns), 1–4 points ≤ 70 | Before/after, us/them, options |
 | `process` | `title`, `steps[{label, detail}]`, `highlight` | 3–8 steps; label ≤ 30, detail ≤ 60 | Ordered steps (chevrons up to 5) |
-| `timeline` | `title`, `events[{date, label}]`, `highlight` | 3–7 events; date ≤ 16, label ≤ 40; `date` on every event or on none | Dates and milestones; without dates, undated stages in order (numbered on the rail) |
+| `timeline` | `title`, `events[{date, label}]`, `highlight`, `window` | 3–7 events; date ≤ 16, label ≤ 40; `date` on every event or on none | Dates and milestones; without dates, undated stages in order (numbered on the rail) |
 | `quote` | `quote`, `attribution`, `role`, `title` | quote ≤ 240 | A real person's words (credit in notes) |
 | `chart` | `title`, `type`, `categories[]`, `series[{name, values}]`, `highlight`, `number_format`, `caption`, `alt` | 2–24 categories, 1–6 series | Native, editable chart (`column`, `bar`, `line`, `pie`) |
 | `table` | `title`, `header[]`, `rows[[]]`, `highlight_row` | 2–6 columns, 1–8 rows | Numbers people will read |
@@ -127,14 +127,25 @@ fact — without building it: show that to the user first, then build.
   claim and its support are anchored by an accent bar. The
   kicker sits above the claim on every statement, as on every other content slide.
 - **`timeline` without dates** — `events` with a `label` only — draws undated sequential stages: a numbered badge
-  on the rail for each, the labels alternating above and below. Use it for "what happens next" sequences; do not
-  invent "Step 1 / Step 2" dates (they repeat in large type).
+  on the rail for each, every label in a tinted card under its badge, all level in one row. Use it for "what
+  happens next" sequences; do not invent "Step 1 / Step 2" dates (they repeat in large type).
+- **`timeline` layout**: with up to five events whose labels fit two or three lines at 32 pt or more, the dates
+  sit above the rail and every label in a card below it, level. Six or seven events, or a label too long for its
+  column, alternate above and below the rail instead - keep labels to about four words for the level row.
+- **`window`** on a dated `timeline` (`"Jan-Jun"`, `"January to June"`): an event whose month falls outside it is
+  a spec warning. Without `window` the slide's own title and notes are searched for one month range. Label an
+  event that is outside on purpose (`"After the pilot: board review"`) and it passes.
 - **`big_number`** with a share — `number` `"41"` and `unit` `"%"`, or `"14/20"` — draws a dot grid beside the
   number (`visual`: `dots`, `bar` for a filled bar, `none`); `points` add two or three supporting facts under
   the caption, so the slide is not one line of support.
 - **`decision`** on `kpi`, `statement` and `next_steps` draws the ask in a box in the text colour with an accent
   edge and a label (`decision_label`, default *Decision requested*); `statement` adds an owner/date line.
-- **`bullets`** with up to four short items (≤ 80 characters) become full-width bands; longer lists stay a list.
+- **`bullets`** with short items (≤ 80 characters each) never render as a bare list: up to five become full-width
+  bands with a number badge each, six or seven numbered cards in two columns. A list with a longer item stays a
+  bulleted list on an accent rule, with a spec warning - shorten each point to a phrase (detail to the notes), or
+  pick `compare`, `process` or a `statement` with `points` when the items have structure.
+- **`chart` caption**: a caption that fits two lines across the slide sits above the chart on an accent rule and
+  the chart takes the full width; a longer caption keeps a side column (and a smaller chart) - keep it short.
 - **`email` callouts** point at `from`, `to`, `subject`, `attachment` or a `body` paragraph (`line`, 0-based); the
   builder draws a numbered marker at that line and the numbered note beside the message, and adds the callouts to
   the notes. A body paragraph that starts with `http` is drawn as a link.
@@ -253,7 +264,8 @@ linted, rendered, found one class of problem (`fit:`, then an overlap, then a wi
   deck is printed as `fit: …` and the build exits **3**.
 - **Spec warnings** (`spec warning: …`, exit code unchanged): a derived figure the deck's data contradicts
   (`spec warning: figure: …`, see *Computed figures*); a `metrics` target with no number, percent, date or
-  comparison; a monthly timeline that skips one month; a `statement` with nothing but a support line, or a
+  comparison; a monthly timeline that skips one month, or has a month outside its `window` (or the range its
+  title or notes state); a `bullets` item over 80 characters; a `statement` with nothing but a support line, or a
   `big_number` with one caption — add `points`.
 - **Email body:** each paragraph's box is as tall as its wrapped text (in the wider of the body font and its
   LibreOffice substitute), so cutting words from an overflowing paragraph shows up at the next build.

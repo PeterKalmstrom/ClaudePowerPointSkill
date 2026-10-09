@@ -41,6 +41,9 @@ only the reference file the task needs.
   `MOVED FROM SLIDE:`, a split where `"allow_split": true`); each change prints as `auto:`. `--no-auto` reports only.
 - Pick patterns that show the thing itself, give the deck a `footer` and the ask a `decision` with its `figure`
   ([BUILDER](reference/BUILDER.md), [DESIGN](reference/DESIGN.md)). Treat `spec warning:` lines as content to fix.
+- Keep list items, stage labels and chart captions short (a phrase, ~4 words for a stage): short items get numbered
+  bands, level label cards and full-width charts; long ones fall back to plain layouts. A pilot timeline gets a
+  `window` (`"Jan-Jun"`) so a month past it is flagged.
 - **4+ slides in one design:** showcase-first - `--slides 1,3 --check`, look, then the rest; unattended, approve it
   yourself and say so ([WORKFLOW](reference/WORKFLOW.md#showcase-first-for-multi-slide-sections)).
 - Three fixes on the same defect without success: escalate - [iteration loop](reference/WORKFLOW.md#iteration-loop--build-render-look-critique-fix).

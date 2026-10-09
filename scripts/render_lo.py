@@ -8,7 +8,10 @@
 APPROXIMATE: LibreOffice substitutes fonts and breaks lines differently from PowerPoint. Use it
 to catch gross problems - text overflowing its box, overlaps, empty or broken slides, missing
 images - not to sign off line breaks or exact spacing (use render_slides.py on Windows for that).
-Needs `soffice` (LibreOffice) and `pdftoppm` (poppler-utils) on PATH.
+Needs LibreOffice and `pdftoppm` (poppler-utils). LibreOffice is found, in order, at: the `KPS_SOFFICE`
+environment variable (full path to soffice / soffice.exe, or the folder holding it), `soffice` on PATH, then the
+usual install folders (C:\\Tools\\LibreOffice\\program - a no-admin `msiexec /a` extract - and
+C:\\Program Files\\LibreOffice\\program on Windows; /Applications/LibreOffice.app on macOS).
 """
 import argparse
 import glob
@@ -40,6 +43,49 @@ class kLoRenderer:
             kS.GlobalErrorHandler(e, f"kLoRenderer.VisibleSlides(file={Path})")
             return None
 
+    KnownLocations = [r"C:\Tools\LibreOffice\program\soffice.exe",
+                      r"C:\Program Files\LibreOffice\program\soffice.exe",
+                      "/Applications/LibreOffice.app/Contents/MacOS/soffice"]
+
+    @staticmethod
+    def FindSoffice():
+        """Path to soffice: KPS_SOFFICE (file or folder), then PATH, then KnownLocations; None if absent."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Configured = os.environ.get("KPS_SOFFICE", "").strip().strip('"')
+            if Configured:
+                for Candidate in (Configured, os.path.join(Configured, "soffice.exe"),
+                                  os.path.join(Configured, "soffice")):
+                    if os.path.isfile(Candidate):
+                        return Candidate
+                raise ToolReportableException(f"KPS_SOFFICE={Configured} does not point at soffice")
+            OnPath = shutil.which("soffice")
+            if OnPath:
+                return OnPath
+            for Candidate in kLoRenderer.KnownLocations:
+                if os.path.isfile(Candidate):
+                    return Candidate
+            return None
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLoRenderer.FindSoffice")
+            return None
+
+    @staticmethod
+    def Available():
+        """True when both LibreOffice (FindSoffice) and pdftoppm are present."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return bool(kLoRenderer.FindSoffice() and shutil.which("pdftoppm"))
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLoRenderer.Available")
+            return False
+
     @staticmethod
     def PageNumber(PagePath):
         """The page number in pdftoppm's page-N.png name (sort key)."""
@@ -57,14 +103,17 @@ class kLoRenderer:
         if kS.ErrorMode:
             return []
         try:
-            for Tool in ("soffice", "pdftoppm"):
-                if not shutil.which(Tool):
-                    raise ToolReportableException(f"{Tool} not found on PATH (install LibreOffice / poppler-utils)")
+            Soffice = kLoRenderer.FindSoffice()
+            if not Soffice:
+                raise ToolReportableException("LibreOffice (soffice) not found: install it, put it on PATH or set "
+                                              "KPS_SOFFICE to soffice's path")
+            if not shutil.which("pdftoppm"):
+                raise ToolReportableException("pdftoppm not found on PATH (install poppler-utils)")
             os.makedirs(OutDir, exist_ok=True)
             Temp = tempfile.mkdtemp(prefix="lorender-")
             # a private profile dir avoids clashing with a running LibreOffice
             Profile = pathlib.Path(Temp, "profile").as_uri()  # file:///C:/... on Windows, file:///tmp/... elsewhere
-            subprocess.run(["soffice", f"-env:UserInstallation={Profile}", "--headless",
+            subprocess.run([Soffice, f"-env:UserInstallation={Profile}", "--headless",
                             "--convert-to", "pdf", "--outdir", Temp, os.path.abspath(Path)],
                            check=True, capture_output=True, timeout=300)
             Pdf = os.path.join(Temp, os.path.splitext(os.path.basename(Path))[0] + ".pdf")

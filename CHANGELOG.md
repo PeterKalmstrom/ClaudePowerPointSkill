@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **LibreOffice found off PATH** (`render_lo.py`): `kLoRenderer.FindSoffice()` looks at `KPS_SOFFICE` (the exe or
+  its folder), then PATH, then the usual install folders; `kLoRenderer.Available()` is what `build_deck.py --check`
+  and the self-test now use, so an unpacked no-admin LibreOffice is no longer skipped.
+- **Design criticisms from benchmark round 7** (`build_deck.py`):
+  - *No bare bullet slides*: `bullets` with short items (≤ 80 characters) become numbered bands (up to five,
+    `BulletRows`, now with a number badge each) or numbered cards in two columns (six or seven, new `BulletGrid`).
+    A list with a longer item stays a list, now on an accent rule, and gets a spec warning to shorten the points.
+  - *Level stage and timeline labels*: undated stages and dated timelines with up to five events put every label
+    in a tinted card below the rail, one row, same top (`StagesInRow`, `TimelineInRow`, `LabelCards`); dates sit
+    above the rail. Labels prefer two even lines at a smaller size over three (`RowLabels`, never below 32 pt, never
+    a word wider than its column). Six or seven events, or labels too long, keep the alternating layout.
+  - *Charts fill the slide*: a chart caption that fits two lines sits above the chart on an accent rule and the
+    chart takes the full width (`ChartWithLead`); only a longer caption keeps the side column.
+  - *Timeline window*: new optional `window` on `timeline` (`"Jan-Jun"`); a dated event outside it - or outside
+    the one month range the slide's title or notes state - is a spec warning, unless its label says
+    "after"/"before" (`kSpecCheck.WindowWarnings`, `MonthRanges`). `spec.schema.json` regenerated.
+  - *Claim outranks its support*: a statement claim beside points is sized as `Title()` will draw it (at most 3
+    lines only at display size), so the box, the support line and the vertical centring follow the real size; the
+    support line is at most three quarters of the claim's size. `Title()` no longer lets the widow fix drop a
+    three-line display claim below display size, where it would be shrunk to two lines.
+  - Self-test: `CheckRound7` (numbered bands and grid, level stages and timeline, full-width chart, claim vs
+    support, window and long-bullet warnings).
+
+- `lint_deck.py` reports `a11y_missing_alt_text` on a table with no alt text (it already did on pictures and
+  charts), and treats a default shape name as alt text ("Picture 3", "image1", "Chart 2") as missing, like a bare
+  file name ("photo.jpg"). `fix_deck.py --only alt` writes table alt text from its header as before.
+
 - A cost table's large total keeps a short unit on the same line ("410 k"); a lone "k" under the number read as a
   stray letter in PowerPoint (Windows test session).
 - Benchmark round 7 on Windows (real-PowerPoint renders): this skill first, 8.22 vs 6.78 vs 6.45.

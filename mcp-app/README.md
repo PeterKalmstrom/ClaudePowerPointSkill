@@ -106,3 +106,5 @@ The view polls a cheap change signature about once a second (every two in the so
 pictures only when something changed. Pictures go to the view, not to Claude, so the live preview costs no tokens.
 The fast preview uses `Slide.Export`, which shows fallback fonts for embedded fonts — tick **Accurate** or use
 `scripts/render_slides.py` to check a slide closely. Versions live in a temporary folder for the session.
+
+Manual test of the panel in Claude Desktop: [`docs/powerpoint-live-checklist.md`](../docs/powerpoint-live-checklist.md).

@@ -1638,6 +1638,13 @@
               "highlight": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "window": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "maxLength": 30
               }
             },
             "required": [

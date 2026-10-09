@@ -37,7 +37,7 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `unused_placeholder` | error | Empty title/body placeholder next to real content — `--fix` deletes it |
 | `palette_too_many_colours` | warn | More than 5 distinct solid fill colours on a slide |
 | `a11y_low_text_contrast` | warn / error < 3:1 | Text below 4.5:1 against its shape fill or the slide background (3:1 for large text: 18 pt, or 14 pt bold). Theme colours and their lumMod/tint adjustments are resolved; text over pictures or gradients is skipped |
-| `a11y_missing_alt_text` | warn | Picture or chart with no alt text, or just a file name, and not marked decorative |
+| `a11y_missing_alt_text` | warn | Picture, chart or table with no alt text, or just a file name or default name ("Picture 3"), and not marked decorative |
 | `picture_stretched` | warn > 3 %, error > 15 % | Shown aspect ratio differs from the (cropped) source image |
 | `chart_default_palette` | warn | 2+ of the first 6 series in Office default colours |
 | `chart_descriptive_title` | info | Chart title has no finding in it (no *leads, rises, falls, vs, %*…) |

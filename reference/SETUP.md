@@ -22,6 +22,19 @@ irm https://astral.sh/uv/install.ps1 | iex
 This installs `uv.exe` and `uvx.exe` to `C:\Users\<USER>\.local\bin\`. If Claude Code can't find `uvx`, use that
 full path.
 
+### LibreOffice without administrator rights (optional)
+
+`scripts/render_lo.py` (approximate renders, any OS) needs LibreOffice and `pdftoppm`. Without admin rights, extract
+the official MSI instead of installing it - no registry, no elevation:
+
+```powershell
+msiexec /a LibreOffice_<version>_Win_x86-64.msi /qn TARGETDIR=C:\Tools\LibreOffice
+```
+
+`render_lo.py` finds soffice from `KPS_SOFFICE` (the exe or its folder), then PATH, then
+`C:\Tools\LibreOffice\program` and `C:\Program Files\LibreOffice\program`. Prefer a local disk over a synced
+folder: the extract is about 19,500 files (~1.5 GB) that a sync client would upload and lock.
+
 ## Verify
 
 ```powershell

@@ -88,7 +88,7 @@ LIMITS = {  # pattern: {field: max characters} plus list-length ranges, checked 
     "compare": {"title": 70, "columns": (2, 3), "columns.heading": 40, "columns.points": (1, 4),
                 "columns.points.*": 70},
     "process": {"title": 70, "steps": (3, 8), "steps.label": 30, "steps.detail": 60},
-    "timeline": {"title": 70, "events": (3, 7), "events.date": 16, "events.label": 40},
+    "timeline": {"title": 70, "events": (3, 7), "events.date": 16, "events.label": 40, "window": 30},
     "quote": {"quote": 240, "attribution": 40, "role": 60},
     "chart": {"title": 70, "categories": (2, 24), "series": (1, 6)},
     "table": {"title": 70, "header": (2, 6), "rows": (1, 8)},
@@ -144,7 +144,7 @@ FIELDS = {  # pattern: {field: kind}; kinds: text, int, number, list[text], list
     "bullets": {"items": "list[text]", "allow_split": "bool"},
     "compare": {"columns": {"heading": "text", "points": "list[text]"}, "highlight": "int"},
     "process": {"steps": {"label": "text", "detail": "text"}, "highlight": "int"},
-    "timeline": {"events": {"date": "text", "label": "text"}, "highlight": "int"},
+    "timeline": {"events": {"date": "text", "label": "text"}, "highlight": "int", "window": "text"},
     "quote": {"quote": "text", "attribution": "text", "role": "text"},
     "chart": {"type": "enum:column,bar,line,pie", "categories": "list[text]",
               "series": {"name": "text", "values": "list[number]"}, "highlight": "int|text",
@@ -205,6 +205,7 @@ SHARE_W = 470     # the dot grid or bar beside a big number that is a share
 TREND_MAX = 200   # the tallest a tile's trend (figures, bars, periods) grows
 TREND_LABEL = 24  # the figures and periods on a tile's trend bars: the label floor, never smaller
 TREND_BARS = 72   # the shortest a tile's bars may be; with less room the trend moves to the note, never tiny
+ROW_PAD, ROW_CARD = 20, 170  # timeline/stage label cards in one row: inner padding, least height
 RAMP = [0, 0.35, -0.3, 0.6, -0.5, 0.75]  # shades of the accent for series 1..6
 CHART_TYPES = {"column": XL_CHART_TYPE.COLUMN_CLUSTERED, "bar": XL_CHART_TYPE.BAR_CLUSTERED,
                "line": XL_CHART_TYPE.LINE_MARKERS, "pie": XL_CHART_TYPE.PIE}
@@ -227,7 +228,7 @@ AUTO_PASSES = 6  # rounds of automatic fixes (filler words, units, detail to the
 SEVERITY_ORDER = {"error": 0, "warn": 1, "info": 2}
 PLAN_SKIP = {"notes", "id", "pattern", "image", "type", "reveal", "visual", "likelihood", "impact", "categories",
              "series", "header", "rows", "number_format", "alt", "highlight", "trend", "trend_labels", "kicker",
-             "allow_split", "decision_label"}
+             "allow_split", "decision_label", "window"}
 NO_CHROME = {"title", "section"}            # no footer or page number on covers and dividers
 NO_KICKER = {"title", "section", "quote"}   # their own title treatment
 LEVELS = {"high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
@@ -557,6 +558,53 @@ class kSpecCheck:
             return None
 
     @staticmethod
+    def MonthRanges(Text):
+        """Every month range in Text ('Jan-Jun', 'January to June', 'Mar–May 2027') as a set of (start, end)
+        month indexes."""
+        if kS.ErrorMode:
+            return set()
+        try:
+            Month = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+\d{4})?"
+            Found = re.findall(r"\b" + Month + r"\s*(?:-|–|—|to|through|until|till)\s*" + Month + r"\b",
+                               str(Text), re.I)
+            return {(MONTHS.index(A.lower()), MONTHS.index(B.lower())) for A, B in Found}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSpecCheck.MonthRanges")
+            return set()
+
+    @staticmethod
+    def WindowWarnings(Sl, I):
+        """A dated timeline whose month falls outside its window: the slide's 'window' ('Jan-Jun'), else the one
+        month range the slide itself states in its title or notes (a pilot 'January to June'; a range elsewhere in
+        the deck, such as the quarter a review covers, is not this timeline's window). An event labelled
+        'after ...' / 'before ...' is outside on purpose and passes."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Ranges = kSpecCheck.MonthRanges(Sl.get("window", ""))
+            Where = "its 'window'"
+            if not Sl.get("window"):
+                Ranges = kSpecCheck.MonthRanges(json.dumps(Sl, ensure_ascii=False))
+                Where = "the range the slide states"
+            if len(Ranges) != 1:
+                return []
+            Start, End = next(iter(Ranges))
+            Out = []
+            for E in Sl.get("events", []):
+                Mi = kSpecCheck.MonthIndex(E.get("date", "")) if isinstance(E, dict) else None
+                Label = str(E.get("label", "")) if isinstance(E, dict) else ""
+                if Mi is None or re.search(r"\b(after|before|post|pre)\b", Label, re.I):
+                    continue
+                if (Mi - Start) % 12 > (End - Start) % 12:
+                    Out.append(f"slide {I} (timeline): '{E.get('date')}: {Label}' falls outside "
+                               f"{MONTHS[Start].title()}-{MONTHS[End].title()} ({Where}) - move it inside, or say "
+                               "it is outside on purpose in its label ('After the pilot: ...')")
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSpecCheck.WindowWarnings")
+            return []
+
+    @staticmethod
     def Warnings(Spec):
         """Content the spec can build but a reader will question, as messages: a success target that is not
         measurable, a monthly timeline that skips a month. They do not stop the build."""
@@ -598,6 +646,11 @@ class kSpecCheck:
                                    "takes (money, time, FTE) in 'decision', a point or a 'figure' (e.g. '200 kSEK', "
                                    "'2 FTE for 6 months'); if the brief gives none, say the figure comes from "
                                    "Finance (reference/CONTENT.md)")
+                if Pat == "bullets" and any(len(str(X)) > 80 for X in Sl.get("items", [])):
+                    Out.append(f"slide {I} (bullets): a point over 80 characters keeps the slide a plain bulleted "
+                               "list - shorten each point to a phrase (detail to the notes) for numbered bands, or "
+                               "use 'compare', 'process' or 'statement' with 'points'")
+                Out.extend(kSpecCheck.WindowWarnings(Sl, I) if Pat == "timeline" else [])
                 if Pat == "timeline":
                     Months = [kSpecCheck.MonthIndex(E.get("date", "")) for E in Sl.get("events", [])
                               if isinstance(E, dict)]
@@ -1313,6 +1366,8 @@ class kDeckBuilder:
                 Size = self.Fit([Text], Size, Wd - 15, Room, Heading=True, What="title")
             Floor = Size - 8  # no width balances it in every face (the substitute wraps a word sooner): a size
             while self.Widow(Text, Size, Wd) and Size - 2 >= max(Floor, 36):  # up to 8 pt smaller that does
+                if self.TitleLines(Text, Size - 2, Wd) > self.MaxTitleLines(Size - 2):
+                    break  # below display size a third line is not allowed: a widow beats a claim shrunk to 2 lines
                 Size -= 2
                 Wd = min(Box, self.BalancedWidth(Text, Size, Box - 15) + 15)
             Lines = self.TitleLines(Text, Size, Wd)
@@ -1809,17 +1864,24 @@ class kSlidePatterns:
                        What="statement")
             Tw = B.BalancedWidth(Sl["title"], Ts, Wd - 15) + 15
             Display = 40 * max(1.0, B.Prs.slide_width / 12700 / 960) / B.TypeScale()  # lint's display size
-            while Ts > 48 and B.TitleLines(Sl["title"], Ts, Tw + 1, True) * Ts * LOOSE_LINE + 8 > 300:
+            Cap = 380 if Pw else 300  # beside points the claim may take a third display line, not shrink to two
+            while Ts > 48 and (B.TitleLines(Sl["title"], Ts, Tw + 1, True) * Ts * LOOSE_LINE + 8 > Cap
+                               or B.TitleLines(Sl["title"], Ts, Tw) > B.MaxTitleLines(Ts)):  # as Title() checks
                 Next = Ts - 4  # the claim must also fit where LibreOffice wraps it wider (a substituted font)
                 if Next < Display and B.TitleLines(Sl["title"], Next, B.BalancedWidth(Sl["title"], Next, Wd - 15)
                                                    + 15) > 2:
                     break  # below display size a claim may take two lines only: keep the measured three
                 Ts = Next
                 Tw = B.BalancedWidth(Sl["title"], Ts, Wd - 15) + 15
+            while Ts > 36 and B.TitleLines(Sl["title"], Ts, Tw) > B.MaxTitleLines(Ts):
+                Ts -= 2  # Title() would shrink it to this anyway: size the box, the support and the block from it
+                Tw = B.BalancedWidth(Sl["title"], Ts, Wd - 15) + 15
             LooseH = B.TitleLines(Sl["title"], Ts, Tw + 1, True) * Ts * LOOSE_LINE + 8  # the loosest renderer's wrap
             Th = min(max(300, LooseH), max(B.Need([Sl["title"]], Ts, Tw - 15, Heading=True) + 10, LooseH))
             Support = str(Sl.get("support") or "")
-            Ss = B.Fit([Support], 44 if Pw else 48, Wd, 170, Floor=FLOOR) if Support else 0
+            # the support line never outranks the claim it supports: at most three quarters of the claim's size
+            Ss = B.Fit([Support], max(FLOOR, min(44 if Pw else 48, int(Ts * 0.75))), Wd, 170, Floor=FLOOR) \
+                if Support else 0
             Sh = B.Need(Support, Ss, Wd) if Support else 0
             Kh = KICKER_H + 12 if B.Kicker else 0  # the kicker sits between the rule and the claim, as on every slide
             Lead = 46 + Kh
@@ -2123,21 +2185,28 @@ class kSlidePatterns:
         try:
             B = self._b
             B.Title(S, Sl["title"])
-            if len(Sl["items"]) <= 4 and all(len(str(X)) <= 80 for X in Sl["items"]):
-                self.BulletRows(S, Sl)  # a few short points: one band each, filling the slide
+            if all(len(str(X)) <= 80 for X in Sl["items"]):
+                if len(Sl["items"]) <= 5:
+                    self.BulletRows(S, Sl)  # a few short points: one numbered band each, filling the slide
+                else:
+                    self.BulletGrid(S, Sl)  # six or seven: numbered cards in two columns, never a bare list
                 return
             Items = ["\u2022 " + str(X) for X in Sl["items"]]
-            Wd, Ht = W - 2 * M - 120, BODY_BOTTOM - BODY_TOP - 20
+            Inset = EDGE + 32  # long points keep a plain list, but on an accent rule, not floating on the slide
+            Wd, Ht = W - 2 * M - 120 - Inset, BODY_BOTTOM - BODY_TOP - 20
             Size = B.Fit(Items, GROW["body"], Wd, Ht)
             Spare = max(0.0, Ht - B.Need(Items, Size, Wd))
             Spacing = 0.5 + (min(1.1, Spare / (len(Items) - 1) / Size * 0.7) if len(Items) > 1 else 0)
-            B.Text(S, "Points", Items, M, BODY_TOP + 20, Wd, Ht, Size, Spacing=Spacing)
+            Used = min(Ht, B.Need(Items, Size, Wd, Spacing=Spacing))
+            B.Rect(S, "PointsRule", M, BODY_TOP + 20, EDGE, Used, ACCENT)
+            B.Text(S, "Points", Items, M + Inset, BODY_TOP + 20, Wd, Ht, Size, Spacing=Spacing)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Bullets")
             return
 
     def BulletRows(self, S, Sl):
-        """Up to four short points as full-width tinted bands with an accent edge, sized to fill the body."""
+        """Up to five short points as full-width tinted bands with an accent edge and a number badge, sized to fill
+        the body: a list the eye can count, never bare bullets on an empty slide."""
         if kS.ErrorMode:
             return
         try:
@@ -2145,16 +2214,46 @@ class kSlidePatterns:
             Items = [str(X) for X in Sl["items"]]
             N = len(Items)
             Ht = min(150, (BODY_BOTTOM - BODY_TOP - 10 - GAP * (N - 1)) / N)
-            Pad = 40
-            Tw = W - 2 * M - EDGE - 2 * Pad
+            Pad = 32
+            D = min(64, Ht - 24)
+            Tw = W - 2 * M - EDGE - 3 * Pad - D
             Size = B.FitAll(Items, GROW["body"], Tw, Ht - 20)
             for I, Item in enumerate(Items):
                 Ty = BODY_TOP + 10 + I * (Ht + GAP)
                 B.Card(S, f"PointBand{I + 1}", M, Ty, W - 2 * M, Ht, False, "left")
-                B.Text(S, f"Point{I + 1}", Item, M + EDGE + Pad, Ty + 10, Tw, Ht - 20, Size, TEXT,
+                self.Badge(S, f"BulletNo{I + 1}", str(I + 1), M + EDGE + Pad, Ty + (Ht - D) / 2, D, ACCENT, BG,
+                           min(32, D * 0.5))
+                B.Text(S, f"Point{I + 1}", Item, M + EDGE + 2 * Pad + D, Ty + 10, Tw, Ht - 20, Size, TEXT,
                        Anchor=MSO_ANCHOR.MIDDLE)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.BulletRows")
+            return
+
+    def BulletGrid(self, S, Sl):
+        """Six or seven short points as numbered cards in two columns (read down the left column, then the right):
+        each card a tinted band with an accent edge and a number badge."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            Items = [str(X) for X in Sl["items"]]
+            N = len(Items)
+            Rows = -(-N // 2)
+            Wd = (W - 2 * M - GAP) / 2
+            Ht = (BODY_BOTTOM - BODY_TOP - 10 - GAP * (Rows - 1)) / Rows
+            Pad, D = 24, min(56, Ht - 24)
+            Tw = Wd - EDGE - 3 * Pad - D
+            Size = B.FitAll(Items, GROW["point"], Tw, Ht - 16)
+            for I, Item in enumerate(Items):
+                Lx = M + (I // Rows) * (Wd + GAP)
+                Ty = BODY_TOP + 10 + (I % Rows) * (Ht + GAP)
+                B.Card(S, f"PointBand{I + 1}", Lx, Ty, Wd, Ht, False, "left")
+                self.Badge(S, f"BulletNo{I + 1}", str(I + 1), Lx + EDGE + Pad, Ty + (Ht - D) / 2, D, ACCENT, BG,
+                           min(28, D * 0.5))
+                B.Text(S, f"Point{I + 1}", Item, Lx + EDGE + 2 * Pad + D, Ty + 8, Tw, Ht - 16, Size, TEXT,
+                       Anchor=MSO_ANCHOR.MIDDLE)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.BulletGrid")
             return
 
     def Compare(self, S, Sl):
@@ -2287,6 +2386,8 @@ class kSlidePatterns:
             if not any(E.get("date") for E in Ev):  # undated sequential stages: numbered badges on the rail
                 self.Stages(S, Sl)
                 return
+            if self.TimelineInRow(S, Sl):  # dates above the rail, every label below it, all on one line
+                return
             Ry = (BODY_TOP + BODY_BOTTOM) / 2 + 10
             Step = (W - 2 * M) / N
             Lw = min(2 * Step - 32, 440) if N > 2 else Step - 32  # neighbours sit on the other side of the rail
@@ -2326,6 +2427,8 @@ class kSlidePatterns:
             return
         try:
             B = self._b
+            if self.StagesInRow(S, Sl):  # every label below its badge, aligned, when they fit one column each
+                return
             Ev = Sl["events"]
             N = len(Ev)
             Ry = (BODY_TOP + BODY_BOTTOM) / 2 + 10
@@ -2352,6 +2455,113 @@ class kSlidePatterns:
                            Align=PP_ALIGN.CENTER)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Stages")
+            return
+
+    def RowLabels(self, Labels, Wd, Room, Size=40, Hi=None):
+        """The size every label fits in one column of width Wd and height Room (label Hi measured bold), and the
+        tallest label's height at it; (0, 0) when a label would need more than three lines or drop below 32 pt -
+        then the row alternates."""
+        if kS.ErrorMode:
+            return 0, 0
+        try:
+            B = self._b
+            Three = (0, 0)
+            if Wd < 160:  # a column this narrow breaks words: alternate above and below instead
+                return Three
+            # measured with Need, not Fit: a failed try must not report unfit text - the alternating row follows
+            Words = [(Word, I == Hi) for I, X in enumerate(Labels) for Word in X.split()]
+            for Try in range(int(Size), 31, -2):  # two even lines at a smaller size read better than three
+                if max(B.LineWidth(Word, Try, False, Bold) for Word, Bold in Words) > (Wd - 4) * B._kx:
+                    continue  # a word wider than the column would break mid-word
+                Th = max(B.Need(X, Try, Wd, Bold=I == Hi) for I, X in enumerate(Labels))
+                if Th <= 2.5 * Try * LINE_HEIGHT:
+                    return Try, Th
+                if not Three[0] and Th <= min(Room, 3.5 * Try * LINE_HEIGHT):  # 3 lines + box insets
+                    Three = (Try, Th)
+            return Three
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.RowLabels")
+            return 0, 0
+
+    def TimelineInRow(self, S, Sl):
+        """A dated timeline with every date above the rail and every label below it, one column per event, the
+        block centred in the body. False (nothing drawn) when a label needs more than three lines at 32 pt."""
+        if kS.ErrorMode:
+            return False
+        try:
+            B = self._b
+            Ev = Sl["events"]
+            N, Hi = len(Ev), Sl.get("highlight")
+            Step = (W - 2 * M) / N
+            Wd, BodyH = Step - 24, BODY_BOTTOM - BODY_TOP - 10
+            if Wd - 2 * ROW_PAD < 160:  # six or seven events: too narrow for a column each - alternate instead
+                return False
+            Ds = B.FitAll([str(E["date"]) for E in Ev], 54, Wd, 70, Heading=True, Bold=True)
+            Dh = max(B.Need(str(E["date"]), Ds, Wd, Heading=True) for E in Ev)
+            Ls, Lh = self.RowLabels([str(E["label"]) for E in Ev], Wd - 2 * ROW_PAD, BodyH - Dh - 60 - 20 - 2 *
+                                    ROW_PAD - EDGE, 40, Hi)
+            if not Ls:
+                return False
+            Ch = max(Lh + 2 * ROW_PAD + EDGE, ROW_CARD)
+            Ry = BODY_TOP + 10 + (BodyH - (Dh + 60 + Ch)) / 2 + Dh + 30
+            B.Rect(S, "Rail", M, Ry - 4, W - 2 * M, 8, QUIET)
+            for I, E in enumerate(Ev):
+                Cx = M + Step * I + Step / 2
+                On = I == Hi or Hi is None
+                D = 48 if I == Hi else 32
+                B.Rect(S, f"Dot{I + 1}", Cx - D / 2, Ry - D / 2, D, D, ACCENT if On else MUTED, MSO_SHAPE.OVAL)
+                B.Text(S, f"Date{I + 1}", str(E["date"]), Cx - Wd / 2, Ry - 30 - Dh, Wd, Dh, Ds, ACCENT, Bold=True,
+                       Align=PP_ALIGN.CENTER, Anchor=MSO_ANCHOR.BOTTOM, Heading=True)
+            self.LabelCards(S, Ev, Hi, Step, Ry + 30, Ch, Ls)
+            return True
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.TimelineInRow")
+            return False
+
+    def StagesInRow(self, S, Sl):
+        """Undated stages with every label below its numbered badge, one column each, top-aligned so the row
+        reads level; False (nothing drawn) when a label needs more than three lines at 32 pt."""
+        if kS.ErrorMode:
+            return False
+        try:
+            B = self._b
+            Ev = Sl["events"]
+            N, Hi = len(Ev), Sl.get("highlight")
+            Step = (W - 2 * M) / N
+            Wd, BodyH, D = Step - 24, BODY_BOTTOM - BODY_TOP - 10, 88
+            Ls, Lh = self.RowLabels([str(E["label"]) for E in Ev], Wd - 2 * ROW_PAD, BodyH - D - 24 - 20 - 2 *
+                                    ROW_PAD - EDGE, 44, Hi)
+            if not Ls:
+                return False
+            Ch = max(Lh + 2 * ROW_PAD + EDGE, ROW_CARD)
+            Ry = BODY_TOP + 10 + (BodyH - (D + 24 + Ch)) / 2 + D / 2
+            B.Rect(S, "Rail", M, Ry - 4, W - 2 * M, 8, QUIET)
+            for I, E in enumerate(Ev):
+                Cx = M + Step * I + Step / 2
+                On = I == Hi or Hi is None
+                self.Badge(S, f"Stage{I + 1}", str(I + 1), Cx - D / 2, Ry - D / 2, D, ACCENT if On else MUTED, BG, 40)
+            self.LabelCards(S, Ev, Hi, Step, Ry + D / 2 + 24, Ch, Ls)
+            return True
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.StagesInRow")
+            return False
+
+    def LabelCards(self, S, Ev, Hi, Step, Top, Ch, Ls):
+        """One tinted card per event under the rail, all the same height and top so the row reads level; the
+        highlighted event's card keeps the accent edge (the others a soft one) and its label goes bold."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            Wd = Step - 24
+            for I, E in enumerate(Ev):
+                Lx = M + Step * I + 12
+                B.Card(S, f"EventCard{I + 1}", Lx, Top, Wd, Ch, False, "top", EdgeOn=Hi is None or I == Hi)
+                B.Text(S, f"Event{I + 1}", str(E["label"]), Lx + ROW_PAD, Top + EDGE + ROW_PAD, Wd - 2 * ROW_PAD,
+                       Ch - EDGE - 2 * ROW_PAD, Ls, TEXT, Bold=I == Hi, Align=PP_ALIGN.CENTER,
+                       Anchor=MSO_ANCHOR.MIDDLE)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.LabelCards")
             return
 
     def Quote(self, S, Sl):
@@ -2463,6 +2673,8 @@ class kSlidePatterns:
         try:
             B = self._b
             B.Title(S, Sl["title"])
+            if self.ChartWithLead(S, Sl):  # a short caption leads above a full-width chart
+                return
             HasSide = bool(Sl.get("caption"))
             Cw = W - 2 * M - (420 if HasSide else 0)
             self.DrawChart(S, Sl, M, BODY_TOP, Cw, BODY_BOTTOM - BODY_TOP)
@@ -2476,6 +2688,32 @@ class kSlidePatterns:
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Chart")
             return
+
+    def ChartWithLead(self, S, Sl):
+        """A caption that fits two lines across the slide sits above the chart on an accent rule, and the chart
+        takes the full width below it - no side column leaving the chart small in white space. False (nothing
+        drawn) for a longer caption, which keeps the side column."""
+        if kS.ErrorMode:
+            return False
+        try:
+            B = self._b
+            Cap = str(Sl.get("caption") or "")
+            if not Cap:
+                return False
+            Inset = EDGE + 24
+            Tw = W - 2 * M - Inset
+            Size = B.Fit([Cap], 34, Tw, 200)
+            Ht = B.Need(Cap, Size, Tw)
+            if Size < 30 or Ht > 2.2 * Size * LINE_HEIGHT:
+                return False
+            B.Rect(S, "NoteRule", M, BODY_TOP, EDGE, Ht, ACCENT)
+            B.Text(S, "ChartNote", Cap, M + Inset, BODY_TOP, Tw, Ht, Size, TEXT, Anchor=MSO_ANCHOR.MIDDLE)
+            Top = BODY_TOP + Ht + GAP
+            self.DrawChart(S, Sl, M, Top, W - 2 * M, BODY_BOTTOM - Top)
+            return True
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.ChartWithLead")
+            return False
 
     def KpiChart(self, S, Sl):
         if kS.ErrorMode:
@@ -3571,10 +3809,10 @@ class kBuildDeckApp:
         if kS.ErrorMode:
             return
         try:
-            if not (shutil.which("soffice") and shutil.which("pdftoppm")):
-                return
             from contact_sheet import kContactSheet
             from render_lo import kLoRenderer
+            if not kLoRenderer.Available():
+                return
             Dir = os.path.splitext(Out)[0] + "-render"
             Files = kLoRenderer.Render(Out, Dir)
             if Files:

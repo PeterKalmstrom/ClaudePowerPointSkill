@@ -44,6 +44,26 @@ A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 P_NS = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
 
 # A tiny app for the error-handler checks: Run calls a method that fails, then one that writes a marker file.
+LIVE_DECISIONS_SCRIPT = '''import json, sys
+from types import SimpleNamespace
+sys.path.insert(0, {McpApp!r})
+import server
+Fix = server.kLintBridge.IsFixable
+Chart, Table, Picture = (SimpleNamespace(HasChart=-1, HasTable=0), SimpleNamespace(HasChart=0, HasTable=-1),
+                         SimpleNamespace(HasChart=0, HasTable=0))
+print(json.dumps({{
+    "picture": Fix("a11y_missing_alt_text", "Picture 3", Picture),
+    "chart": Fix("a11y_missing_alt_text", "Chart 2", Chart),
+    "table": Fix("a11y_missing_alt_text", "Table 4", Table),
+    "not_found": Fix("a11y_missing_alt_text", "Gone", None),
+    "stretched": Fix("picture_stretched", "Picture 3", None),
+    "no_shape": Fix("unused_placeholder", "", None),
+    "unknown": Fix("made_up_code", "Picture 3", Picture),
+    "running": server.kPowerPointLive.IsRegistered(object),
+    "quit": server.kPowerPointLive.IsRegistered(type(None)),
+    "halted": server.kS.ErrorMode}}))
+'''
+
 HALT_SCRIPT = '''import sys
 sys.path.insert(0, {Scripts!r})
 from kShared import kRun, kS
@@ -467,6 +487,16 @@ class kSelfTest:
             Plain = " ".join(str(Text).replace(" ", " ").split())
             self.Check("figures: {change|abs} drops the sign", Plain == "up 44 %, +44 %" and not Errs,
                        f"{Text} {Errs}")
+            from build_deck import kSlidePatterns
+            Mail = {"pattern": "email", "callouts": [{"target": "body", "line": 2, "note": "c"},
+                                                     {"target": "subject", "note": "b"},
+                                                     {"target": "body", "line": 0, "note": "x"},
+                                                     {"target": "from", "note": "a"}]}
+            Order = "".join(C["note"] for C in kSlidePatterns.ReadingOrder(Mail["callouts"]))
+            Told = kSlidePatterns.ExtraNotes(Mail)
+            self.Check("email: callouts numbered in reading order (markers and notes)",
+                       Order == "abxc" and Told.index("1. a") < Told.index("2. b") < Told.index("4. c"),
+                       f"{Order} {Told}")
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckBasics")
             return
@@ -1917,6 +1947,32 @@ class kSelfTest:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckThemeAndRenders")
             return
 
+    def CheckLiveDecisions(self):
+        """PowerPoint Live decisions with fake shapes, no PowerPoint: Fix only for chart/table alt text, and
+        'PowerPoint was quit' when no PowerPoint is registered for automation."""
+        if kS.ErrorMode:
+            return
+        try:
+            if importlib.util.find_spec("mcp") is None:
+                print("(skipped the PowerPoint Live decision checks: the mcp package is not installed)")
+                return
+            Script = os.path.join(self.Tmp, "live_decisions.py")
+            with open(Script, "w", encoding="utf-8") as File:
+                File.write(LIVE_DECISIONS_SCRIPT.format(McpApp=os.path.join(os.path.dirname(HERE), "mcp-app")))
+            Code, Out, Err = self.RunCommand([sys.executable, Script])
+            Got = json.loads(Out.strip().splitlines()[-1]) if Code == 0 and Out.strip() else {}
+            Want = {"picture": False, "chart": True, "table": True, "not_found": False, "stretched": True,
+                    "no_shape": False, "unknown": False, "running": True, "quit": False, "halted": False}
+            self.Check("live: missing alt text is fixable only on a chart or a table",
+                       all(Got.get(K) == Want[K] for K in ("picture", "chart", "table", "not_found", "stretched",
+                                                            "no_shape", "unknown")), f"exit {Code}: {Got} {Err[-300:]}")
+            self.Check("live: no registered PowerPoint means the code quit it",
+                       Got.get("running") is True and Got.get("quit") is False and Got.get("halted") is False,
+                       f"exit {Code}: {Got} {Err[-300:]}")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckLiveDecisions")
+            return
+
     def CheckErrorPattern(self):
         """The pattern audit passes, a reported error halts and exits 1, an expected state exits with its code."""
         if kS.ErrorMode:
@@ -1934,6 +1990,8 @@ class kSelfTest:
             self.Check("error handler: a reported error halts and exits 1",
                        Code == 1 and "ERROR in" in Err and "ZeroDivisionError" in Err and not os.path.exists(Marker),
                        f"exit {Code}, marker {'written' if os.path.exists(Marker) else 'absent'}: {Err[-400:]}")
+
+            self.CheckLiveDecisions()
 
             ExpectedScript = os.path.join(self.Tmp, "expected_app.py")
             with open(ExpectedScript, "w", encoding="utf-8") as File:

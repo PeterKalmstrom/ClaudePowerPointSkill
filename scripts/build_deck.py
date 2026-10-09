@@ -1693,6 +1693,32 @@ class kSlidePatterns:
             kS.GlobalErrorHandler(e, "kSlidePatterns.__init__")
 
     @staticmethod
+    def ReadingOrder(Calls):
+        """An email's callouts in the order the eye meets their targets (from, to, subject, attachment, body
+        lines top to bottom), so marker 1 is the first red flag read and the explanation list follows suit."""
+        if kS.ErrorMode:
+            return []
+        try:
+            return sorted([C for C in Calls if isinstance(C, dict)], key=kSlidePatterns.ReadingRank)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.ReadingOrder")
+            return []
+
+    @staticmethod
+    def ReadingRank(Call):
+        """Where a callout's target sits on the drawn email: (field rank, body line)."""
+        if kS.ErrorMode:
+            return (0, 0)
+        try:
+            Rank = {"from": 0, "to": 1, "subject": 2, "attachment": 3, "body": 4}
+            Target = Call.get("target", "body")
+            Line = Call.get("line", 0) if Target == "body" else 0
+            return (Rank.get(Target, 4), Line if isinstance(Line, int) else 0)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.ReadingRank")
+            return (0, 0)
+
+    @staticmethod
     def ExtraNotes(Sl):
         """Notes the pattern adds after the spec's own: an email's callouts, a quiz's answer."""
         if kS.ErrorMode:
@@ -1701,7 +1727,7 @@ class kSlidePatterns:
             Pat = Sl.get("pattern")
             if Pat == "email" and Sl.get("callouts"):
                 return "CALLOUTS:\n" + "\n".join(f"{I}. {C.get('note', '')} ({C.get('target', 'body')})"
-                                                 for I, C in enumerate(Sl["callouts"], 1))
+                                                 for I, C in enumerate(kSlidePatterns.ReadingOrder(Sl["callouts"]), 1))
             if Pat == "quiz":
                 Right = [f"{'ABCD'[I]}: {O.get('text', '')}" for I, O in enumerate(Sl["options"]) if O.get("correct")]
                 return "ANSWER: " + "; ".join(Right) + (f"\nWHY: {Sl['explain']}" if Sl.get("explain") else "")
@@ -2764,7 +2790,7 @@ class kSlidePatterns:
         try:
             B = self._b
             B.Title(S, Sl["title"])
-            Calls = Sl.get("callouts", [])
+            Calls = self.ReadingOrder(Sl.get("callouts", []))
             Ew = 900 if Calls else W - 2 * M
             Lx, Ty, Eh = M, BODY_TOP - 16, BODY_BOTTOM - BODY_TOP + 16
             Keys = [(C.get("target", "body"), C.get("line", 0) if C.get("target", "body") == "body" else 0)

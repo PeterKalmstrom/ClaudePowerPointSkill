@@ -2,7 +2,15 @@
 
 ## Unreleased
 
+- **PowerPoint Live: no Fix button for a picture's alt text.** `deck_lint` marks `a11y_missing_alt_text` fixable
+  only on a chart or a table (`kLintBridge.IsFixable`); a picture offers only Ask Claude. Any change now re-lints,
+  so a fixed alt text no longer stays listed from the cache.
+- **PowerPoint Live: code that quits PowerPoint.** `powerpoint_run` with `app.Quit()` returns `deck_closed: true`
+  (plus `app_quit: true`), drops every reference so PowerPoint exits, and the next call says "no deck is open"
+  without starting PowerPoint again (`kPowerPointLive.IsRunning`, `Quitted`).
 - **Rough edges from benchmark round 6:**
+  - *Email callouts in reading order*: markers, explanation list and notes are numbered from, to, subject,
+    attachment, then body lines top to bottom, whatever order the spec lists them in (`kSlidePatterns.ReadingOrder`).
   - *One word count*: `--plan` and lint count visible words the same way (`kRules.WordCount`: tokens with a letter
     or digit); `--check` counts a built slide's words from its spec, as `--plan` does.
   - *Measurable targets*: a time window alone ("<= last 6 months", "by Q3") is not a target; a number needs a unit,

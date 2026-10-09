@@ -31,6 +31,7 @@ While halted every tool answers "PowerPoint Live halted ..." until a person pres
 import asyncio
 import base64
 import contextlib
+import gc
 import io
 import os
 import re
@@ -377,6 +378,8 @@ class kRunMutation(kMutation):
                     exec(compile(self.Code, "<powerpoint_run>", "exec"), Scope)
                 except Exception:  # ERROR-SUPPRESSED-JUSTIFIED: the user's code failing is the tool's result, reported back to Claude
                     self.Error = traceback.format_exc(limit=3)
+            Scope.clear()  # the code's own COM references go now, so a PowerPoint it quit can exit
+            self.Prs = None
             return {}
         except kToolException:
             raise
@@ -817,11 +820,12 @@ class kLintBridge:
             _, Findings = kLintDeck.Lint(Copy, 18.0, 12)
             Out = []
             for I in Findings.Items:
-                Item = {**I, "fixable": I["code"] in FIXABLE and bool(I["shape"]), "slide_id": None, "box": None}
+                Item = {**I, "fixable": self.IsFixable(I["code"], I["shape"], None), "slide_id": None, "box": None}
                 if I["slide"]:
                     Slide = Prs.Slides(I["slide"])
                     Item["slide_id"] = Slide.SlideID
                     Shape = Live.FindShape(Slide, I["shape"], I.get("shape_id")) if I["shape"] else None
+                    Item["fixable"] = self.IsFixable(I["code"], I["shape"], Shape)
                     if Shape is not None:
                         Item["shape_id"] = Shape.Id
                         Item["box"] = [round(Shape.Left, 1), round(Shape.Top, 1), round(Shape.Width, 1),
@@ -838,6 +842,22 @@ class kLintBridge:
         except Exception as e:
             kS.GlobalErrorHandler(e, "kLintBridge.Lint")
             return None
+
+    @staticmethod
+    def IsFixable(Code, ShapeName, Shape):
+        """Whether the view may offer Fix: a fixable code on a named shape. Missing alt text is fixable only on a
+        chart or a table (Shape is the PowerPoint shape, or None when it was not found)."""
+        if kS.ErrorMode:
+            return False
+        try:
+            if Code not in FIXABLE or not ShapeName:
+                return False
+            if Code == "a11y_missing_alt_text":
+                return Shape is not None and bool(Shape.HasChart or Shape.HasTable)
+            return True
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kLintBridge.IsFixable")
+            return False
 
     def FloorPt(self):
         """The body-text floor of the last lint, or 18 pt scaled to the slide width."""
@@ -1668,6 +1688,8 @@ class kPowerPointLive:
         if kS.ErrorMode:
             return None
         try:
+            if not self.PrsName and not self.IsRunning():  # do not start PowerPoint only to say nothing is open
+                raise ToolReportableException("no deck is open - call powerpoint_open with a path")
             App = self.App()
             if self.PrsName:
                 for P in App.Presentations:
@@ -1683,6 +1705,62 @@ class kPowerPointLive:
             raise
         except Exception as e:
             kS.GlobalErrorHandler(e, "kPowerPointLive.Prs")
+            return None
+
+    @staticmethod
+    def IsRegistered(GetActive):
+        """True when GetActive() finds a PowerPoint registered for automation (it returns None otherwise).
+        PowerPoint revokes that registration as it quits, so False means it is gone or going."""
+        if kS.ErrorMode:
+            return True
+        try:
+            return GetActive() is not None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPowerPointLive.IsRegistered")
+            return True
+
+    def ActivePowerPoint(self):
+        """The running PowerPoint from the running-object table, or None when none is registered."""
+        if kS.ErrorMode:
+            return None
+        try:
+            import pythoncom
+            try:
+                return pythoncom.GetActiveObject("PowerPoint.Application")
+            except pythoncom.com_error:  # ERROR-SUPPRESSED-JUSTIFIED: "operation unavailable" is how COM says PowerPoint is not running - the answer, not a failure
+                return None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPowerPointLive.ActivePowerPoint")
+            return None
+
+    def IsRunning(self):
+        """Whether PowerPoint is still running, without starting it (Dispatch would start a new one)."""
+        if kS.ErrorMode:
+            return True
+        try:
+            if sys.platform != "win32":
+                return True
+            return self.IsRegistered(self.ActivePowerPoint)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPowerPointLive.IsRunning")
+            return True
+
+    def Quitted(self, Result):
+        """The closed-deck result after code quit PowerPoint; every reference we held to it is dropped."""
+        if kS.ErrorMode:
+            return None
+        try:
+            self.PrsName = None
+            self.Current = 1
+            self.Tracker.Clear()
+            self.Lint.Key = self.Lint.Result = None
+            gc.collect()  # releases COM proxies left in reference cycles so PowerPoint can finish quitting
+            self.Version += 1
+            return {**(Result or {}), "deck_closed": True, "app_quit": True, "slide": 0, "count": 0,
+                    "version": self.Version,
+                    "note": "PowerPoint was quit by this change. Call powerpoint_open to start it and open a deck."}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPowerPointLive.Quitted")
             return None
 
     def OpenNames(self):
@@ -1807,6 +1885,10 @@ class kPowerPointLive:
             Before = {Prs.Slides(I).SlideID: Tracker.ShapeMap(Prs.Slides(I)) for I in range(1, Prs.Slides.Count + 1)}
             OpenBefore = self.OpenNames()
             Result = Mutation.Apply(Prs)
+            Prs = None
+            self.Lint.Key = None  # a change the slide signature cannot see (alt text, notes) must still re-lint
+            if not self.IsRunning():  # the change quit PowerPoint: let go of it, never start it again here
+                return self.Quitted(Result)
             Prs = self.Rebind(OpenBefore)
             if Prs is None:  # the change itself closed the deck: a defined outcome, not an error
                 self.Version += 1

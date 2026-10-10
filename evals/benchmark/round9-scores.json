@@ -1,0 +1,116 @@
+{
+ "P": {
+  "qbr": {
+   "message": 8,
+   "design": 8,
+   "legibility": 7,
+   "layout": 7,
+   "data": 9,
+   "notes": 2,
+   "comment": "Strong action titles and correct charts (s3 bars, s5 churn, full-year 19.8 and +58% check out); s3/s5 titles wrap awkwardly and only s1 has notes."
+  },
+  "phishing": {
+   "message": 8,
+   "design": 8,
+   "legibility": 6,
+   "layout": 8,
+   "data": 7,
+   "notes": 2,
+   "comment": "Friendly, complete coverage with a well-annotated email (s4) and process flow (s6); card body text on s3/s5 is small, quiz answers are printed on s7 spoiling it, '9 in 10' is an unsourced claim, notes only on s1 and s7."
+  },
+  "fourday": {
+   "message": 9,
+   "design": 8,
+   "legibility": 6,
+   "layout": 8,
+   "data": 9,
+   "notes": 2,
+   "comment": "Best-argued board case: 32h design (s3), milestones with board touchpoints (s4), measurable targets (s5), cost table plus donut summing to 200 (s7); body text small on s3/s6, notes empty."
+  },
+  "mean": {
+   "message": 8.33,
+   "design": 8.0,
+   "legibility": 6.33,
+   "layout": 7.67,
+   "data": 8.33,
+   "notes": 2.0,
+   "overall": 6.78
+  }
+ },
+ "Q": {
+  "qbr": {
+   "message": 8,
+   "design": 8,
+   "legibility": 9,
+   "layout": 8,
+   "data": 9,
+   "notes": 9,
+   "comment": "Large type, highlighted bar charts (s3, s5), risk ratings (s6) and a 14/20 dot visual (s7); decision slide s8 has owner/date, notes are full and flag assumptions though the ask lacks a cost figure."
+  },
+  "phishing": {
+   "message": 9,
+   "design": 8,
+   "legibility": 9,
+   "layout": 8,
+   "data": 8,
+   "notes": 9,
+   "comment": "Very legible, quiz with separate reveal (s7-s8), annotated email (s4) and closing action (s9); slightly bullet-like s3 and fewer example scenarios, notes excellent."
+  },
+  "fourday": {
+   "message": 8,
+   "design": 9,
+   "legibility": 9,
+   "layout": 8,
+   "data": 9,
+   "notes": 9,
+   "comment": "Polished navy/gold system, 41-of-100 dot grid (s2), clear timeline (s4), cost table with total (s7) and decision block (s8); design detail is thinner than other makers (s3), notes thorough."
+  },
+  "mean": {
+   "message": 8.33,
+   "design": 8.33,
+   "legibility": 9.0,
+   "layout": 8.0,
+   "data": 8.67,
+   "notes": 9.0,
+   "overall": 8.55
+  }
+ },
+ "R": {
+  "qbr": {
+   "message": 8,
+   "design": 6,
+   "legibility": 6,
+   "layout": 6,
+   "data": 9,
+   "notes": 1,
+   "comment": "Most complete story (problem/effect/fix s8, run-rate and QoQ growth on s3 all correct, hiring bar s7); KPI wraps on s2, small text and empty cards on s6/s8, no notes."
+  },
+  "phishing": {
+   "message": 7,
+   "design": 5,
+   "legibility": 5,
+   "layout": 5,
+   "data": 7,
+   "notes": 3,
+   "comment": "Covers the brief with a good annotated email (s4); cards on s3/s5/s7 are mostly empty with tiny text, quiz slide s7 is bare, notes only on s1 and s7."
+  },
+  "fourday": {
+   "message": 8,
+   "design": 6,
+   "legibility": 6,
+   "layout": 6,
+   "data": 8,
+   "notes": 2,
+   "comment": "Sound content incl. 5 kSEK per engineer (s7) and March stop review; tables and cards use small type with large empty areas (s3, s6, s8), notes mostly absent."
+  },
+  "mean": {
+   "message": 7.67,
+   "design": 5.67,
+   "legibility": 5.67,
+   "layout": 5.67,
+   "data": 8.0,
+   "notes": 2.0,
+   "overall": 5.78
+  }
+ }
+}

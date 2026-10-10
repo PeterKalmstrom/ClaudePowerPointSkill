@@ -11,7 +11,46 @@ All 27 slides per maker were rendered with LibreOffice and scored **blind** by a
 only anonymous labels (keys: `round*-key.json`), on six criteria from 1 to 10: message, visual design, legibility,
 layout correctness, data presentation, presenter support (speaker notes).
 
-## Round 8 - round 7's method, makers can see LibreOffice renders (current)
+## Round 9 - spoken-script notes, every category label, duplicate-chart warning (current)
+
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
+|---|---|---|---|---|---|---|---|---|
+| **This skill** | 8.3 | 8.3 | 9.0 | 8.0 | 8.7 | 9.0 | **8.55** | 246 s / 100k / 16 |
+| Anthropic pptx skill | 8.3 | 8.0 | 6.3 | 7.7 | 8.3 | 2.0 | 6.78 | 175 s / 86k / 9 |
+| Plain Claude | 7.7 | 5.7 | 5.7 | 5.7 | 8.0 | 2.0 | 5.78 | 168 s / 76k / 7 |
+
+**What changed in the skill since round 8:** speaker notes are a spoken script (`notes.say`) plus a short
+presenter-only reference; every chart category label shows; a warning flags two slides that chart the same data.
+The other two makers did not change, but all three were rebuilt fresh, in parallel, under the same conditions.
+
+**Method:** round 8's method repeated - same briefs, one unattended agent per maker run in parallel, slides rendered
+in real PowerPoint (`render_slides.py`) into contact sheets, slide text and notes extracted to text, one separate
+blind judge with new labels (P/Q/R, `round9-key.json`) on the six criteria. The exact maker and judge prompts are
+saved in `_scratch/bench9/prompts/` for reuse. One difference from round 8: the plain and pptx-skill makers reported
+they could not find LibreOffice (not on PATH), so neither looked at its own slides; this skill's maker rendered
+through its own `render_lo.py` and did. The judge said it worked mostly from the contact sheets plus the text files,
+opening only a few single slides.
+Lint (this skill's own, not neutral): this skill 0 errors / 0 warnings on all three decks; plain Claude 7-9 errors
+per deck; pptx skill 1-2.
+
+Judge, in short: this skill - full notes on every deck that a presenter can deliver, with assumptions marked; the
+largest type; charts that highlight the key value; data visuals (41-in-100 dot grid, 14/20 hiring dots); decisions
+with owner and date; a separate quiz-answer slide; all figures right. Weaknesses: a few near-bullet slides (phishing
+s3, four-day s3) and no cost figure on the QBR ask. Best deck: phishing. pptx skill - the strongest storytelling and
+polish (four-day deck with a cost donut summing to 200 kSEK was its best), but notes almost absent, small card text,
+awkward title wraps, quiz answers printed on the quiz slide and an unsourced "9 in 10 attacks". Plain Claude - sound
+content and correct extra arithmetic (run-rate, 5 kSEK per engineer), but tiny text in mostly empty cards, a KPI
+that wraps in its tile, plain design and almost no notes.
+
+**Compared with round 8.** Notes, the round-8 weakness, went from 6.0 to 9.0: the judge called them "full",
+"excellent" and "thorough" instead of round 8's "templated KEY FACT/ASSUMPTIONS blocks rather than a talk track". The
+round-8 QBR complaints (chart missing Q2/Q3 labels, slide 2 repeating slides 3 and 5) did not come back. Legibility
+rose 8.0 -> 9.0; message and data dipped slightly (9.0 -> 8.3, 9.0 -> 8.7), within judge noise. Overall 8.11 -> 8.55,
+the highest since round 6. The pptx skill fell 7.44 -> 6.78, almost all from notes (6.3 -> 2.0: this run wrote notes
+on two slides per deck); plain Claude rose 5.17 -> 5.78. This skill's agent was faster than in round 8 (328 s / 21
+calls -> 246 s / 16).
+
+## Round 8 - round 7's method, makers can see LibreOffice renders
 
 | Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
 |---|---|---|---|---|---|---|---|---|
@@ -171,6 +210,7 @@ per deck (round 5) - the scripts are not the bottleneck, the number of loops is.
 | 6 | 124 s / 73k / 9 | 159 s / 90k / 12 | 131 s / 91k / 13 |
 | 7 | 162 s / 75k / 3 | 189 s / 84k / 6 | 212 s / 100k / 11 |
 | 8 | 68 s / 64k / 3 | 279 s / 94k / 12 | 328 s / 97k / 21 |
+| 9 | 168 s / 76k / 7 | 175 s / 86k / 9 | 246 s / 100k / 16 |
 
 **Reading it.** As the skill gained checks (rounds 2-5) its quality rose from 5.44 to 8.56, but the agent needed
 more loops: each check found one class of problem per build, so it built, rendered, fixed one thing and built

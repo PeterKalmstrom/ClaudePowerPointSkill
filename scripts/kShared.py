@@ -462,6 +462,8 @@ class kRun:
         kS.InstallUnhandledExceptionCapture()
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8")  # warnings quote slide text ('44 %'); callers read UTF-8
         Code = 0
         try:
             Code = AppClass().Run() or 0

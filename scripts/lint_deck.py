@@ -27,7 +27,7 @@ from pptx.util import Emu
 
 from kShared import ToolReportableException, kRun, kS, kToolException
 from _rules import (CARTOON_HOSTS, DEFAULT_FACES, INSIGHT_WORDS, OFFICE_DEFAULT_SERIES, ORDINAL_RE,
-                    STOCK_HOSTS, STOP_WORDS, kRules)
+                    SCRIPT_MIN_WORDS, STOCK_HOSTS, STOP_WORDS, kRules)
 from _theme import kTheme
 from _measure import kMeasure
 from _figures import kFigures
@@ -693,6 +693,10 @@ class kLintDeck:
             Notes = Slide.notes_slide.notes_text_frame.text if Slide.has_notes_slide else ""
             if not Notes.strip():
                 F.Add(N, "info", "missing_notes", "No speaker notes.")
+            elif kRules.ScriptWords(Notes) < SCRIPT_MIN_WORDS:
+                F.Add(N, "info", "notes_no_script", "The notes have no spoken script (under "
+                      f"{SCRIPT_MIN_WORDS} words of prose before any labelled block); open them with 2-5 sentences "
+                      "the presenter says, the point first and figures with their source in-line.")
             Shown = " ".join(X.text_frame.text for X in Shapes if X.has_text_frame) + " " + " ".join(
                 C.text for X in Shapes if getattr(X, "has_table", False) and X.has_table for C in X.table.iter_cells())
             HasChart = any(getattr(X, "has_chart", False) and X.has_chart for X in Shapes)

@@ -111,7 +111,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -120,8 +120,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -134,7 +149,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -174,7 +190,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -251,7 +267,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -260,8 +276,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -274,7 +305,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -314,7 +346,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -391,7 +423,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -400,8 +432,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -414,7 +461,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -454,7 +502,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -625,7 +673,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -634,8 +682,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -648,7 +711,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -688,7 +752,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -800,7 +864,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -809,8 +873,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -823,7 +902,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -863,7 +943,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -1014,7 +1094,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1023,8 +1103,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -1037,7 +1132,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -1077,7 +1173,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -1163,7 +1259,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1172,8 +1268,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -1186,7 +1297,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -1226,7 +1338,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -1335,7 +1447,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1344,8 +1456,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -1358,7 +1485,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -1398,7 +1526,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -1501,7 +1629,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1510,8 +1638,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -1524,7 +1667,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -1564,7 +1708,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -1674,7 +1818,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1683,8 +1827,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -1697,7 +1856,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -1737,7 +1897,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -1828,7 +1988,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -1837,8 +1997,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -1851,7 +2026,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -1891,7 +2067,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -2036,7 +2212,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2045,8 +2221,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -2059,7 +2250,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -2099,7 +2291,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -2206,7 +2398,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2215,8 +2407,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -2229,7 +2436,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -2269,7 +2477,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -2365,7 +2573,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2374,8 +2582,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -2388,7 +2611,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -2428,7 +2652,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -2545,7 +2769,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2554,8 +2778,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -2568,7 +2807,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -2608,7 +2848,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -2755,7 +2995,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -2764,8 +3004,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -2778,7 +3033,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -2818,7 +3074,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -3026,7 +3282,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -3035,8 +3291,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -3049,7 +3320,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -3089,7 +3361,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -3217,7 +3489,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -3226,8 +3498,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -3240,7 +3527,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -3280,7 +3568,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -3395,7 +3683,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -3404,8 +3692,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -3418,7 +3721,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -3458,7 +3762,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -3576,7 +3880,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -3585,8 +3889,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -3599,7 +3918,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -3639,7 +3959,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [
@@ -3772,7 +4092,7 @@
                 "description": "Write it as a claim, not a topic."
               },
               "notes": {
-                "description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / qa (lists may be a single string; a Q&A item may be a string).",
+                "description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences the presenter says, figures with their source in-line) plus a short presenter-only reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the script when there is no 'say'. Lists may be a single string.",
                 "oneOf": [
                   {
                     "type": "string"
@@ -3781,8 +4101,23 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
+                      "say": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ],
+                        "description": "What the presenter says: 2-5 natural sentences that lead with the slide's point and work figures in with their source ('... according to the Q3 finance report'). Written first in the notes."
+                      },
                       "key_fact": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Older shape: the script's first sentence when there is no 'say' (and --plan's line for the slide)."
                       },
                       "facts": {
                         "oneOf": [
@@ -3795,7 +4130,8 @@
                               "type": "string"
                             }
                           }
-                        ]
+                        ],
+                        "description": "Older shape: further script sentences when there is no 'say'; with 'say' they go to the reference part as 'Figures:'."
                       },
                       "pitfalls": {
                         "oneOf": [
@@ -3835,7 +4171,7 @@
                             }
                           }
                         ],
-                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the notes under ASSUMPTIONS:."
+                        "description": "What the slide assumes beyond the brief (ratings, targets, dates, owners); written into the presenter reference as 'Assumed:'."
                       },
                       "qa": {
                         "oneOf": [

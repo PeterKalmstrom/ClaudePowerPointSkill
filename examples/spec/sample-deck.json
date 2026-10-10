@@ -11,7 +11,10 @@
       "title": "Q1 review: East leads, the rest holds",
       "subtitle": "Regional performance, January – March 2026",
       "notes": {
-        "key_fact": "One region outperformed; the others were steady."
+        "say": [
+          "This quarter one region pulled clearly ahead and the other three held steady.",
+          "I will show you what East did differently and ask you to fund the same playbook everywhere."
+        ]
       }
     },
     {
@@ -22,10 +25,9 @@
       "unit": "%",
       "caption": "East revenue vs Q4, constant currency",
       "notes": {
-        "key_fact": "East grew 8 % quarter on quarter.",
-        "facts": [
-          "Constant currency",
-          "One-offs excluded"
+        "say": [
+          "East grew 8 % on the previous quarter, faster than any other region, according to the April finance dashboard.",
+          "That is in constant currency with one-offs taken out, so it is real growth, not an exchange-rate effect."
         ],
         "qa": [
           {
@@ -68,7 +70,16 @@
       "highlight": "East",
       "number_format": "+0.0;-0.0",
       "caption": "North's dip is seasonal and repeats every Q1.",
-      "notes": "Sources: finance dashboard, April 2026."
+      "notes": {
+        "say": [
+          "Here is the same quarter region by region: East is up 8 %, South 3 %, West is flat and North is down 1.5 %.",
+          "North's dip is seasonal and repeats every first quarter.",
+          "The figures are from the April finance dashboard."
+        ],
+        "sources": [
+          "Finance dashboard, April 2026"
+        ]
+      }
     },
     {
       "id": "kpis",
@@ -100,9 +111,12 @@
       ],
       "highlight": 1,
       "notes": {
-        "key_fact": "Margin rose 1.5 points with flat operating costs.",
+        "say": [
+          "Margins rose 1.5 points this quarter while operating costs stayed flat, according to the April finance dashboard.",
+          "That is why I am asking for the partner budget now: growth is not costing us margin."
+        ],
         "facts": [
-          "KPI definitions in the appendix."
+          "KPI definitions in the appendix"
         ],
         "sources": [
           "Finance dashboard, April 2026"
@@ -132,7 +146,15 @@
         }
       ],
       "highlight": 0,
-      "notes": "Interviews with regional leads, March 2026."
+      "notes": {
+        "say": [
+          "When we interviewed the regional leads in March, East's approach stood out in two ways.",
+          "East sells through partners where the others sell direct, and it reviews its pipeline every week instead of every month."
+        ],
+        "sources": [
+          "Interviews with regional leads, March 2026"
+        ]
+      }
     },
     {
       "id": "rollout",
@@ -156,7 +178,12 @@
           "detail": "Same metrics"
         }
       ],
-      "notes": "Owner: sales operations."
+      "notes": {
+        "say": [
+          "Rolling the playbook out takes four steps, and sales operations owns all of them.",
+          "I will walk through them in order; the slide shows what each one hands over to the next."
+        ]
+      }
     },
     {
       "id": "plan",
@@ -181,7 +208,15 @@
         }
       ],
       "highlight": 3,
-      "notes": "Dates assume partner contracts by mid-May."
+      "notes": {
+        "say": [
+          "If we start now, every region runs the playbook by October.",
+          "The dates hold only if partner contracts are signed by mid-May, so that is the first thing I will track."
+        ],
+        "assumptions": [
+          "Dates assume partner contracts by mid-May"
+        ]
+      }
     },
     {
       "id": "options",
@@ -208,7 +243,18 @@
         }
       ],
       "highlight": 0,
-      "notes": "Scoring from the March workshop."
+      "notes": {
+        "say": [
+          "Of everything East tried, partners gave the most result for the least effort.",
+          "That ranking comes from the scoring we did together in the March workshop."
+        ],
+        "assumptions": [
+          "Effort and value scores are the workshop's judgement, not measured data"
+        ],
+        "sources": [
+          "March workshop scoring"
+        ]
+      }
     },
     {
       "id": "voice",
@@ -217,7 +263,15 @@
       "quote": "The weekly review is where the deals actually move.",
       "attribution": "Regional sales lead",
       "role": "East",
-      "notes": "Quote approved for internal use."
+      "notes": {
+        "say": [
+          "I will let the East team speak for themselves here.",
+          "Read the quote out, then pause before moving on - it is the best summary of why the playbook works."
+        ],
+        "sources": [
+          "Quote approved for internal use"
+        ]
+      }
     },
     {
       "id": "photo",
@@ -226,7 +280,15 @@
       "image": "skyline.jpg",
       "caption": "Illustration.",
       "alt": "Stylised city skyline at dusk.",
-      "notes": "Image: generated placeholder."
+      "notes": {
+        "say": [
+          "Most of East's growth came from the city centre.",
+          "The picture is an illustration, not a photo of our stores."
+        ],
+        "assumptions": [
+          "Image: generated placeholder"
+        ]
+      }
     },
     {
       "id": "numbers",
@@ -266,7 +328,10 @@
       ],
       "highlight_row": 0,
       "notes": {
-        "key_fact": "Only East beat its target.",
+        "say": [
+          "Only East beat its target this quarter, according to the 2026 plan and the April finance dashboard.",
+          "East finished 8 % over its target; the other three regions ended within 3 % of theirs."
+        ],
         "sources": [
           "2026 plan; finance dashboard, April 2026"
         ]
@@ -314,7 +379,10 @@
       ],
       "number_format": "0.0",
       "notes": {
-        "key_fact": "East's gap widened each month.",
+        "say": [
+          "East did not win on one good month: its lead over the other regions widened in every month of the quarter.",
+          "The monthly figures are from the April finance dashboard."
+        ],
         "sources": [
           "Finance dashboard, April 2026"
         ]
@@ -340,9 +408,12 @@
         }
       ],
       "notes": {
-        "key_fact": "Partner pace is the risk that matters.",
+        "say": [
+          "Two risks could stall the rollout, and partner pace is the one that matters most.",
+          "If partners sign slowly, every date on the timeline moves, so that is where mitigation effort goes first."
+        ],
         "assumptions": [
-          "Likelihood and impact ratings are the team's assessment, not data."
+          "Likelihood and impact ratings are the team's assessment, not data"
         ]
       }
     },
@@ -371,7 +442,10 @@
       ],
       "note": "Partner fees are paid only on closed deals.",
       "notes": {
-        "key_fact": "410 k in total, most of it paid only on results.",
+        "say": [
+          "The rollout costs 410 thousand this year in total, according to the April budget draft.",
+          "Most of that is paid only when partners deliver results, so the money at risk up front is small."
+        ],
         "sources": [
           "Budget draft v3, April 2026"
         ]
@@ -407,9 +481,12 @@
         }
       ],
       "notes": {
-        "key_fact": "Use this invite as the template for every region.",
-        "facts": [
-          "Names and addresses are examples."
+        "say": [
+          "This is the invite East sent to its partners, and I suggest every region uses it as the template.",
+          "It makes one clear ask; the names and addresses on the slide are examples, not real people."
+        ],
+        "assumptions": [
+          "Names and addresses are examples"
         ]
       }
     },
@@ -435,7 +512,10 @@
       ],
       "explain": "Only East: 12.4 M against a target of 11.5 M.",
       "notes": {
-        "key_fact": "Ask the room before revealing.",
+        "say": [
+          "Before I show the answer, which region do you think beat its target?",
+          "Take a few answers from the room, then reveal it."
+        ],
         "sources": [
           "Finance dashboard, April 2026"
         ]
@@ -450,7 +530,12 @@
         "Name an owner per region",
         "Agree the Q3 review date"
       ],
-      "notes": "Budget detail in the appendix."
+      "notes": {
+        "say": [
+          "That leaves three decisions for today.",
+          "The budget detail behind them is in the appendix if anyone wants to go through it."
+        ]
+      }
     },
     {
       "id": "success",
@@ -482,9 +567,12 @@
       ],
       "rule": "Stop rule: if partner deals stay under 20 % by July, we pause and review.",
       "notes": {
-        "key_fact": "Three targets with an owner and a date; one stop rule.",
+        "say": [
+          "We will call the rollout a success if we hit three targets, each with an owner and a date.",
+          "There is also one stop rule, so we know in advance when to pull back."
+        ],
         "pitfalls": [
-          "Example targets; set them with Finance."
+          "The targets are examples; set them with Finance before presenting them as agreed"
         ],
         "sources": [
           "Finance dashboard, April 2026"
@@ -519,7 +607,10 @@
         }
       ],
       "notes": {
-        "key_fact": "Each step has one owner and a date.",
+        "say": [
+          "Four steps take the playbook live by October, and each one has a single owner and a date.",
+          "These come from the April rollout plan."
+        ],
         "sources": [
           "Rollout plan, April 2026"
         ]
@@ -530,7 +621,11 @@
       "pattern": "section",
       "eyebrow": "Appendix",
       "title": "Detail and definitions",
-      "notes": "Appendix follows."
+      "notes": {
+        "say": [
+          "What follows is the detail and the definitions, for anyone who wants to check the numbers."
+        ]
+      }
     },
     {
       "id": "close",
@@ -538,7 +633,10 @@
       "title": "Copy what works in East, everywhere",
       "support": "East grew 8 % with partners and weekly reviews; the other regions can follow by October.",
       "notes": {
-        "key_fact": "Close on the one decision: the partner budget.",
+        "say": [
+          "So the ask is simple: copy what works in East, everywhere.",
+          "The one decision I need from you today is the partner budget."
+        ],
         "sources": [
           "Finance dashboard, April 2026"
         ]

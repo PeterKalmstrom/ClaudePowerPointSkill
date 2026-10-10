@@ -44,11 +44,12 @@ if HERE not in sys.path:
 
 from _figures import kFigures  # noqa: E402
 from _measure import LINE_HEIGHT, kMeasure  # noqa: E402  (the skill's own helpers sit beside this script)
-from _rules import kRules  # noqa: E402
+from _rules import NOTES_DIVIDER, SCRIPT_MIN_WORDS, kRules  # noqa: E402
 from _theme import kTheme  # noqa: E402
 
 A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+C = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 NS = {"a": A, "p": P}
 
 # Canvas and type scale for a 1440 x 810 pt slide (1920 x 1080 px). Body never below 18 pt.
@@ -185,13 +186,22 @@ REQUIRED = {"title": ["title"], "section": ["title"], "statement": ["title"], "q
             "cost_table": ["title", "rows"], "quiz": ["title", "options"], "risks": ["title", "risks"],
             "metrics": ["title", "rows"], "next_steps": ["title", "steps"]}
 _STRS = {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]}
-NOTES_SCHEMA = {"description": "Speaker notes: a string, or key_fact / facts / assumptions / pitfalls / sources / "
-                               "qa (lists may be a single string; a Q&A item may be a string).", "oneOf": [
+NOTES_SCHEMA = {"description": "Speaker notes, a spoken script first: a string (said as is), or 'say' (2-5 sentences "
+                               "the presenter says, figures with their source in-line) plus a short presenter-only "
+                               "reference: assumptions / sources / pitfalls / qa. Older key_fact / facts become the "
+                               "script when there is no 'say'. Lists may be a single string.", "oneOf": [
     {"type": "string"},
     {"type": "object", "additionalProperties": False, "properties": {
-        "key_fact": {"type": "string"}, "facts": _STRS, "pitfalls": _STRS, "sources": _STRS,
+        "say": dict(_STRS, description="What the presenter says: 2-5 natural sentences that lead with the slide's "
+                                       "point and work figures in with their source ('... according to the Q3 "
+                                       "finance report'). Written first in the notes."),
+        "key_fact": {"type": "string", "description": "Older shape: the script's first sentence when there is no "
+                                                      "'say' (and --plan's line for the slide)."},
+        "facts": dict(_STRS, description="Older shape: further script sentences when there is no 'say'; with "
+                                         "'say' they go to the reference part as 'Figures:'."),
+        "pitfalls": _STRS, "sources": _STRS,
         "assumptions": dict(_STRS, description="What the slide assumes beyond the brief (ratings, targets, dates, "
-                                               "owners); written into the notes under ASSUMPTIONS:."),
+                                               "owners); written into the presenter reference as 'Assumed:'."),
         "qa": {"oneOf": [{"type": "object"}, {"type": "array", "items": {"oneOf": [
             {"type": "string"},
             {"type": "object", "additionalProperties": False, "required": ["q"],
@@ -661,9 +671,57 @@ class kSpecCheck:
                             Out.append(f"slide {I} (timeline): the months jump from {MONTHS[Months[J]].title()} to "
                                        f"{MONTHS[Months[J + 1]].title()}; add the missing month or say why in "
                                        "the notes")
-            return Out
+            return Out + kSpecCheck.RepeatWarnings(Spec)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSpecCheck.Warnings")
+            return []
+
+    @staticmethod
+    def ChartedSeries(Sl):
+        """The number runs a slide draws as data, as (name, tuple of values): a chart's series and a kpi /
+        kpi_chart metric's trend (two or more numbers each)."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Pat = Sl.get("pattern") if isinstance(Sl, dict) else None
+            Runs = []
+            if Pat in ("chart", "kpi_chart"):
+                Runs += [(str(X.get("name", "")), X.get("values")) for X in Sl.get("series", []) if isinstance(X, dict)]
+            if Pat in ("kpi", "kpi_chart"):
+                Runs += [(str(X.get("label", "")), X.get("trend")) for X in Sl.get("metrics", []) if isinstance(X, dict)]
+            Out = []
+            for Name, Vals in Runs:
+                if isinstance(Vals, list) and len(Vals) >= 2 and all(
+                        isinstance(V, (int, float)) and not isinstance(V, bool) for V in Vals):
+                    Out.append((Name, tuple(round(float(V), 6) for V in Vals)))
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSpecCheck.ChartedSeries")
+            return []
+
+    @staticmethod
+    def RepeatWarnings(Spec):
+        """Two slides charting the same numbers: usually a summary slide re-drawing a detail slide's chart. The
+        summary should state the conclusion in words or KPI figures; the detail slide carries the chart."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Seen, Out = {}, []
+            for I, Sl in enumerate(Spec.get("slides", []), 1):
+                for Name, Vals in kSpecCheck.ChartedSeries(Sl):
+                    First = Seen.get(Vals)
+                    if First is None:
+                        Seen[Vals] = (I, Name)
+                        continue
+                    if First[0] == I:
+                        continue
+                    Nums = ", ".join(f"{V:g}" for V in Vals)
+                    Out.append(f"slide {I} ({Sl.get('pattern')}): '{Name}' charts the same data as slide {First[0]} "
+                               f"('{First[1]}': {Nums}) - chart it once, on the detail slide; a summary states the "
+                               "conclusion in words or a KPI figure without the trend (reference/CONTENT.md)")
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSpecCheck.RepeatWarnings")
             return []
 
     @staticmethod
@@ -785,7 +843,8 @@ class kSpecLoader:
             for N, Sl in enumerate(Spec["slides"], 1):
                 Title = Sl.get("title") or Sl.get("quote", "")[:60]
                 Notes = Sl.get("notes")
-                Key = Notes.get("key_fact") if isinstance(Notes, dict) else (Notes or "").split("\n")[0]
+                Script = kSlideText.NotesScript(Notes)
+                Key = Script.split("\n")[0]
                 if Sl.get("pattern") == "section":
                     Section = Sl.get("kicker") or Sl.get("eyebrow") or ""
                 Kick = Sl.get("kicker", Section) if Spec.get("kickers", True) else ""
@@ -793,10 +852,12 @@ class kSpecLoader:
                 print(f"{N:>2}. [{Sl.get('pattern')}] {Kick}{Title}")
                 if Sl.get("decision"):
                     print(f"      DECISION: {Sl['decision'][:100]}")
-                if Key:
-                    print(f"      {Key[:110]}")
-                else:
+                if not Key:
                     print("      (no speaker notes yet)")
+                elif kRules.ScriptWords(Script) < SCRIPT_MIN_WORDS:
+                    print(f"      {Key[:84]}  (no spoken script yet: write notes.say)")
+                else:
+                    print(f"      SAYS: {Key[:104]}")
                 Assume = Notes.get("assumptions") if isinstance(Notes, dict) else None
                 if Assume:
                     Assume = [Assume] if isinstance(Assume, str) else Assume
@@ -960,8 +1021,33 @@ class kSlideText:
             return ""
 
     @staticmethod
-    def NotesText(Notes):
-        """Speaker notes as text: a string as is, or the structured fields in a fixed order."""
+    def Items(Value):
+        """A notes field that may be one string or a list, as a list of non-empty strings."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Value = [Value] if isinstance(Value, str) else (Value or [])
+            return [str(X).strip() for X in Value if str(X).strip()]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideText.Items")
+            return []
+
+    @staticmethod
+    def Sentence(Text):
+        """Text as a spoken sentence: ends with a full stop (or its own ! ? : punctuation)."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Text = Text.strip()
+            return Text if not Text or Text[-1] in ".!?:;\u2026" else Text + "."
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideText.Sentence")
+            return ""
+
+    @staticmethod
+    def NotesScript(Notes):
+        """What the presenter says: a string as is, 'say' (one paragraph per item), or - the older shape - the
+        key_fact and facts as sentences of one paragraph."""
         if kS.ErrorMode:
             return ""
         try:
@@ -969,20 +1055,65 @@ class kSlideText:
                 return ""
             if isinstance(Notes, str):
                 return Notes
+            Say = kSlideText.Items(Notes.get("say"))
+            if Say:
+                return "\n".join(Say)
+            Lines = kSlideText.Items(Notes.get("key_fact")) + kSlideText.Items(Notes.get("facts"))
+            return " ".join(kSlideText.Sentence(X) for X in Lines)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideText.NotesScript")
+            return ""
+
+    @staticmethod
+    def NotesReference(Notes):
+        """The presenter-only part of structured notes, brief: figures (when 'say' carries the script),
+        what is assumed, pitfalls, sources and Q&A - one short labelled line or block each."""
+        if kS.ErrorMode:
+            return []
+        try:
+            if not isinstance(Notes, dict):
+                return []
             Out = []
-            if Notes.get("key_fact"):
-                Out.append(f"KEY FACT: {Notes['key_fact']}")
-            for Label, Key in (("FACTS", "facts"), ("ASSUMPTIONS", "assumptions"), ("PITFALLS", "pitfalls"),
-                               ("SOURCES", "sources")):
-                Items = Notes.get(Key)
-                if Items:
-                    Items = [Items] if isinstance(Items, str) else Items
-                    Out.append(f"{Label}:\n" + "\n".join(f"- {X}" for X in Items))
+            Fields = (("Figures", "facts"), ("Assumed (confirm before presenting)", "assumptions"),
+                      ("Pitfalls", "pitfalls"), ("Sources", "sources"))
+            for Label, Key in Fields:
+                Items = kSlideText.Items(Notes.get(Key))
+                if Items and (Key != "facts" or kSlideText.Items(Notes.get("say"))):
+                    Out.append(kSlideText.RefLine(Label, Items))
             Qa = Notes.get("qa")
             if Qa:
                 Qa = [Qa] if isinstance(Qa, dict) else Qa
                 Out.append("Q&A:\n" + "\n".join(kSlideText.QaLine(Q) for Q in Qa))
-            return "\n\n".join(Out)
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideText.NotesReference")
+            return []
+
+    @staticmethod
+    def RefLine(Label, Items):
+        """One labelled reference entry: on one line for a single item, else a short bulleted block."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            if len(Items) == 1:
+                return f"{Label}: {Items[0]}"
+            return f"{Label}:\n" + "\n".join(f"- {X}" for X in Items)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideText.RefLine")
+            return ""
+
+    @staticmethod
+    def NotesText(Notes, Extra=None):
+        """Speaker notes as text: the spoken script first, then - after NOTES_DIVIDER - the presenter-only
+        reference (the notes' own, then Extra: what the pattern and the deck add)."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Script = kSlideText.NotesScript(Notes).strip()
+            Ref = [X for X in kSlideText.NotesReference(Notes) + list(Extra or []) if X and X.strip()]
+            if not Ref:
+                return Script
+            return "\n\n".join(X for X in (Script, NOTES_DIVIDER, "\n".join(Ref)) if X)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlideText.NotesText")
             return ""
@@ -1615,12 +1746,13 @@ class kDeckBuilder:
         if kS.ErrorMode:
             return
         try:
-            Text = "\n\n".join(X for X in (kSlideText.NotesText(Sl.get("notes")), Extra, "\n".join(self.Extra),
-                                            "\n".join(Sl.get("_moved") or []), self.DeckSources(Sl)) if X)
+            Text = kSlideText.NotesText(Sl.get("notes"), [Extra, "\n".join(self.Extra),
+                                                          "\n".join(Sl.get("_moved") or []), self.DeckSources(Sl)])
             self.Extra = []
             if Text.strip():
                 S.notes_slide.notes_text_frame.text = Text
-            if not kSlideText.NotesText(Sl.get("notes")).strip():
+            if not kSlideText.NotesScript(Sl.get("notes")).strip() and \
+                    not kSlideText.NotesReference(Sl.get("notes")):
                 self.NoNotes.append(f"slide {self.SlideNo} ({self.SlideId})")
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.Notes")
@@ -1678,7 +1810,7 @@ class kDeckBuilder:
             if isinstance(Notes, str) and re.search(r"source", Notes, re.I):
                 return ""
             Src = [Src] if isinstance(Src, str) else Src
-            return "SOURCES:\n" + "\n".join(f"- {X}" for X in Src)
+            return kSlideText.RefLine("Sources", kSlideText.Items(Src))
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.DeckSources")
             return ""
@@ -2642,6 +2774,7 @@ class kSlidePatterns:
                     Ca.reverse_order = True
                 Ca.tick_label_position = XL_TICK_LABEL_POSITION.LOW
                 Ca.has_major_gridlines = False
+                self.EveryCategoryLabel(Ca)
             # colour: one series -> highlight one point in the accent, the rest quiet; several -> accent ramp
             for Si, Ser in enumerate(Plot.series):
                 if Kind == "line":
@@ -2665,6 +2798,47 @@ class kSlidePatterns:
             return Gf
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.DrawChart")
+            return None
+
+    @staticmethod
+    def EveryCategoryLabel(Ca):
+        """tickLblSkip=1 on the category axis: PowerPoint otherwise drops every other label (Q2, Q4) when it
+        judges they will not fit, leaving bars no reader can name. Inserted in schema order (before
+        tickMarkSkip / noMultiLvlLbl)."""
+        if kS.ErrorMode:
+            return
+        try:
+            Ax = Ca._element
+            for Old in Ax.findall(f"{{{C}}}tickLblSkip"):
+                Ax.remove(Old)
+            Skip = etree.SubElement(Ax, f"{{{C}}}tickLblSkip")
+            Skip.set("val", "1")
+            After = Ax.find(f"{{{C}}}tickMarkSkip")
+            if After is None:
+                After = Ax.find(f"{{{C}}}noMultiLvlLbl")
+            if After is not None:
+                After.addprevious(Skip)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.EveryCategoryLabel")
+            return
+
+    @staticmethod
+    def SpanLabels(First, Last, N):
+        """N labels from First to Last when both are one prefix plus a number counting up by one per step
+        ('Q1'..'Q4', '2023'..'2026', 'Week 1'..'Week 6'); None when they are not such a run."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Fm = re.match(r"^(.*?)(\d+)(\D*)$", First)
+            Lm = re.match(r"^(.*?)(\d+)(\D*)$", Last)
+            if not Fm or not Lm or Fm.group(1) != Lm.group(1) or Fm.group(3) != Lm.group(3):
+                return None
+            Start, End = int(Fm.group(2)), int(Lm.group(2))
+            if End - Start != N - 1:
+                return None
+            return [f"{Fm.group(1)}{Start + J}{Fm.group(3)}" for J in range(N)]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.SpanLabels")
             return None
 
     def Chart(self, S, Sl):
@@ -2752,8 +2926,11 @@ class kSlidePatterns:
         try:
             Vals = list(Mt["trend"])
             Names = [str(X) for X in (Mt.get("trend_labels") or [])]
+            Span = kSlidePatterns.SpanLabels(Names[0], Names[1], len(Vals)) if len(Names) == 2 else None
             if len(Names) == len(Vals):
                 Cats = Names
+            elif Span:  # 'Q1' and 'Q4' over four values name every bar: Q1, Q2, Q3, Q4
+                Cats = Span
             elif len(Names) == 2:
                 Cats = [Names[0]] + [NBSP * (J + 1) for J in range(len(Vals) - 2)] + [Names[1]]
             else:
@@ -3671,6 +3848,8 @@ class kCheckReport:
                 return f"shorten {Where}.title to one claim"
             if Code == "missing_notes":
                 return f"write {Where}.notes (what the speaker says)"
+            if Code == "notes_no_script":
+                return f"write {Where}.notes.say: 2-5 sentences the presenter says, figures with their source"
             if Code in ("spec", "spec_warning"):
                 return f"edit {Where} as the message says"
             return "see the message"

@@ -27,6 +27,11 @@ into than then them these those your more most over also only very just such eac
 ORDINAL_RE = (r"^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?$|^q[1-4]$|^fy\s?\d{2,4}\s*q[1-4]$"
               r"|^(19|20)\d{2}$|^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?$|^h[12]$|^week\s?\d+$")
 
+# Speaker notes are a spoken script first; this line separates it from the presenter-only reference part
+# (assumptions, sources, pitfalls, Q&A) - build_deck writes it, lint_deck counts the script above it.
+NOTES_DIVIDER = "--- For the presenter, not to be read out ---"
+SCRIPT_MIN_WORDS = 12  # fewer words of prose than this before the divider: the notes have no spoken script
+
 
 # A success target is measurable when, after any time window ("last 6 months", "by Q3", "in 2027") is set aside,
 # a number remains with a unit or a comparator - and the row (or the target) names what is measured.
@@ -53,6 +58,28 @@ COST_CUE = re.compile(r"\b(?:costs?|costing|budget\w*|spend\w*|price\w*|invest\w
 
 class kRules:
     """Stateless rule helpers shared by lint_deck.py and build_deck.py."""
+
+    @staticmethod
+    def ScriptWords(Notes):
+        """Words of spoken prose in speaker notes: the text before the presenter-reference divider, without
+        labelled blocks ('KEY FACT:', 'SOURCES:'), bullet lines and Q&A lines - what a presenter would say."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            Script = (Notes or "").split(NOTES_DIVIDER)[0]
+            Count = 0
+            for Line in Script.splitlines():
+                Line = Line.strip()
+                if not Line or re.match(r"^(?:[-*•]\s|Q:|A:)", Line):
+                    continue
+                Label = re.match(r"^([A-Z][A-Z &/]{2,}):\s*(.*)$", Line)
+                if Label:
+                    continue  # 'KEY FACT: ...', 'ASSUMPTIONS:' - a fill-in block, not something said
+                Count += len(re.findall(r"\S+", Line))
+            return Count
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kRules.ScriptWords")
+            return 0
 
     @staticmethod
     def LooksLikeLabel(Title):

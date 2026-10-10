@@ -44,6 +44,8 @@ only the reference file the task needs.
 - Keep list items, stage labels and chart captions short (a phrase, ~4 words for a stage): short items get numbered
   bands, level label cards and full-width charts; long ones fall back to plain layouts. A pilot timeline gets a
   `window` (`"Jan-Jun"`) so a month past it is flagged.
+- Chart each data series once: a summary slide states its conclusions in words or KPI figures (no `trend`), the
+  detail slides carry the charts - two slides charting the same numbers is a spec warning ([CONTENT](reference/CONTENT.md#a-summary-states-conclusions-the-detail-slides-carry-the-charts)).
 - **4+ slides in one design:** showcase-first - `--slides 1,3 --check`, look, then the rest; unattended, approve it
   yourself and say so ([WORKFLOW](reference/WORKFLOW.md#showcase-first-for-multi-slide-sections)).
 - Three fixes on the same defect without success: escalate - [iteration loop](reference/WORKFLOW.md#iteration-loop--build-render-look-critique-fix).
@@ -60,7 +62,7 @@ These apply to every deck. Each links to its full explanation.
 6. **About 10 visible words per slide (by anchor type), body ≥ 18 pt on a 960-pt slide — ≥ 27 pt on Full HD (1440 pt)**, claim titles. ([LAYOUT](reference/LAYOUT.md#anchor-types-and-word-budgets), [CONTENT](reference/CONTENT.md#titles-make-a-claim-not-a-topic))
 7. **No text baked into images or video** — overlay it in PowerPoint. ([MEDIA](reference/MEDIA.md#generate-images-without-text--overlay-text-in-powerpoint))
 8. **Crop pictures, never stretch them.** ([LAYOUT](reference/LAYOUT.md#pictures-stretch--crop-to-fill-never-pass-both-sizes-blindly))
-9. **The slide carries the punch, the notes carry the depth** — notes on every slide, written first, fixed order. Never invent facts beyond the brief: put anything you add in the notes' `assumptions` (written as `ASSUMPTIONS:`); when the brief is the only source, say so — deck-level `"sources": ["the brief"]`. An ask states its reasons and its cost or impact. ([CONTENT](reference/CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief), [ask](reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost))
+9. **The slide carries the punch, the notes carry the depth** — notes on every slide, written first: a spoken script (`say`: 2-5 sentences the presenter says, point first, each figure with its source in the sentence), then a brief presenter-only reference. Never invent facts beyond the brief: put anything you add in the notes' `assumptions` (written after the script as `Assumed (confirm before presenting):`); when the brief is the only source, say so — deck-level `"sources": ["the brief"]`. An ask states its reasons and its cost or impact. ([CONTENT](reference/CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief), [ask](reference/CONTENT.md#the-ask-states-its-reasons-and-its-cost))
 10. **Lint, then render and LOOK** before calling anything done — `scripts/lint_deck.py` catches what the file shows (overlaps, stretched pictures, small text, missing alt text) on any OS; the render catches the rest. Render via Save As JPEG on Windows, not `Slide.Export`; `scripts/render_lo.py` elsewhere (approximate). (Loop below; [LAYOUT](reference/LAYOUT.md#embedded-fonts-slideexport-renders-a-fallback--use-save-as-jpeg))
 
 ## Error reports - always ask first

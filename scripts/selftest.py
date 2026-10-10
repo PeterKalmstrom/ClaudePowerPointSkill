@@ -688,7 +688,8 @@ class kSelfTest:
                 self.Check("build_deck: pie slices labelled with their category",
                            Chart.plots[0].data_labels.show_category_name)
                 Notes = EdgeDeck.slides[6].notes_slide.notes_text_frame.text
-                self.Check("build_deck: string 'facts' kept whole in notes", "- one string" in Notes, Notes)
+                self.Check("build_deck: string 'facts' kept whole in notes (a script sentence)",
+                           Notes.startswith("one string.") and "o\nn" not in Notes, Notes)
             self.WriteJson({"slides": [
                 {"pattern": "table", "title": "Ragged rows fail", "header": ["a", "b"], "rows": [["1", "2", "3"]]},
                 {"pattern": "chart", "title": "Unknown highlight fails", "categories": ["A"], "highlight": "Z",
@@ -1269,7 +1270,9 @@ class kSelfTest:
                              {"value": "112 %", "label": "Net retention"},
                              {"value": "60", "label": "New customers"}]},
                 {"id": "summary", "pattern": "kpi", "title": "Every growth metric improved",
-                 "notes": {"key_fact": "Summary.", "sources": ["brief"]},
+                 "notes": {"say": ["Every growth metric we track improved this year.",
+                                   "The figures on the slide all come straight from the brief, so nothing is "
+                                   "estimated here."], "sources": ["brief"]},
                  "metrics": [{"value": "5.9 M", "label": "Q4 revenue", "trend": [4.1, 4.6, 5.2, 5.9],
                               "trend_labels": ["Q1", "Q4"]},
                              {"value": "112 %", "label": "Net retention"},
@@ -1364,16 +1367,31 @@ class kSelfTest:
             Title = Slides[0].shapes.title.text_frame.text
             self.Check("build_deck: number and unit glued in a title too ('44 %')", "44 %" in Title, repr(Title))
             Notes = [self.NotesOf(Sl) for Sl in Slides]
-            self.Check("build_deck: notes 'assumptions' become an ASSUMPTIONS: section",
-                       "ASSUMPTIONS:\n- Start and end are Q1 and Q4." in Notes[1], Notes[1])
+            Divider = "--- For the presenter, not to be read out ---"
+            Script1, _, Ref1 = Notes[1].partition(Divider)
+            self.Check("build_deck: older key_fact notes become the spoken script; 'assumptions' are flagged in the "
+                       "presenter reference after the divider", Script1.strip() == "Churn 1.8 to 1.2."
+                       and "Assumed (confirm before presenting): Start and end are Q1 and Q4." in Ref1
+                       and "KEY FACT" not in Notes[1] and "ASSUMPTIONS:" not in Notes[1], Notes[1])
+            self.Check("build_deck: notes 'say' is the script, said first, with no labels; the reference comes "
+                       "after the divider", Notes[2].startswith("Every growth metric we track improved this year.\n"
+                                                                "The figures on the slide")
+                       and Notes[2].index(Divider) > Notes[2].index("nothing is estimated")
+                       and not re.search(r"^[A-Z ]{3,}:", Notes[2].split(Divider)[0], re.M), Notes[2])
+            NoScript = [Sl for Sl, C, _, _ in Found if C == "notes_no_script"]
+            self.Check("lint: 'notes_no_script' (info) on notes that are only a fragment ('Churn 1.8 to 1.2.'), "
+                       "not on a 'say' script", 2 in NoScript and 3 not in NoScript, str(Found))
             self.Check("build_deck: deck-level 'sources' fill slides without their own; a slide's own 'sources' "
-                       "(even just 'brief') wins; no figure_without_source", "SOURCES:\n- Self-test brief" in Notes[1]
-                       and "Self-test brief" not in Notes[2] and "SOURCES:\n- brief" in Notes[2]
+                       "(even just 'brief') wins; no figure_without_source", "Sources: Self-test brief" in Notes[1]
+                       and "Self-test brief" not in Notes[2] and "Sources: brief" in Notes[2]
                        and "Self-test brief" not in Notes[0]
                        and not any(C == "figure_without_source" for _, C, _, _ in Found), str(Notes[:3]))
             Code, Out = self.RunScript("build_deck.py", Path, "--plan")
             self.Check("build_deck --plan: shows assumptions and the deck's sources",
                        "ASSUMES: Start and end are Q1 and Q4." in Out and "Sources (every slide" in Out, Out[:500])
+            self.Check("build_deck --plan: marks a slide with no spoken script and shows a 'say' script",
+                       "Churn 1.8 to 1.2.  (no spoken script yet: write notes.say)" in Out
+                       and "SAYS: Every growth metric we track improved this year." in Out, Out[:900])
             Gap = {"slides": [{"id": "t", "pattern": "timeline", "title": "Six months with a mid-point check",
                                "notes": "n", "events": [{"date": "Jan", "label": "Start"}, {"date": "Feb", "label": "Survey"},
                                                         {"date": "Mar", "label": "Review"}, {"date": "May", "label": "Survey"},
@@ -1945,6 +1963,43 @@ class kSelfTest:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckRound7Chart")
             return
 
+    def CheckRound8(self):
+        """Benchmark round 8's criticisms: a kpi trend labelled only 'Q1'/'Q4' left Q2 and Q3 unnamed, and every
+        category axis must tell PowerPoint not to skip labels; a summary slide charting the same numbers as a
+        detail slide is a spec warning."""
+        if kS.ErrorMode:
+            return
+        try:
+            Spec = {"direction": "clean-corporate", "sources": ["Self-test brief"], "slides": [
+                {"id": "summary", "pattern": "kpi", "title": "Revenue grew 44 % in 2026", "notes": {"key_fact": "S."},
+                 "metrics": [{"value": "5.9 M", "label": "Q4 revenue", "trend": [4.1, 4.6, 5.2, 5.9],
+                              "trend_labels": ["Q1", "Q4"]}, {"value": "112 %", "label": "Net retention"}]},
+                {"id": "detail", "pattern": "chart", "type": "bar", "title": "Every quarter beat the last",
+                 "notes": {"key_fact": "D."}, "categories": ["Q1", "Q2", "Q3", "Q4"],
+                 "series": [{"name": "Revenue", "values": [4.1, 4.6, 5.2, 5.9]}]}]}
+            Path, Deck = os.path.join(self.Edge, "round8.json"), os.path.join(self.Tmp, "round8.pptx")
+            self.WriteJson(Spec, Path)
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Slides = list(Presentation(Deck).slides) if os.path.exists(Deck) else []
+            Charts = [Sh.chart for Sl in Slides for Sh in Sl.shapes if Sh.has_chart]
+            Cats = list(Charts[0].plots[0].categories) if Charts else []
+            self.Check("build_deck: a kpi trend labelled 'Q1'/'Q4' over four values names every bar (Q1..Q4)",
+                       Code == 0 and Cats == ["Q1", "Q2", "Q3", "Q4"], f"{Cats} {Out[-300:]}")
+            Skips = [Ch._chartSpace.xpath(".//c:catAx/c:tickLblSkip/@val") for Ch in Charts]
+            self.Check("build_deck: every category axis sets tickLblSkip=1 (PowerPoint never drops a label)",
+                       len(Charts) == 2 and all(S == ["1"] for S in Skips), str(Skips))
+            self.Check("build_deck: two slides charting the same series is a spec warning naming both slides",
+                       "slide 2 (chart): 'Revenue' charts the same data as slide 1" in Out, Out[-400:])
+            Spec["slides"][0]["metrics"][0].pop("trend")
+            Spec["slides"][0]["metrics"][0].pop("trend_labels")
+            self.WriteJson(Spec, Path)
+            Code, Out = self.RunScript("build_deck.py", Path, "--plan")
+            self.Check("build_deck --plan: a summary stating the KPI without the trend raises no repeat warning",
+                       Code == 0 and "charts the same data" not in Out, Out[-300:])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckRound8")
+            return
+
     def CheckAutoAndCheck(self):
         """Speed round: automatic fixes for unfit text (filler words, units, detail to the notes, a split), --no-auto,
         build --check (every problem of every class in one summary, sorted by slide) and --plan's pre-checks."""
@@ -2254,6 +2309,7 @@ class kSelfTestApp:
             Test.CheckRound4()
             Test.CheckRound5()
             Test.CheckRound7()
+            Test.CheckRound8()
             Test.CheckAutoAndCheck()
             Test.CheckThemeAndRenders()
             Test.CheckErrorPattern()

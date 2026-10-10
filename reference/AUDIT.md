@@ -60,7 +60,8 @@ uvx --with python-pptx --with pillow python scripts/lint_deck.py deck.pptx --fix
 | `grid_monotony` | info | 4+ identical boxes in a row (not when one differs in fill, weight or size - a highlight - nor on a built timeline) |
 | `stock_or_cartoon_image` | info | Picture name, alt text or link points at a stock or generic-illustration site |
 | `missing_notes` | info | No speaker notes |
-| `figure_without_source` | info | The slide shows numbers (%, currency, a chart or table figures) but the notes name no source (not on the cover or a section divider). `SOURCES: the brief` counts; `build_deck.py` writes a deck-level `sources` into every slide without its own |
+| `notes_no_script` | info | The notes have no spoken script: fewer than 12 words of prose before the presenter-reference divider (only `KEY FACT:` / `SOURCES:`-style blocks, bullets or a fragment). Open them with 2-5 sentences the presenter says (`notes.say`) |
+| `figure_without_source` | info | The slide shows numbers (%, currency, a chart or table figures) but the notes name no source (not on the cover or a section divider). `Sources: the brief` counts, and so does a source named in the script ("according to the Q3 finance report"); `build_deck.py` writes a deck-level `sources` into every slide without its own |
 | `duplicate_titles` / `mixed_font_families` | warn | Deck-wide: repeated titles / more than 3 fonts set directly on text |
 | `default_font_only` | info | Deck-wide: one default face (Calibri, Aptos, Arial, Inter…) for everything |
 

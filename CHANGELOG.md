@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- **Chart findings from benchmark round 8** (`build_deck.py`):
+  - *Every category label shows*: a kpi trend labelled only by its ends (`trend_labels: ["Q1", "Q4"]` over four
+    values) drew blank Q2/Q3 bars; two labels that are one prefix plus a number counting up one per value
+    (`Q1`..`Q4`, `2023`..`2026`, `Week 1`..`Week 6`) now fill in every label (`kSlidePatterns.SpanLabels`). Any
+    other pair keeps the ends-only labelling. Every chart's category axis also gets `c:tickLblSkip val=1`
+    (`EveryCategoryLabel`), so PowerPoint never drops alternate labels it judges too tight. Verified in a
+    PowerPoint render of the QBR deck (slide 2 shows Q1-Q4).
+  - *Repeated chart data is a spec warning* (`kSpecCheck.ChartedSeries`, `RepeatWarnings`, shown in a build,
+    `--check` and `--plan`): two slides charting the same numbers (a chart series or a kpi / kpi_chart metric
+    trend, two or more values) - typically a summary slide re-drawing the detail slides. `SKILL.md` and
+    `reference/CONTENT.md` say a summary states its conclusions in words or KPI figures and the detail slides
+    carry the charts. Self-test `CheckRound8` covers both.
+- **Speaker notes are a spoken script first** (benchmark round 8 scored notes 6.0, down from 9.0: they read as
+  `KEY FACT:` / `FACTS:` / `ASSUMPTIONS:` / `SOURCES:` forms, not words to say):
+  - New notes field `say` (string or list): 2-5 sentences the presenter says, point first, figures with their
+    source in-line. It is written first; then a divider, `--- For the presenter, not to be read out ---`, and a
+    brief reference: `Assumed (confirm before presenting):`, `Pitfalls:`, `Sources:`, `Q&A:`, plus what the pattern
+    and deck add (callouts, quiz answer, moved text, deck-level `Sources:`). One item stays on one line
+    (`kSlideText.NotesScript`, `NotesReference`, `RefLine`; `NotesText` composes them).
+  - Backward compatible: without `say`, `key_fact` and `facts` become the script's sentences (no labels); with
+    `say`, `facts` go to the reference as `Figures:`. String notes are unchanged.
+  - New lint info `notes_no_script` (fewer than 12 words of prose before the divider; `kRules.ScriptWords`,
+    shared with the builder), with an `edit:` line in `--check`; `--plan` shows `SAYS: ...` or marks
+    `(no spoken script yet: write notes.say)`. `spec.schema.json` regenerated.
+  - `examples/spec/sample-deck.json` rewritten with `say` scripts; `CONTENT.md`, `BUILDER.md`, `AUDIT.md` and
+    `SKILL.md` rule 9 describe the script-first shape. Self-test checks for the new shape, the lint code and `--plan`.
+- **UTF-8 stderr** (`kShared.kRun.Main`): stderr is reconfigured to UTF-8 like stdout, so a spec warning quoting
+  slide text with a no-break space no longer crashes a caller that reads the output as UTF-8.
+
 - **LibreOffice found off PATH** (`render_lo.py`): `kLoRenderer.FindSoffice()` looks at `KPS_SOFFICE` (the exe or
   its folder), then PATH, then the usual install folders; `kLoRenderer.Available()` is what `build_deck.py --check`
   and the self-test now use, so an unpacked no-admin LibreOffice is no longer skipped.

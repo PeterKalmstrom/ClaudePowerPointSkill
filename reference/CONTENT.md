@@ -65,6 +65,9 @@ claim, the hierarchy is wrong.
 - Cross-references to other slides in the deck
 - Pacing notes: "spend ~15 sec here", "skip if running long"
 
+Most of this belongs in the short presenter-only reference after the spoken script (see *Write the notes first*
+below); the script itself stays 2-5 sentences the presenter says.
+
 **Pattern:** the slide carries the punch; the notes carry the depth. A presenter should be able to deliver a 90-second talk from the slide alone, *and* a 10-minute deep dive from the notes alone, on the same content.
 
 ### Every slide gets notes; never invent facts beyond the brief
@@ -72,7 +75,8 @@ claim, the hierarchy is wrong.
 **Rule:** every slide — the cover and the close included — has speaker notes, and nothing on a slide or in its
 notes goes beyond what the brief, the data or a named source says. Anything you add to make the story work (a
 rating, a target, a start date, a mitigation, a process step, a time) is listed in the notes' **`assumptions`**
-(the builder writes them as an `ASSUMPTIONS:` section after the facts; `--plan` shows them per slide) — so the
+(the builder writes them as `Assumed (confirm before presenting):` in the presenter-only reference after the spoken script;
+`--plan` shows them per slide) — so the
 presenter knows what to confirm before standing up. When the brief is the only source, say so: `"sources":
 ["the brief"]` in a slide's notes, or once at deck level (`"sources"` beside `footer`), which fills every content
 slide that names none and satisfies `figure_without_source`.
@@ -102,6 +106,19 @@ scored it as a thin ask. Decision-makers approve what they can weigh.
 `statement`; repeat the decision on the closing slide, with a **`figure`** beside the box — the number the
 decision moves (new customers and their trend) or what it costs (`200 kSEK`) — so the close is not text only. Put the expected questions ("What does it cost?", "What if
 it fails?") in the notes' Q&A.
+
+### A summary states conclusions; the detail slides carry the charts
+
+**Rule:** chart each data series once. A summary or overview slide states its conclusions in words or KPI figures
+("Revenue +44 %", "Churn 1.8 → 1.2 %") with no trend; the detail slide that follows carries the chart.
+
+**Why:** benchmark round 8 marked down a QBR whose summary slide charted revenue and churn and whose slides 3 and 5
+then charted the same numbers again - the reader saw the same data twice and the summary added nothing.
+
+**How to apply:** on a summary `kpi`, give metrics a `value`, `label` and `note` but no `trend` when a later slide
+charts that series. `build_deck.py` (and `--check` / `--plan`) warns when two slides chart the same numbers.
+A `trend_labels` pair such as `["Q1", "Q4"]` over four values is expanded to Q1-Q4; for any other labels give one
+per value so every bar is named.
 
 ### Success has a number
 
@@ -137,20 +154,33 @@ cost and table columns and `facts` in the same deck, and prints `spec warning: f
 wrong; `lint_deck.py` reports `figure_mismatch` on the built deck. The check catches slips — it is not a reason to
 compute by hand.
 
-### Write the notes first, in a fixed order
+### Write the notes first: a spoken script, then a short reference
 
 Write a slide's notes **before** its visible text — the notes hold the full argument, the slide is the compression.
-Use the same order on every slide so the presenter always knows where to look:
+Every slide's notes have two parts, in this order:
 
-1. **Key fact** — the one sentence the slide exists to land
-2. **Facts** — supporting points, numbers and context to browse (no word cap)
-3. **Assumptions** — what you added beyond the brief, to confirm
-4. **Pitfalls** — what is commonly misunderstood, or what not to say
-5. **Sources** — citations with DOI or URL (or "the brief")
-6. **Q&A** — likely questions with short answers
+1. **The script (`say`)** — 2-5 natural sentences the presenter actually says. Lead with the slide's point, then
+   the why. Work each figure in with its source in the sentence: *"Burnout reached 41 % in the spring survey of all
+   40 engineers, according to HR's pulse report."* Write for the ear: short sentences, no labels, no bullet
+   fragments, no "KEY FACT:".
+2. **The reference (presenter only, kept brief)** — `assumptions` (what you added beyond the brief, to confirm),
+   `pitfalls` (what not to say), `sources`, `qa`. The builder writes these after a divider line,
+   `--- For the presenter, not to be read out ---`, as one short labelled line each (`Assumed (confirm before presenting):`,
+   `Sources:`). Use `facts` only for figures the presenter may need to look up; with `say` they appear as
+   `Figures:`.
 
-Write facts to browse, not a script to read aloud. A fixed structure also lets a script check notes coverage
-(every content slide has a key fact and at least one source) and feeds the Q&A panic sheet in *Presenter prep*.
+```json
+"notes": {"say": ["Four days a week is a cheap way to cut a 41 % burnout rate, and we can test it in six months.",
+                  "HR's spring pulse survey put burnout at 41 %, the highest since we started measuring."],
+          "assumptions": ["The pilot covers the 40 engineers only"], "sources": ["HR pulse survey, May 2026"]}
+```
+
+**Why:** in benchmark round 8 (October 2026) the judge scored this skill's notes 6.0 against 9.0 a round earlier:
+`KEY FACT: 41 % burnout.` / `FACTS: - Burnout survey: 41 %` reads as a form to fill, not words to say. An old
+spec with only `key_fact` / `facts` still builds - they become the script's sentences - but a fragment such as
+"41 % burnout." is not a script: lint reports `notes_no_script` (fewer than 12 words of prose before the
+divider) and `--plan` marks the slide `(no spoken script yet: write notes.say)`. Honesty is unchanged: every
+invented or assumed item still goes in `assumptions`, and a made-up example is said to be made up in the script.
 
 **API:**
 ```python

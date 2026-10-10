@@ -47,8 +47,9 @@ fact — without building it: show that to the user first, then build.
   "slides": [
     {"id": "growth", "pattern": "big_number", "title": "East grew faster than any region",
      "number": "+8", "unit": "%", "caption": "East revenue vs Q4.",
-     "notes": {"key_fact": "...", "facts": ["..."], "assumptions": ["..."], "qa": [{"q": "...", "a": "..."}],
-               "pitfalls": ["..."], "sources": ["..."]}}
+     "notes": {"say": ["East grew 8 % on Q4, faster than any region, according to the April finance dashboard.",
+                       "That is in constant currency with one-offs taken out, so it is real growth."],
+               "assumptions": ["..."], "pitfalls": ["..."], "sources": ["..."], "qa": [{"q": "...", "a": "..."}]}}
   ]
 }
 ```
@@ -58,7 +59,7 @@ fact — without building it: show that to the user first, then build.
 - **`facts`** (deck level) — named numbers from the brief: `{"revenue_q": [4.1, 4.6, 5.2, 5.9], "roles_planned":
   20}`. Derived figures anywhere in the deck are checked against them (and against every chart series, metric
   trend and cost or table column), and figure tokens compute from them — see *Computed figures* below.
-- **`sources`** (deck level) — a string or list (`["the brief"]`) written as `SOURCES:` into the notes of every
+- **`sources`** (deck level) — a string or list (`["the brief"]`) written as `Sources:` into the notes reference of every
   content slide whose own notes name none; it satisfies lint's `figure_without_source`. A slide's own
   `"sources": ["brief"]` works too.
 - **`kicker`** — a small tracked-caps label above the title (at most three words). It defaults to the current
@@ -70,8 +71,13 @@ fact — without building it: show that to the user first, then build.
   `scripts/extract_theme.py` on it first.
 - **`id`** — stable slide id; keep it when content changes, so diffs and hand-edit harvesting can match slides.
 - **`title`** — required on every content slide; write it as a claim ([CONTENT.md](CONTENT.md#titles-make-a-claim-not-a-topic)).
-- **`notes`** — a string, or the fixed structure: `key_fact`, `facts`, `assumptions` (what you added beyond the
-  brief — written as `ASSUMPTIONS:`, shown by `--plan`), `pitfalls`, `sources`, `qa`.
+- **`notes`** — a spoken script first: a string (said as is), or the structure `say` (2-5 sentences the
+  presenter says, figures with their source in-line), then the presenter-only reference `assumptions` (what you
+  added beyond the brief — written as `Assumed (confirm before presenting):`, shown by `--plan`), `pitfalls`, `sources`,
+  `qa`, written after a `--- For the presenter, not to be read out ---` divider. The older `key_fact` / `facts`
+  still work: without `say` they become the script's sentences (lint's `notes_no_script` flags a script under
+  12 words); with `say`, `facts` go to the reference as `Figures:`. See
+  [CONTENT.md](CONTENT.md#write-the-notes-first-a-spoken-script-then-a-short-reference).
 - **`highlight`** — on most patterns: the one item that gets the accent colour. Everything else stays quiet.
 - Image paths and `template` are relative to the spec file.
 
@@ -269,8 +275,8 @@ linted, rendered, found one class of problem (`fit:`, then an overlap, then a wi
   `big_number` with one caption — add `points`.
 - **Email body:** each paragraph's box is as tall as its wrapped text (in the wider of the body font and its
   LibreOffice substitute), so cutting words from an overflowing paragraph shows up at the next build.
-- **Notes:** the spec's notes (with `ASSUMPTIONS:`), plus what the pattern adds (email callouts, the quiz answer, a
-  tile trend that had no room),
+- **Notes:** the spoken script first; then, after the divider, the reference: the spec's assumptions, pitfalls,
+  sources and Q&A, plus what the pattern adds (email callouts, the quiz answer, a tile trend that had no room),
   plus the deck-level `sources` where a slide names none. A slide whose spec has
   no notes is listed as `notes: slide N (id) has no speaker notes` — write them; see
   [CONTENT.md](CONTENT.md#every-slide-gets-notes-never-invent-facts-beyond-the-brief).

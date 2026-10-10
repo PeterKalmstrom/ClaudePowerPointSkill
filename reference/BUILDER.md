@@ -66,15 +66,15 @@ fact — without building it: show that to the user first, then build.
   section's `eyebrow` (`"kickers": false` at deck level turns them all off; `"kicker": ""` on one slide).
 - **`direction`** — one of the 20 looks in [DESIGN.md](DESIGN.md); written into the deck's *theme*, so the
   deck re-themes cleanly. Ignored when `template` is set.
-- **`template`** — a .pptx/.potx to build on: its masters, layouts, colours and fonts are kept, its slides
-  dropped. The builder picks the *Title Only* layout and leaves fonts and colours to the theme. Run
-  `scripts/extract_theme.py` on it first.
+- **`template`** — a .pptx/.potx to build on (or `--template brand.potx` on the command line, which wins over
+  the spec). See [Building into a company template](#building-into-a-company-template) below.
 - **`id`** — stable slide id; keep it when content changes, so diffs and hand-edit harvesting can match slides.
 - **`title`** — required on every content slide; write it as a claim ([CONTENT.md](CONTENT.md#titles-make-a-claim-not-a-topic)).
 - **`notes`** — a spoken script first: a string (said as is), or the structure `say` (2-5 sentences the
   presenter says, figures with their source in-line), then the presenter-only reference `assumptions` (what you
   added beyond the brief — written as `Assumed (confirm before presenting):`, shown by `--plan`), `pitfalls`, `sources`,
-  `qa`, written after a `--- For the presenter, not to be read out ---` divider. The older `key_fact` / `facts`
+  `qa`, written after a `--- For the presenter, not to be read out ---` divider (plus `moved`: text `--apply` took
+  off the slide, written as `MOVED FROM SLIDE:`). The older `key_fact` / `facts`
   still work: without `say` they become the script's sentences (lint's `notes_no_script` flags a script under
   12 words); with `say`, `facts` go to the reference as `Figures:`. See
   [CONTENT.md](CONTENT.md#write-the-notes-first-a-spoken-script-then-a-short-reference).
@@ -93,11 +93,12 @@ fact — without building it: show that to the user first, then build.
 | `bullets` | `title`, `items[]` | 1–7 items, ≤ 100 chars | Asks, agendas, short lists |
 | `compare` | `title`, `columns[{heading, points[]}]`, `highlight` | 2–3 columns, heading ≤ 40 (≤ 24 with 3 columns), 1–4 points ≤ 70 | Before/after, us/them, options |
 | `process` | `title`, `steps[{label, detail}]`, `highlight` | 3–8 steps; label ≤ 30, detail ≤ 60 | Ordered steps (chevrons up to 5) |
-| `timeline` | `title`, `events[{date, label}]`, `highlight`, `window` | 3–7 events; date ≤ 16, label ≤ 40; `date` on every event or on none | Dates and milestones; without dates, undated stages in order (numbered on the rail) |
+| `timeline` | `title`, `events[{date, label, plan, actual}]`, `highlight`, `window`, `unit` | 3–7 events; date ≤ 16, label ≤ 40; `date` on every event or on none; `plan` and `actual` on every event or on none | Dates and milestones; without dates, undated stages in order (numbered on the rail); with `plan`/`actual`, plan vs actual per milestone with the slip |
 | `quote` | `quote`, `attribution`, `role`, `title` | quote ≤ 240 | A real person's words (credit in notes) |
 | `chart` | `title`, `type`, `categories[]`, `series[{name, values}]`, `highlight`, `number_format`, `caption`, `alt` | 2–24 categories, 1–6 series | Native, editable chart (`column`, `bar`, `line`, `pie`) |
 | `table` | `title`, `header[]`, `rows[[]]`, `highlight_row` | 2–6 columns, 1–8 rows | Numbers people will read |
-| `image` | `title`, `image`, `caption`, `alt`, `focus_x`, `focus_y` | caption ≤ 120 | A photo, cover-cropped to the body box |
+| `image` | `title`, `image`, `caption`, `alt`, `focus_x`, `focus_y` | caption ≤ 120 | A photo, cover-cropped to the body box (no `alt` is a spec warning) |
+| `image_text` | `title`, `image`, `alt` (required), `points[]` or `text`, `caption`, `side`, `focus_x`, `focus_y` | 1–4 points ≤ 90, text ≤ 200, caption ≤ 100, alt ≤ 250; `side` `left` (default) / `right` | A picture on one half, its points as cards on the other ([icons and pictures](#icons-and-pictures)) |
 | `matrix` | `title`, `quadrants[{heading, text}]`, `x_axis`, `y_axis`, `highlight` | 4 quadrants; heading ≤ 30, text ≤ 90 | 2 × 2 prioritisation |
 | `email` | `title`, `from`, `to`, `subject`, `body[]`, `attachment`, `callouts[{target, line, note}]` | from/to ≤ 70, subject ≤ 90, 1–6 body paragraphs ≤ 160, 0–5 callouts, note ≤ 70 | A realistic mocked message (phishing, support, a template to copy) with numbered markers |
 | `kpi_chart` | `title`, `metrics[{value, label, note, trend, trend_labels}]`, `highlight_metric`, and the `chart` fields (optional when a metric has a `trend`) | 1–4 metrics; 2–12 categories, 1–4 series | One to four headline numbers beside the chart that proves them |
@@ -141,6 +142,17 @@ fact — without building it: show that to the user first, then build.
 - **`window`** on a dated `timeline` (`"Jan-Jun"`, `"January to June"`): an event whose month falls outside it is
   a spec warning. Without `window` the slide's own title and notes are searched for one month range. Label an
   event that is outside on purpose (`"After the pilot: board review"`) and it passes.
+- **Plan vs actual** (`timeline` with `plan` and `actual` on every event): one row per milestone - its label on
+  the left, the planned bar (faint) above the actual bar (soft up to the planned end, the overrun past it in the
+  accent), and the slip at the right end in units (`+3 months`, `On time`, `−2 weeks`). Values are units from the
+  project start, `unit` `month` (default), `week`, `day` or `quarter`: `[0, 6]` is a bar from the start of M1 to
+  the end of M6; `[6]` is a milestone date (a faint diamond at the plan, an accent dot at the actual, the slip a
+  line between). The axis below labels the cells `M1`, `M2` ... (`W`, `D`, `Q`), every cell up to 12, then every
+  second, fourth ... The largest slip (or `highlight`) has its label in bold; the notes get a `PLAN VS ACTUAL:`
+  line per milestone (*Data migration: planned M4-M5, actual M5-M8 (+3 months)*). Spec errors: an event without
+  both fields, a value that is not `[start, end]` or `[at]` (0 or more, end ≥ start), a bar on one side and a
+  milestone on the other, an axis over 104 units (pick a coarser `unit`). Use it for post-mortems and status
+  reviews; a two-bar "plan 6 / actual 9" chart says less.
 - **`big_number`** with a share — `number` `"41"` and `unit` `"%"`, or `"14/20"` — draws a dot grid beside the
   number (`visual`: `dots`, `bar` for a filled bar, `none`); `points` add two or three supporting facts under
   the caption, so the slide is not one line of support.
@@ -161,6 +173,36 @@ fact — without building it: show that to the user first, then build.
   the notes. A body paragraph that starts with `http` is drawn as a link.
 - **`quiz`** always writes `ANSWER:` (and `WHY:` from `explain`) into the notes; `"reveal": "slide"` adds a slide
   `<id>-answer` with the right options in the accent.
+
+### Icons and pictures
+
+The skill bundles about 100 line icons from [Lucide](https://lucide.dev) (ISC licence,
+[`assets/icons/LICENSE`](../assets/icons/LICENSE)): shield, mail, lock, clock, users, chart-column, banknote,
+triangle-alert, check, calendar, phone, target, handshake, graduation-cap and more - the file names in
+`assets/icons/` are the icon names. Aliases work too (`money`, `warning`, `people`, `email`, `chart`, `time`).
+
+- **Where they go.** `"icon"` on a `kpi` metric (corner of the tile), a `compare` column (end of its heading), a
+  `process` step (above the label in the card; with three or four steps and no room there, in the arrow in place
+  of the number) and an undated `timeline` stage (above its badge); bullet tiles take a slide-level `"icons"`
+  list, one per item (end of the number row). `"none"` switches one item's icon off.
+- **Automatic choice.** Without any named icon, the builder picks one per item from its words (*phishing email* →
+  mail, *budget* → coins, *password* → key-round) - only when every item of the set gets one and no two share
+  one; a half-iconed row reads worse than none. `"auto_icons": false` on the slide, or at the deck level, turns
+  it off.
+- **Room, never squeezed.** An icon is drawn only where it fits beside the text, at one size for the whole set;
+  all items of a set get one or none do. Named icons that do not fit are listed on stderr as `icon: ...`; text is
+  never shrunk for an icon.
+- **What they are.** Each icon is one native shape with a custom geometry (the SVG strokes as path outlines,
+  round caps and joins), stroked in the theme accent (the background colour on an accent card): crisp at any
+  size, recoloured by the theme, editable with Edit Points, and drawn the same by PowerPoint and LibreOffice. A
+  PNG would need a rasteriser and blurs when scaled, an SVG picture shows only in PowerPoint 2016+, and EMF draws
+  unevenly in LibreOffice - verified in both renderers.
+- **Accessibility.** An icon beside its own text is marked decorative (PowerPoint's *Mark as decorative* flag,
+  which `lint_deck.py` reads), so screen readers skip it; an icon that stands in for text (a step number) gets
+  alt text (`Step 2`).
+- **Pictures.** `image_text` puts a picture (a local file, relative to the spec) cover-cropped on one half and
+  its points as accent-edged cards on the other. `alt` is required - say what the picture shows; a missing file,
+  a missing `alt` or an icon name that is not bundled is a spec error (exit 2).
 
 ### Computed figures
 
@@ -198,6 +240,93 @@ the slide, and step cards are only as tall as their text with the text block cen
 raised to the floor first. If a slide still looks empty in the render, it is short of content, not of layout: add
 the evidence (a chart beside the numbers, the mitigation beside the risk) rather than enlarging what is there.
 
+## Building into a company template
+
+```
+python scripts/build_deck.py --inspect brand.potx                       # what it offers, how it maps, warnings
+python scripts/build_deck.py deck.json --template brand.potx --out deck.pptx --check
+```
+
+- **Inspect first.** `--inspect` prints the slide size, the five colours the builder paints with (text, background,
+  muted, quiet/card, accent - read through the master's colour map), the heading and body fonts (and whether they
+  are installed), every layout with the role it was given, the mapping, the master footer text, the number of
+  example slides that will be dropped, and every warning. It builds nothing.
+- **Layouts.** A `title` slide uses the template's cover layout, a `section` slide its divider, every other pattern
+  its *Title Only* layout. Roles come from layout names (English and a few Swedish words: *Title Slide*, *Cover*,
+  *Section Header*, *Chapter Break*, *Title Only*, *Headline Only*, *Blank*, ...) and, when a name says nothing,
+  from the placeholders (a centred title = cover; a title and one short text line = divider; a title alone = title
+  only). Fallbacks: no divider - the cover layout; no title-only layout - *Title and Content* with its body removed.
+  A blank layout is never used: every pattern writes its claim into the title placeholder.
+- **Kept:** the masters, layouts, logos and other master graphics, the theme's colours and fonts (text boxes name
+  the theme fonts, `+mj-lt` / `+mn-lt`, so the template's faces show), and the slide size (the 1440 x 810 grid is
+  scaled onto it). The master's footer text becomes the deck `footer` when the spec has none. **Dropped:** the
+  template's own slides, with the sections and custom shows that listed them.
+- **Warnings** (printed as `spec warning: template ...`, also in `--check`; exit code unchanged): no cover or
+  divider layout; a size that is not 16:9 (the grid is stretched: kpi rows, compare and timeline get cramped);
+  theme colours below WCAG - text, muted on background or card at 4.5:1, accent figures at 3:1, background on an
+  accent card at 4.5:1 (lint then reports the same slides as errors); a theme font not installed here (fit is
+  measured with a stand-in). The builder does not recolour a template: fix its theme, or use a `direction`.
+- The template's layouts keep their own text styles: a divider title set in capitals by the template stays in
+  capitals. Check the render.
+- `scripts/make_test_templates.py DIR` writes two fictional test templates (a 16:9 `.potx` with renamed layouts, a
+  logo, footer text and an example slide; a 4:3 `.pptx` with a failing accent and a missing font).
+
+## Several decks in one call (batch)
+
+**Rule:** for more than one deck, write every spec first, then check them together:
+`build_deck.py a.json b.json c.json --check --apply`. Look at the one `contact-all.png` it names and read the
+`slides:` tables; open a per-deck sheet only for a deck that needs a closer look.
+
+**Why:** in benchmark round 10 this skill's unattended maker used 22-23 tool calls for five decks (plain Claude
+~11). The calls went into one `--plan` and one `--check` per deck, plus one image read per deck's contact sheet.
+
+**How to apply:**
+
+- Each spec runs as its own `build_deck.py` process with the batch's flags (`--check`, `--plan`, `--apply`,
+  `--no-auto`, `--force`, `--template`), three at a time (every LibreOffice render has a private profile). Its full
+  output prints under `==== spec: ... ====` without the `CHECK-JSON` line; the call ends with a `batch summary` (one
+  `clean`/`FIX` line per deck), `all-sheet: <folder>/contact-all.png` (one row per deck) and a `BATCH-JSON` line.
+- Decks go beside their specs; `--out DIR` puts them in a folder instead. The exit code is the worst deck's
+  (4 error report > 1 crash > 3 unfit text > 2 spec error > 0).
+- A single `--check` without `--out` builds `<spec>.pptx` beside the spec. `--check` prints a `slides:` table: per
+  built slide its pattern, title, and the codes of its warnings and errors (`ok` when none).
+- Code: `scripts/_batch.py` (`kBatchCheck`); tests: `scripts/selftest_batch.py`.
+
+## Ready edits and --apply
+
+**Rule:** `--plan --apply`, answer the `question:` lines in one edit, then `--check --apply`. Do not shorten a
+listed text by hand: the edit printed for it is already measured.
+
+**Why:** in benchmark rounds 8 and 9 this skill's maker used 16-21 tool calls for three decks against 7-12 for the
+other makers. Most of the loops were text-length findings - a field over its limit, a word budget, a title that
+wraps, a list item too long for its layout - fixed by hand, unmeasured, and found again by the next build.
+
+**How to apply:**
+
+- `--plan` and `--check` print, per finding they can fix without new facts, `suggest: slide N (id) field: 'old' ->
+  'new' (how)` (`_suggest.py`, `kSuggest`). The new text only removes or abbreviates words: filler words and short
+  forms first (nothing lost), then a parenthesis, a cut at a clause boundary, then a closing phrase (`... projects
+  | in every region`). It is measured: the field's limit, a title's two lines at the title size in the deck's own
+  heading font. Whatever goes is kept in the notes (`notes.moved`, written as `MOVED FROM SLIDE:`).
+- Covered: text over its pattern's limit (spec errors), a title that wraps past two lines, `bullets` items over 80
+  characters and `compare` points over 60 (the designed layouts), a quiz answer slide with the default title (the
+  first clause of the slide's own `explain`), a kpi `trend` that repeats a chart on another slide (removed), a
+  slide well over its word budget (secondary detail - mitigations, step details, captions, support lines - to the
+  notes; never titles, values, points, items or quiz options), and the dry build's auto-fixes.
+- Not covered, by design - a `question: slide N (id) needs ...` line instead: anything that needs new content (an
+  ask's cost, a target number, supporting points, a date, which slide keeps a chart), a list that is simply too
+  long (which points matter is the author's call), and a cut that would land mid-phrase - shown as a `proposal`
+  to use only if the sense holds.
+- `--apply` (with `--plan` or `--check`) writes the edits into the spec file in the same call, keeping the previous
+  file as `<spec>.before-apply.json`, prints each as `applied:`, then plans or builds the patched spec; with
+  `--check` the builder's own auto-fixes are written back too, so the next build makes none. A field whose text in
+  the file differs from what was measured - typically one holding a `{sum}` token - is `skipped:` for a hand edit,
+  and the token stays. A slide added by an `allow_split` split is not written back. YAML specs are rewritten as
+  YAML (comments are lost; JSON is written with one-space indents).
+- `CHECK-JSON` carries the same as `suggestions: {edits, questions}`. Repeated findings are listed once: the same
+  fit message from two passes, and a lint finding (`ask_without_cost`, `target_not_measurable`, the answer slide's
+  `title_is_label`) when the spec warning on the same slide already says it.
+
 ## Automatic fixes and --check
 
 **Rule:** build with `--check` and fix everything it lists in one edit. Each extra build-lint-render loop costs
@@ -217,7 +346,9 @@ linted, rendered, found one class of problem (`fit:`, then an overlap, then a wi
   the rest is reported too (exit 2). No LibreOffice: everything but the sheet.
 - `--plan` runs the cheap checks first: limits, figures, spec warnings, each slide's visible words against its
   pattern's budget (an estimate, printed as advice) and each title measured in the deck's heading font
-  (`plan:` lines).
+  (`plan:` lines), then a dry build into a temporary file beside the spec (deleted after) of the spec as it will be
+  once the ready edits are in: text that still does not fit and layout lint warnings print as `plan: fit` /
+  `plan: lint` lines - see *Ready edits and --apply* below.
 - **Automatic fixes** (default; `--no-auto` switches them off). When text does not fit, the builder changes the
   spec in memory and builds again, up to six rounds, one step per slide and round - the first that changes
   something:
@@ -243,7 +374,11 @@ linted, rendered, found one class of problem (`fit:`, then an overlap, then a wi
   the body, a footer and the page number. Cards share one language: a tint of the theme (the background with a
   breath of the accent), an accent edge on top or left, square corners, the same gaps; the highlighted card is
   filled with the accent and its text set in the background colour (4.5:1 checked for every direction).
-  Covers and section dividers are full panels in the text colour, so the deck opens, breaks and closes with weight.
+  On a light direction, covers and section dividers are full panels in the text colour, so the deck opens, breaks
+  and closes with weight. On a dark direction (`dark-stage`, `night-terminal`, `blueprint`) that panel would be
+  light - a light cover before dark body slides reads as a clash - so covers and dividers stay on the deck's own
+  dark background, with the accent rule and band. The deck-level **`cover`** overrides: `auto` (default),
+  `panel` or `plain`; `panel` on a dark direction is a spec warning.
 - **Kicker and title as one block:** the kicker is placed above the title's ink as the loosest renderer sets it —
   its line height, and its line count: LibreOffice draws a theme font that is not installed (Georgia, Segoe UI on
   Linux) with a wider substitute (fontconfig's choice, e.g. DejaVu Serif), so a title on one line in PowerPoint

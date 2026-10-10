@@ -92,6 +92,33 @@ notes` for every slide the spec left without, and `lint_deck.py` reports `missin
 (a training email, a sample price) is labelled as made up in the notes, and placeholder contact details are
 written as "give the real number here", never as a plausible fake.
 
+### Invented goals must add up to the stated target
+
+**Rule:** a per-person or per-period goal you add ("3 deals each by 31 March") must be derived from a target the
+brief states, and goal x people x periods must fit it. List the goal, its number and its basis in the slide's
+notes `assumptions` ("1 deal each by 31 March is proposed: 120 a year / 25 sellers ~ 5 each").
+
+**Why:** benchmark round 10 marked down a launch deck whose "3 deals each by 31 March" for a 25-person team meant
+~75 deals in one month against a target of 120 customers for the whole year - both judges caught it.
+
+**How to apply:** state the headcount in the deck (a `facts` entry such as `"sales_team": 25`, or "25 sellers" in
+the text). `build_deck.py` (and `--check` / `--plan`) computes the implied total and warns when it is more than half
+the annual target in one month or an implied year is over twice it, asks for the headcount when the deck gives
+none, and warns when the goal's number is neither a fact nor named in the slide's `assumptions`.
+
+### Objection answers: claim, proof, action
+
+**Rule:** on an objection or FAQ slide each answer states the claim, one proof point and the action ("Saves 4.5 h a
+week per analyst - show the beta numbers"), at least six words; the full spoken answer is in the say notes, one
+sentence per objection.
+
+**Why:** benchmark round 10's judges called both runs' objection slides "terse fragments" ("49 USD vs 59-79",
+"Proven with 12 betas"): the presenter could not answer from them and the reader learned nothing.
+
+**How to apply:** `compare` with one column per objection (heading = the objection, one or two points = the
+answer, each under 60 characters so it stays a card) or a `table` (objection | answer | proof). `build_deck.py`
+warns on an objection slide (title says objection, FAQ, concern, pushback) with an answer under six words.
+
 ### The ask states its reasons and its cost
 
 **Rule:** the slide that asks for a decision says three things: **what** is asked (a verb and a number: "approve

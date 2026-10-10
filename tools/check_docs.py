@@ -59,7 +59,8 @@ class kDocsCheck:
             return
         try:
             self.Files = [os.path.relpath(Found, ROOT) for Found in
-                          glob.glob(os.path.join(ROOT, "**", "*.md"), recursive=True) if "node_modules" not in Found]
+                          glob.glob(os.path.join(ROOT, "**", "*.md"), recursive=True)
+                          if "node_modules" not in Found and "_scratch" not in os.path.relpath(Found, ROOT).split(os.sep)]
             for Name in self.Files:
                 with open(os.path.join(ROOT, Name), encoding="utf-8") as File:
                     self.Texts[Name] = File.read()

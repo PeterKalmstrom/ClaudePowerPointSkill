@@ -39,6 +39,11 @@ from pptx.util import Pt
 
 from kShared import ToolReportableException, kRun, kS, kToolException
 from render_lo import kLoRenderer
+from selftest_edit import kSelfTestEdit
+from selftest_plausibility import kSelfTestPlausibility
+from selftest_suggest import kSelfTestSuggest
+from selftest_timeline import kSelfTestPlanActual
+from selftest_batch import kSelfTestBatch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
@@ -1979,6 +1984,95 @@ class kSelfTest:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckRound9")
             return
 
+    def IconSpec(self):
+        """Explicit icons on tiles, cards, steps and stages, automatic ones on bullets, one opted out, and an
+        image_text slide."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            Img = os.path.join(os.path.dirname(HERE), "examples", "spec", "skyline.jpg")
+            Say = {"say": "This slide is part of the icon self-test and says what the presenter would say aloud here."}
+            return {"direction": "clean-corporate", "slides": [
+                {"pattern": "bullets", "title": "Three habits stop most phishing", "notes": Say,
+                 "items": ["Check the sender's email address", "Never share a password", "Report it to security"]},
+                {"pattern": "kpi", "title": "The programme paid for itself", "notes": Say, "metrics": [
+                    {"value": "41 M", "label": "Revenue", "icon": "money"}, {"value": "12 %", "label": "Margin",
+                                                                            "icon": "percent"},
+                    {"value": "3", "label": "New partners", "icon": "handshake"}]},
+                {"pattern": "compare", "title": "Two ways to run the pilot", "notes": Say, "columns": [
+                    {"heading": "In house", "points": ["Own team", "Slower"], "icon": "users"},
+                    {"heading": "Partner", "points": ["Faster start", "Fee per deal"], "icon": "handshake"}]},
+                {"pattern": "process", "title": "Rolling it out takes four steps", "notes": Say, "steps": [
+                    {"label": "Pick partners", "icon": "users"}, {"label": "Train", "icon": "graduation-cap"},
+                    {"label": "Review", "icon": "calendar"}, {"label": "Measure", "icon": "chart-column"}]},
+                {"pattern": "timeline", "title": "An incident runs in four stages", "notes": Say, "events": [
+                    {"label": "Detect", "icon": "search"}, {"label": "Contain", "icon": "shield"},
+                    {"label": "Recover", "icon": "refresh-cw"}, {"label": "Review", "icon": "clipboard-check"}]},
+                {"pattern": "bullets", "title": "Automatic icons can be switched off", "notes": Say,
+                 "auto_icons": False,
+                 "items": ["Check the sender's email address", "Never share a password", "Report it to security"]},
+                {"pattern": "image_text", "title": "The city centre drove the growth", "notes": Say, "image": Img,
+                 "alt": "Stylised city skyline at dusk.", "points": ["Two new offices", "Footfall up 18 %"]}]}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.IconSpec")
+            return {}
+
+    def CheckIcons(self):
+        """Bundled icons: each drawn as one editable vector shape in the theme accent, decorative beside its text;
+        keyword choice and its off switch; unknown icon names and a missing alt are spec errors; image_text."""
+        if kS.ErrorMode:
+            return
+        try:
+            if HERE not in sys.path:
+                sys.path.insert(0, HERE)
+            from _icons import kIconLibrary, kSvgIcon
+            Names = kIconLibrary.Names()
+            Licence = os.path.join(os.path.dirname(HERE), "assets", "icons", "LICENSE")
+            self.Check("icons: 60-120 bundled icons with their ISC licence, each with geometry",
+                       60 <= len(Names) <= 120 and os.path.exists(Licence)
+                       and all(kSvgIcon.Load(N) for N in Names), str(len(Names)))
+            self.Check("icons: aliases and keyword choice", kIconLibrary.Resolve("Warning") == "triangle-alert"
+                       and kIconLibrary.Guess("Report phishing emails") == "mail"
+                       and kIconLibrary.Guess("Aim high") == "target" and kIconLibrary.AutoSet(["Revenue", "Zzz"]) == [],
+                       str(kIconLibrary.Guess("Aim high")))
+            Path, Deck = os.path.join(self.Edge, "icons.json"), os.path.join(self.Tmp, "icons.pptx")
+            self.WriteJson(self.IconSpec(), Path)
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Bad = [f"{Sl}:{C}" for Sl, C, _, Sev in self.LintFindings(Deck) if Sev in ("error", "warn")]
+            self.Check("build_deck: the icon slides build and lint clean", Code == 0 and not Bad, ", ".join(Bad) + Out[-300:])
+            Slides = Presentation(Deck).slides if os.path.exists(Deck) else []
+            Icons = [[Sh for Sh in Slide.shapes if "Icon" in Sh.name] for Slide in Slides]
+            if len(Icons) < 7:
+                return
+            self.Check("build_deck: icons on bullet tiles (automatic), KPI tiles, compare headings, steps, stages",
+                       [len(X) for X in Icons[:5]] == [3, 3, 2, 4, 4] and not Icons[5], str([len(X) for X in Icons]))
+            First = Icons[0][0]._element
+            Clr = First.find(f".//{A_NS}ln/{A_NS}solidFill/{A_NS}schemeClr")
+            self.Check("build_deck: an icon is one custom-geometry shape, stroked in the theme accent, no fill",
+                       First.find(f".//{A_NS}custGeom") is not None and Clr is not None
+                       and Clr.get("val") == "accent1" and First.find(f"{P_NS}spPr/{A_NS}noFill") is not None,
+                       Icons[0][0].name)
+            from lint_deck import kLintDeck
+            self.Check("build_deck: every icon is marked decorative beside its text, or carries alt text where it "
+                       "stands in for text (lint reads PowerPoint's decorative flag)",
+                       all(kLintDeck.IsDecorative(Sh) or kLintDeck.AltText(Sh) for X in Icons for Sh in X)
+                       and all(kLintDeck.IsDecorative(Sh) for Sh in Icons[0]), "")
+            Pics = [Sh for Sh in Slides[6].shapes if Sh.name == "Photo"]
+            self.Check("build_deck: image_text draws the picture with its alt text beside point cards",
+                       len(Pics) == 1 and kLintDeck.AltText(Pics[0]) == "Stylised city skyline at dusk."
+                       and "PointCard2" in [Sh.name for Sh in Slides[6].shapes], "")
+            Spec = self.IconSpec()
+            Spec["slides"][1]["metrics"][0]["icon"] = "no-such-icon"
+            del Spec["slides"][6]["alt"]
+            self.WriteJson(Spec, Path)
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            self.Check("build_deck: an unknown icon name and an image_text without alt are spec errors (exit 2)",
+                       Code == 2 and "icon 'no-such-icon' is not bundled" in Out and "'alt' is required" in Out,
+                       Out[-400:])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckIcons")
+            return
+
     def CheckRound7Chart(self, Chart, Claim, Out):
         """The chart, claim and pilot-window parts of CheckRound7."""
         if kS.ErrorMode:
@@ -2167,6 +2261,99 @@ class kSelfTest:
             kS.GlobalErrorHandler(e, "kSelfTest.FirstOf")
             return 0
 
+    def CheckTemplateInspect(self, Wide, Square):
+        """build_deck.py --inspect on the two test templates: the mapping, and the warnings each should raise."""
+        if kS.ErrorMode:
+            return
+        try:
+            Code, Out = self.RunScript("build_deck.py", "--inspect", Wide)
+            self.Check("template: --inspect maps title/section/content onto renamed layouts",
+                       Code == 0 and re.search(r"title\s+-> Cover", Out) is not None
+                       and re.search(r"section\s+-> Chapter Break", Out) is not None
+                       and "every other pattern  -> Headline Only" in Out and "inspect: 0 warning(s)" in Out
+                       and "example slides to drop: 1" in Out, Out[-900:])
+            Code, Out = self.RunScript("build_deck.py", "--inspect", Square)
+            self.Check("template: --inspect warns about a 4:3 size, a failing accent and a missing font",
+                       Code == 0 and "not 16:9" in Out and "contrast: accent #FFB870" in Out
+                       and "'Fictional Display Sans' (headings) is not installed" in Out, Out[-900:])
+            Code, Out = self.RunScript("build_deck.py", "--inspect", os.path.join(self.Tmp, "no-such.potx"))
+            self.Check("template: a missing template is an expected state - exit 2, no error report",
+                       Code == 2 and "template not found" in Out and "ERROR in" not in Out, Out[-300:])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckTemplateInspect")
+            return
+
+    def CheckTemplateDeck(self, Built):
+        """The deck built into northwind-16x9.potx: layouts per pattern, example slide and section entry gone,
+        the master's logo and footer kept, heading boxes on the theme's heading font."""
+        if kS.ErrorMode:
+            return
+        try:
+            Deck = Presentation(Built)
+            Names = [S.slide_layout.name for S in Deck.slides]
+            self.Check("template: title, section and content slides use Cover / Chapter Break / Headline Only",
+                       Names == ["Cover", "Chapter Break", "Headline Only", "Headline Only"], str(Names))
+            Titles = [S.shapes.title.text_frame.text for S in Deck.slides if S.shapes.title is not None]
+            Xml = etree.tostring(Deck.part._element).decode()
+            self.Check("template: the template's example slide and its section entry are dropped",
+                       len(Deck.slides) == 4 and not any("Example" in T for T in Titles) and "p14:sldId " not in Xml,
+                       f"{len(Deck.slides)} slides, {Titles}")
+            Master = [Sh.name for Sh in Deck.slide_master.shapes]
+            Footers = [Sh.text_frame.text for S in Deck.slides for Sh in S.shapes if Sh.name == "Footer"]
+            self.Check("template: the master's logo stays and its footer text becomes the deck footer",
+                       "Logo" in Master and Footers and all("Northwind Example Co." in F for F in Footers),
+                       f"{Master} / {Footers}")
+            Faces = {R.font.name for S in Deck.slides for Sh in S.shapes if Sh.has_text_frame and Sh.name == "Subtitle"
+                     for P in Sh.text_frame.paragraphs for R in P.runs}
+            self.Check("template: text boxes name theme fonts (+mn-lt / +mj-lt), so the template's fonts show",
+                       Faces == {"+mn-lt"}, str(Faces))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckTemplateDeck")
+            return
+
+    def CheckTemplates(self):
+        """Company templates: make_test_templates.py, --inspect, a build into each template (--template), and with
+        --com the built deck rendered by PowerPoint."""
+        if kS.ErrorMode:
+            return
+        try:
+            self.Say("\n== templates ==")
+            Dir = os.path.join(self.Tmp, "templates")
+            Code, Out = self.RunScript("make_test_templates.py", Dir)
+            Wide, Square = os.path.join(Dir, "northwind-16x9.potx"), os.path.join(Dir, "harbor-4x3.pptx")
+            self.Check("make_test_templates: a 16:9 .potx and a 4:3 .pptx written",
+                       Code == 0 and os.path.isfile(Wide) and os.path.isfile(Square), Out)
+            self.CheckTemplateInspect(Wide, Square)
+            Spec = os.path.join(Dir, "deck.json")
+            self.WriteJson({"direction": "clean-corporate", "slides": [
+                {"pattern": "title", "title": "Templates carry the brand", "subtitle": "A short test deck"},
+                {"pattern": "section", "title": "How it maps"},
+                {"pattern": "statement", "title": "Every content slide uses the title-only layout"},
+                {"pattern": "bullets", "title": "Three things stay from the template",
+                 "items": ["Masters and logos", "Footer text", "Theme colours and fonts"]}]}, Spec)
+            Built = os.path.join(Dir, "northwind-deck.pptx")
+            Code, Out = self.RunScript("build_deck.py", Spec, "--template", Wide, "--out", Built, "--lint")
+            self.Check("template: a deck built into the .potx with --template builds and lints clean",
+                       Code == 0 and "4 slides ->" in Out and "\n0 error(s), 0 warning(s)" in Out
+                       and "spec warning: template" not in Out,
+                       Out[-600:])
+            if os.path.isfile(Built):
+                self.CheckTemplateDeck(Built)
+            Code, Out = self.RunScript("build_deck.py", Spec, "--template", Square, "--out",
+                                       os.path.join(Dir, "harbor-deck.pptx"))
+            self.Check("template: building into the 4:3 template prints the size, contrast and font warnings",
+                       "spec warning: template size:" in Out and "spec warning: template contrast:" in Out
+                       and "spec warning: template font:" in Out, Out[-600:])
+            if self.Com and os.path.isfile(Built):
+                Renders = os.path.join(Dir, "renders")
+                Code, Out = self.RunScript("render_slides.py", "--file", Built, "--out", Renders)
+                Count = len(glob.glob(os.path.join(Renders, "*.jpg")))
+                self.Check("template: PowerPoint opens and renders the template deck (one JPEG per slide)",
+                           Code == 0 and Count == 4, Out[-400:])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckTemplates")
+            return
+
     def CheckThemeAndRenders(self):
         """extract_theme, diff_renders on synthetic images, render_lo where LibreOffice is installed."""
         if kS.ErrorMode:
@@ -2200,6 +2387,90 @@ class kSelfTest:
                 self.Say("(skipped render_lo: LibreOffice/pdftoppm not installed)")
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckThemeAndRenders")
+            return
+
+    @staticmethod
+    def DrawTextRows(Draw, X, Y, Width, Rows, Pitch=50, Height=16):
+        """Fake text lines for visual_check: rows of black word blocks."""
+        if kS.ErrorMode:
+            return
+        try:
+            for Row in range(Rows):
+                Left = X
+                while Left < X + Width - 40:
+                    Draw.rectangle([Left, Y + Row * Pitch, Left + 60, Y + Row * Pitch + Height], fill="black")
+                    Left += 74
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.DrawTextRows")
+            return
+
+    def CheckVisualCheck(self):
+        """visual_check.py on synthetic renders: a statement slide and a filled slide pass, empty card bottoms
+        warn, a one-column stack reads like a list; the deck-level and balance rules from metrics directly."""
+        if kS.ErrorMode:
+            return
+        try:
+            from PIL import ImageDraw
+            from visual_check import kSlideJudge
+            Folder = os.path.join(self.Tmp, "visual")
+            os.makedirs(Folder, exist_ok=True)
+            Slides = [Image.new("RGB", (1280, 720), Colour) for Colour in ((30, 40, 60), "white", "white", "white")]
+            Draws = [ImageDraw.Draw(S) for S in Slides]
+            self.DrawTextRows(Draws[0], 100, 300, 900, 1, Height=40)
+            for D in Draws[1:]:
+                self.DrawTextRows(D, 80, 60, 700, 1, Height=40)                     # the title
+            self.DrawTextRows(Draws[1], 80, 200, 520, 9, Pitch=48)                  # two full columns
+            self.DrawTextRows(Draws[1], 680, 200, 520, 9, Pitch=48)
+            for Card in range(4):                                                   # cards, text only at the top
+                Draws[2].rectangle([80 + Card * 285, 200, 340 + Card * 285, 560], fill=(243, 244, 246))
+                self.DrawTextRows(Draws[2], 100 + Card * 285, 220, 220, 2, Pitch=30, Height=10)
+            self.DrawTextRows(Draws[3], 120, 180, 760, 6, Pitch=60)                 # one stacked column
+            for Index, S in enumerate(Slides):
+                S.save(os.path.join(Folder, f"s{Index + 1:03d}.png"))
+            Code, Out = self.RunScript("visual_check.py", Folder, "--json")
+            Found = {(F["slide"], F["code"], F["severity"]) for F in json.loads(Out)["findings"]} if Code == 0 else set()
+            self.Check("visual_check: statement slide and a well-filled slide have no findings",
+                       Code == 0 and not [F for F in Found if F[0] in (1, 2)], Out[-600:])
+            self.Check("visual_check: empty card bottoms warn as empty_area", (3, "empty_area", "warn") in Found,
+                       str(Found))
+            self.Check("visual_check: six aligned one-column rows read like a list", (4, "list_like", "info") in Found,
+                       str(Found))
+            Base = {"occupancy": 0.4, "empty_band": 0.0, "empty_band_at": {}, "band_ends_content": False,
+                    "empty_side": 0.0, "empty_side_at": {}, "dx": -0.3, "dy": 0.0, "list_rows": 0, "dark": False}
+            Codes = [F["code"] for F in kSlideJudge.Findings(5, Base)]
+            Crowded = [F["code"] for F in kSlideJudge.Findings(5, dict(Base, occupancy=0.97, dx=0.0))]
+            self.Check("visual_check: lopsided mass is unbalanced, a full content area is crowded",
+                       Codes == ["unbalanced"] and Crowded == ["crowded"], f"{Codes} {Crowded}")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckVisualCheck")
+            return
+
+    def CheckVisualDarkTheme(self):
+        """visual_check on a light title slide plus dark body slides (round-10 post-mortem decks): the dark slides
+        are the body, not statement slides, so the median occupancy is real and deck_outlier still fires."""
+        if kS.ErrorMode:
+            return
+        try:
+            from visual_check import kVisualCheck
+            Base = {"occupancy": 0.3, "empty_band": 0.0, "empty_band_at": {}, "band_ends_content": False,
+                    "empty_side": 0.0, "empty_side_at": {}, "dx": 0.0, "dy": 0.0, "list_rows": 0, "dark": True}
+            Occupancies = [0.24, 0.39, 0.40, 0.23, 0.34, 0.08]
+            Slides = [{"slide": Index + 1, "file": "", "metrics": dict(Base, occupancy=Value, dark=Index > 0)}
+                      for Index, Value in enumerate(Occupancies)]
+            kVisualCheck.MarkDarkTheme(Slides)
+            Findings = []
+            Median = kVisualCheck.AddOutliers(Slides, Findings)
+            Outliers = [F["slide"] for F in Findings if F["code"] == "deck_outlier"]
+            self.Check("visual_check: dark body slides after a light title count as content (median > 0)",
+                       0.29 < Median < 0.35, str(Median))
+            self.Check("visual_check: deck_outlier still flags the near-empty dark slide", Outliers == [6],
+                       str(Outliers))
+            Light = [dict(S, metrics=dict(S["metrics"], dark=S["slide"] == 6)) for S in Slides]
+            kVisualCheck.MarkDarkTheme(Light)
+            self.Check("visual_check: a lone dark slide in a light deck stays a statement slide",
+                       not Light[5]["metrics"]["dark_theme"], str(Light[5]["metrics"]))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckVisualDarkTheme")
             return
 
     def CheckLiveDecisions(self):
@@ -2368,8 +2639,17 @@ class kSelfTestApp:
             Test.CheckRound7()
             Test.CheckRound8()
             Test.CheckRound9()
+            Test.CheckIcons()
             Test.CheckAutoAndCheck()
+            kSelfTestSuggest(Test).Run()  # ready edits, --plan dry build, --apply (selftest_suggest.py)
+            kSelfTestPlausibility(Test).Run()  # invented goals, terse objection answers (selftest_plausibility.py)
+            kSelfTestPlanActual(Test).Run()  # cover tone, plan-vs-actual timeline (selftest_timeline.py)
+            kSelfTestBatch(Test).Run()  # several specs in one --check call, slides: summary (selftest_batch.py)
             Test.CheckThemeAndRenders()
+            Test.CheckVisualCheck()
+            Test.CheckVisualDarkTheme()
+            Test.CheckTemplates()
+            kSelfTestEdit(Test).Run()  # existing decks: extract_spec.py, improve_deck.py (selftest_edit.py)
             Test.CheckErrorPattern()
             Test.CheckCom()
             return 1 if Test.Finish() else 0

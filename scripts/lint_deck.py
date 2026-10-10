@@ -328,7 +328,10 @@ class kLintDeck:
             Nv = Sh._element.find(".//p:cNvPr", NS)
             if Nv is None:
                 return False
-            Dec = Nv.find(".//a16:decorative", NS)
+            # PowerPoint writes 'Mark as decorative' as adec:decorative (2017 namespace); a16 kept for older files
+            Dec = Nv.find(".//{http://schemas.microsoft.com/office/drawing/2017/decorative}decorative")
+            if Dec is None:
+                Dec = Nv.find(".//a16:decorative", NS)
             return Dec is not None and Dec.get("val") in ("1", "true")
         except Exception as e:
             kS.GlobalErrorHandler(e, "kLintDeck.IsDecorative")

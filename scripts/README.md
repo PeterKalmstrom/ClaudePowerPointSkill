@@ -4,15 +4,19 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 
 | Script | Needs | What it does |
 |---|---|---|
-| `build_deck.py` | `python-pptx`, `pillow` (any OS) | Builds a deck from a JSON/YAML spec: 21 patterns that fill the slide, design directions or a template, native charts, computed figures; `--check` (build + lint + render + one summary of every problem), `--plan` (story + pre-checks), automatic fixes for unfit text (`auto:` lines; `--no-auto`), `--lint`, `--slides 1,3` |
+| `build_deck.py` | `python-pptx`, `pillow` (any OS) | Builds a deck from a JSON/YAML spec: 21 patterns that fill the slide, design directions or a template, native charts, computed figures; `--check` (build + lint + render + one summary of every problem), `--plan` (story + pre-checks + a dry build), ready-to-apply edits per finding (`suggest:`; `--apply` writes them and the auto-fixes into the spec; `_suggest.py`), automatic fixes for unfit text (`auto:` lines; `--no-auto`), `--lint`, `--slides 1,3`; several specs in one call (`a.json b.json --check --apply`: one summary, `contact-all.png`, `BATCH-JSON`; `_batch.py`) |
 | `directions.json` | — | The 20 design directions `build_deck.py` and DESIGN.md use |
 | `read_deck.py` | `python-pptx` (any OS) | Whole deck to JSON (ids, layouts, shapes with positions and sizes, charts, tables, notes) or a text outline |
 | `harvest_edits.py` | `python-pptx` (any OS) | Keeps people's hand edits (edited, added, deleted slides) when a generated deck is rebuilt |
 | `fix_deck.py` | `python-pptx`, `pillow` (any OS) | Applies the safe fixes for lint findings to a copy (or `--in-place`, keeping a `.bak`), lists each, re-lints |
+| `extract_spec.py` | `python-pptx` (any OS) | Existing deck → best-effort `build_deck.py` spec (text, figures, charts, tables, pictures, notes; overflow to the notes, each gap a `flag:`), to restyle by rebuilding; `--compare` checks a rebuilt deck kept every word and figure |
+| `improve_deck.py` | `python-pptx`, `pillow` (any OS) | Keeps a deck's look: `fix_deck.py`'s safe fixes, a DRAFT spoken script from each slide's own words where notes are missing or have no script (marked for review, originals kept), then the lint report |
 | `lint_deck.py` | `python-pptx`, `pillow` (any OS) | Lints a deck for the AUDIT.md defect codes from the file alone; `--json`, `--room-depth`, `--fix --out` |
 | `extract_theme.py` | `python-pptx` (any OS) | Theme colours, fonts, layouts and placeholders as JSON, or a `brand-spec.md` skeleton |
+| `make_test_templates.py` | `python-pptx` (any OS) | Writes two fictional test templates (16:9 `.potx`, 4:3 `.pptx`) for `build_deck.py --template` / `--inspect`; `_template.py` holds the layout mapping and template warnings |
 | `render_lo.py` | LibreOffice + poppler (any OS) | Approximate slide PNGs without PowerPoint; `--sheet` adds a contact sheet |
 | `diff_renders.py` | `pillow`, `numpy` (any OS) | Which slides changed between two render folders, with heat maps |
+| `visual_check.py` | `pillow`, `numpy` (any OS) | Looks at renders like a reviewer: empty bands and empty card bottoms, lopsided or crowded slides, list-like stacks, deck outliers; each with a spec edit (`--json`, `--metrics`); part of `build_deck.py --check` |
 | `backup_snapshot.py` | Python only | Timestamped side copy of a deck before a risky edit |
 | `check_word_breaks.py` | Windows + PowerPoint, `pywin32` | Fails if any word is broken across two lines |
 | `render_slides.py` | Windows + PowerPoint, `pywin32` | Slides to JPEG via Save As JPEG (renders embedded fonts correctly) |
@@ -22,7 +26,7 @@ Referenced from `SKILL.md`. Run them with `uvx` so their dependencies never touc
 | `cover_crop.py` | `pillow` (any OS) | Reports stretch distortion and crops an image to a box ratio |
 | `selftest.py` | `python-pptx`, `pillow` (+ `pywin32` with `--com`) | Builds a test deck with known defects and checks every script against it |
 
-`_theme.py` resolves theme colours and slide backgrounds for the linter. `_measure.py` estimates text wrapping from font metrics. `_figures.py` checks derived figures (totals, averages, changes, shares) against the deck's own data and computes the builder's figure tokens (`{sum}`, `{change}` …). `_rules.py` holds the rule helpers shared by the build and lint scripts (label titles, contrast, overlap, room-depth floors). `_ppt.py` is the shared COM helper: it reuses a deck already open in PowerPoint (matched by
+`_theme.py` resolves theme colours and slide backgrounds for the linter. `_measure.py` estimates text wrapping from font metrics. `_figures.py` checks derived figures (totals, averages, changes, shares) against the deck's own data and computes the builder's figure tokens (`{sum}`, `{change}` …). `_plausibility.py` warns on a per-person goal that contradicts the deck's total target or is not listed as assumed, and on objection answers cut to fragments. `_rules.py` holds the rule helpers shared by the build and lint scripts (label titles, contrast, overlap, room-depth floors). `_ppt.py` is the shared COM helper: it reuses a deck already open in PowerPoint (matched by
 path, never `ActivePresentation`), otherwise opens it read-only and windowless, and quits
 PowerPoint only if it started it.
 

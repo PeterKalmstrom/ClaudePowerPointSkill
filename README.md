@@ -124,7 +124,7 @@ Troubleshooting: [`reference/SETUP.md`](reference/SETUP.md).
 | [`reference/SETUP.md`](reference/SETUP.md) | Windows setup, driving PowerPoint from Python, troubleshooting | Windows |
 | [`reference/COM.md`](reference/COM.md) | Snapshots, multi-deck safety, idempotent builds, keeping hand edits, shape filtering | Windows |
 | [`reference/LAYOUT.md`](reference/LAYOUT.md) | Slide size, cropping, text wrap, embedded fonts, word budgets, layout patterns | Mostly any OS |
-| [`reference/BUILDER.md`](reference/BUILDER.md) | Spec format, the 19 patterns and their limits, what the builder decides | Any OS |
+| [`reference/BUILDER.md`](reference/BUILDER.md) | Spec format, the 22 patterns and their limits, icons and pictures, what the builder decides | Any OS |
 | [`reference/DESIGN.md`](reference/DESIGN.md) | Full HD type scale, spacing, chart/table defaults, 20 design directions | Any OS |
 | [`reference/CONTENT.md`](reference/CONTENT.md) | Audience, claim titles, cognitive load, speaker notes | Any OS |
 | [`reference/AUDIT.md`](reference/AUDIT.md) | Defect catalogue with severities, full audit procedure | Catalogue any OS; scripts Windows |
@@ -152,5 +152,6 @@ table in `SKILL.md`, with the fix in the right reference file. See [CONTRIBUTING
 ## License
 
 [MIT](LICENSE). Some audit codes and the audience checklist are adapted from
-[Impeccable](https://impeccable.style/) (Apache-2.0) — see [NOTICE](NOTICE). Changes are listed in
+[Impeccable](https://impeccable.style/) (Apache-2.0), and the icons in `assets/icons/` are
+[Lucide](https://lucide.dev) (ISC, [licence](assets/icons/LICENSE)) — see [NOTICE](NOTICE). Changes are listed in
 [CHANGELOG.md](CHANGELOG.md).

@@ -19,6 +19,13 @@
         { "Out": "scripts/contact_sheet.py",     "Parts": [ "powerpoint/contact_sheet.py" ] },
         { "Out": "scripts/export_pdf.py",        "Parts": [ "powerpoint/export_pdf.py" ] },
         { "Out": "scripts/backup_snapshot.py",   "Parts": [ "powerpoint/backup_snapshot.py" ] },
+        { "Out": "scripts/_theme.py",            "Parts": [ "powerpoint/_theme.py" ] },
+        { "Out": "scripts/render_lo.py",         "Parts": [ "powerpoint/render_lo.py" ] },
+        {
+            "Out":      "scripts/_measure.py",
+            "Parts":    [ "powerpoint/_measure.py" ],
+            "Settings": { "FontDirsVariable": "PPTSKILL_FONT_DIRS" }
+        },
         {
             "Out":      "tools/check_kpattern.py",
             "Parts":    [ "kpy/check_kpattern.py" ],

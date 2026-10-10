@@ -20,6 +20,7 @@ import importlib.util
 import io
 import json
 import os
+import copy
 import re
 import shutil
 import subprocess
@@ -46,6 +47,7 @@ from _figures import kFigures  # noqa: E402
 from _measure import LINE_HEIGHT, kMeasure  # noqa: E402  (the skill's own helpers sit beside this script)
 from _rules import NOTES_DIVIDER, SCRIPT_MIN_WORDS, kRules  # noqa: E402
 from _theme import kTheme  # noqa: E402
+from _template import kTemplateMap  # noqa: E402  (company templates: layout mapping, warnings, --inspect)
 
 A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 P = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -62,6 +64,10 @@ GROW = {"body": 44, "point": 40, "detail": 36, "heading": 44, "value": 120, "not
 GAP = 24
 TILE_ITEM_MAX = 50              # bullets this short (3-5 of them) become tiles side by side
 COMPARE_CARD_MAX = 60           # compare points this short (up to 4 a column) become point cards, not bullets
+BULLET_BAND_MAX = 80            # bullets longer than this stay a plain list (spec warning)
+LINT_COVERED = {                # lint code -> words of the spec warning that already reports it (one line, not two)
+    "ask_without_cost": "does not state its cost", "target_not_measurable": "is not measurable",
+    "title_is_label": "answer slide's title"}
 EDGE = 8                        # the accent edge every card carries (card language: tint + edge, highlight = accent fill)
 FOOTER_TOP, FOOTER_H, FOOTER_SIZE = 760, 30, 18  # deck footer and page number, below BODY_BOTTOM (caption tier)
 KICKER_SIZE, KICKER_H = 24, 34  # the small accent label above a title
@@ -91,11 +97,13 @@ LIMITS = {  # pattern: {field: max characters} plus list-length ranges, checked 
     "compare": {"title": 70, "columns": (2, 3), "columns.heading": 40, "columns.points": (1, 4),
                 "columns.points.*": 70},
     "process": {"title": 70, "steps": (3, 8), "steps.label": 30, "steps.detail": 60},
-    "timeline": {"title": 70, "events": (3, 7), "events.date": 16, "events.label": 40, "window": 30},
+    "timeline": {"title": 70, "events": (3, 7), "events.date": 16, "events.label": 40, "window": 30,
+                 "events.plan": (1, 2), "events.actual": (1, 2)},
     "quote": {"quote": 240, "attribution": 40, "role": 60},
     "chart": {"title": 70, "categories": (2, 24), "series": (1, 6)},
     "table": {"title": 70, "header": (2, 6), "rows": (1, 8)},
     "image": {"title": 70, "caption": 120},
+    "image_text": {"title": 70, "caption": 100, "points": (1, 4), "points.*": 90, "text": 200, "alt": 250},
     "matrix": {"title": 70, "quadrants": (4, 4), "quadrants.heading": 30, "quadrants.text": 90,
                "x_axis": 30, "y_axis": 30},
     "email": {"title": 70, "from": 70, "to": 70, "subject": 90, "body": (1, 6), "body.*": 160, "attachment": 40,
@@ -142,12 +150,19 @@ FIELDS = {  # pattern: {field: kind}; kinds: text, int, number, list[text], list
     "big_number": {"number": "text", "unit": "text", "caption": "text", "visual": "enum:auto,dots,bar,none",
                    "points": "list[text]"},
     "kpi": {"metrics": {"value": "text", "label": "text", "note": "text", "trend": "list[number]",
-                        "trend_labels": "list[text]"},
-            "highlight": "int", "decision": "text", "decision_label": "text", "trend_chart": "bool"},
-    "bullets": {"items": "list[text]", "allow_split": "bool"},
-    "compare": {"columns": {"heading": "text", "points": "list[text]"}, "highlight": "int"},
-    "process": {"steps": {"label": "text", "detail": "text"}, "highlight": "int"},
-    "timeline": {"events": {"date": "text", "label": "text"}, "highlight": "int", "window": "text"},
+                        "trend_labels": "list[text]", "icon": "text"},
+            "highlight": "int", "decision": "text", "decision_label": "text", "trend_chart": "bool",
+            "auto_icons": "bool"},
+    "bullets": {"items": "list[text]", "allow_split": "bool", "icons": "list[text]", "auto_icons": "bool"},
+    "compare": {"columns": {"heading": "text", "points": "list[text]", "icon": "text"}, "highlight": "int",
+                "auto_icons": "bool"},
+    "process": {"steps": {"label": "text", "detail": "text", "icon": "text"}, "highlight": "int",
+                "auto_icons": "bool"},
+    "timeline": {"events": {"date": "text", "label": "text", "icon": "text", "plan": "list[number]",
+                            "actual": "list[number]"}, "highlight": "int", "window": "text",
+                 "unit": "enum:day,week,month,quarter", "auto_icons": "bool"},
+    "image_text": {"image": "text", "alt": "text", "points": "list[text]", "text": "text", "caption": "text",
+                   "side": "enum:left,right", "focus_x": "number", "focus_y": "number"},
     "quote": {"quote": "text", "attribution": "text", "role": "text"},
     "chart": {"type": "enum:column,bar,line,pie", "categories": "list[text]",
               "series": {"name": "text", "values": "list[number]"}, "highlight": "int|text",
@@ -178,12 +193,13 @@ FIELDS = {  # pattern: {field: kind}; kinds: text, int, number, list[text], list
 OPTIONAL_SUB = {"process.detail", "matrix.text", "kpi.note", "kpi_chart.note", "cost_table.detail",
                 "email.line", "kpi.trend", "kpi_chart.trend", "metrics.owner", "metrics.date", "next_steps.owner",
                 "next_steps.date", "timeline.date", "kpi.trend_labels", "kpi_chart.trend_labels", "statement.note", "statement.trend",
-                "statement.trend_labels"}  # sub-fields of list items that may be left out
+                "statement.trend_labels",
+                "kpi.icon", "compare.icon", "process.icon", "timeline.icon", "timeline.plan", "timeline.actual"}  # sub-fields of list items that may be left out
 REQUIRED = {"title": ["title"], "section": ["title"], "statement": ["title"], "quote": ["quote"],
             "big_number": ["title", "number"], "kpi": ["title", "metrics"], "bullets": ["title", "items"],
             "compare": ["title", "columns"], "process": ["title", "steps"], "timeline": ["title", "events"],
             "chart": ["title", "categories", "series"], "table": ["title", "header", "rows"],
-            "image": ["title", "image"], "matrix": ["title", "quadrants"],
+            "image": ["title", "image"], "image_text": ["title", "image", "alt"], "matrix": ["title", "quadrants"],
             "email": ["title", "from", "subject", "body"], "kpi_chart": ["title", "metrics"],
             "cost_table": ["title", "rows"], "quiz": ["title", "options"], "risks": ["title", "risks"],
             "metrics": ["title", "rows"], "next_steps": ["title", "steps"]}
@@ -204,6 +220,8 @@ NOTES_SCHEMA = {"description": "Speaker notes, a spoken script first: a string (
         "pitfalls": _STRS, "sources": _STRS,
         "assumptions": dict(_STRS, description="What the slide assumes beyond the brief (ratings, targets, dates, "
                                                "owners); written into the presenter reference as 'Assumed:'."),
+        "moved": dict(_STRS, description="Text taken off the slide to make it fit (written by --apply), kept in "
+                                         "the presenter reference as 'MOVED FROM SLIDE:'."),
         "qa": {"oneOf": [{"type": "object"}, {"type": "array", "items": {"oneOf": [
             {"type": "string"},
             {"type": "object", "additionalProperties": False, "required": ["q"],
@@ -225,8 +243,8 @@ PATTERNS = {"title": "Title", "section": "Section", "statement": "Statement", "b
             "kpi": "Kpi", "bullets": "Bullets", "compare": "Compare", "process": "Process",
             "timeline": "Timeline", "quote": "Quote", "chart": "Chart", "table": "Table", "image": "Image",
             "matrix": "Matrix", "email": "Email", "kpi_chart": "KpiChart", "cost_table": "CostTable",
-            "quiz": "Quiz", "risks": "Risks", "metrics": "Metrics", "next_steps": "NextSteps"}  # pattern -> kSlidePatterns method
-NUMERIC_KEYS = {"values", "trend", "highlight", "highlight_row", "highlight_metric", "focus_x", "focus_y", "amount", "line",
+            "quiz": "Quiz", "risks": "Risks", "metrics": "Metrics", "next_steps": "NextSteps", "image_text": "ImageText"}  # pattern -> kSlidePatterns method
+NUMERIC_KEYS = {"values", "trend", "plan", "actual", "highlight", "highlight_row", "highlight_metric", "focus_x", "focus_y", "amount", "line",
                 "correct"}
 HIGHLIGHT_ITEMS = {"kpi": "metrics", "compare": "columns", "process": "steps", "timeline": "events",
                    "matrix": "quadrants", "chart": "categories", "kpi_chart": "categories", "cost_table": "rows",
@@ -240,7 +258,8 @@ AUTO_PASSES = 6  # rounds of automatic fixes (filler words, units, detail to the
 SEVERITY_ORDER = {"error": 0, "warn": 1, "info": 2}
 PLAN_SKIP = {"notes", "id", "pattern", "image", "type", "reveal", "visual", "likelihood", "impact", "categories",
              "series", "header", "rows", "number_format", "alt", "highlight", "trend", "trend_labels", "kicker",
-             "allow_split", "decision_label", "window"}
+             "allow_split", "decision_label", "window", "_moved", "icon", "icons", "auto_icons", "side",
+             "answer_title", "explain", "plan", "actual", "unit"}  # a quiz's answer and why: on the answer slide or in the notes, not the quiz
 NO_CHROME = {"title", "section"}            # no footer or page number on covers and dividers
 NO_KICKER = {"title", "section", "quote"}   # their own title treatment
 LEVELS = {"high": "HIGH", "medium": "MEDIUM", "low": "LOW"}
@@ -354,6 +373,13 @@ class kSpecSchema:
                                "description": "Footer text on every content slide (not on title and section slides)."},
                     "page_numbers": {"type": "boolean", "description": "Page numbers on content slides (default true)."},
                     "kickers": {"type": "boolean", "description": "Kicker labels above titles (default true)."},
+                    "cover": {"enum": ["auto", "panel", "plain"], "description": "Cover and section-divider tone "
+                              "(default auto): 'panel' a full panel in the text colour, 'plain' the deck's own "
+                              "background; auto is a panel on a light direction and plain on a dark one, so the "
+                              "cover never flips light before dark body slides."},
+                    "auto_icons": {"type": "boolean", "description": "Icons chosen from the words of tiles, cards, "
+                                   "steps and stages when no item names one (default true; a slide's own "
+                                   "'auto_icons' wins)."},
                     "sources": dict(_STRS, description="Deck-level sources (e.g. [\"the brief\"]): written into "
                                                        "the notes of every content slide whose notes name none."),
                     "facts": {"type": "object", "description": "Named numbers from the brief (a number or a list of "
@@ -450,6 +476,7 @@ class kSpecCheck:
                     if any(Dated) and not all(Dated):
                         Errors.append(f"slide {I} (timeline): give every event a 'date', or none (undated stages are "
                                       "drawn as numbered steps)")
+                    Errors.extend(kPlanActual.SpecErrors(Sl, I))
                 if Pat == "quiz" and not any(isinstance(O, dict) and O.get("correct") is True
                                              for O in Sl.get("options", [])):
                     Errors.append(f"slide {I} (quiz): mark at least one option \"correct\": true")
@@ -509,6 +536,8 @@ class kSpecCheck:
                                           f"values for {Cats} categories")
             if len(str(Spec.get("footer") or "")) > 70:
                 Errors.append("spec: 'footer' is over 70 characters; keep it to the deck name and audience")
+            Errors.extend(kSlideIcons.SpecErrors(Spec))
+            Errors.extend(kCoverTone.SpecErrors(Spec))
             return Errors
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSpecCheck.CheckSpec")
@@ -644,9 +673,7 @@ class kSpecCheck:
                                "what drives it) or state it as a share ('41' + '%', '14/20') for a dot grid")
                 if Pat == "quiz" and Sl.get("reveal") == "slide":
                     Answer = str(Sl.get("answer_title") or "")
-                    if not Answer or re.match(r"^\s*(?:the\s+)?(?:right\s+|correct\s+)?answers?\b\s*(?:is|are)?\s*[:\-"
-                                              r"\u2013\u2014]?\s*[A-D](?:\s*(?:,|and|&)\s*[A-D])*\s*[.!]?\s*$",
-                                              Answer, re.I) or kRules.LooksLikeLabel(Answer):
+                    if kSpecCheck.LabelAnswer(Sl):
                         Out.append(f"slide {I} (quiz): the answer slide's title is " + (f"'{Answer}'" if Answer else
                                    "the default 'Answer: <letter>'") + " - a label, not a claim; set 'answer_title' "
                                    "to what the answer teaches (e.g. 'A look-alike sender is the first red flag')")
@@ -678,10 +705,29 @@ class kSpecCheck:
                             Out.append(f"slide {I} (timeline): the months jump from {MONTHS[Months[J]].title()} to "
                                        f"{MONTHS[Months[J + 1]].title()}; add the missing month or say why in "
                                        "the notes")
-            return Out + kSpecCheck.RepeatWarnings(Spec)
+            from _plausibility import kObjectionCheck, kTargetCheck
+            return (Out + kSpecCheck.RepeatWarnings(Spec) + kSlideIcons.SpecWarnings(Spec)
+                    + kTargetCheck.Warnings(Spec) + kObjectionCheck.Warnings(Spec) + kCoverTone.SpecWarnings(Spec))
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSpecCheck.Warnings")
             return []
+
+    @staticmethod
+    def LabelAnswer(Sl):
+        """True when a quiz's answer slide would be titled by a label (the default 'Answer: C', 'The answer is
+        B', a topic) rather than a claim about what the answer teaches."""
+        if kS.ErrorMode:
+            return False
+        try:
+            if Sl.get("pattern") != "quiz" or Sl.get("reveal") != "slide":
+                return False
+            Answer = str(Sl.get("answer_title") or "")
+            return not Answer or bool(re.match(r"^\s*(?:the\s+)?(?:right\s+|correct\s+)?answers?\b\s*(?:is|are)?\s*"
+                                               r"[:\-–—]?\s*[A-D](?:\s*(?:,|and|&)\s*[A-D])*\s*[.!]?\s*$",
+                                               Answer, re.I)) or kRules.LooksLikeLabel(Answer)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSpecCheck.LabelAnswer")
+            return False
 
     @staticmethod
     def ChartedSeries(Sl):
@@ -968,10 +1014,9 @@ class kDeckDesign:
         if kS.ErrorMode:
             return None
         try:
-            if Path.lower().endswith((".potx", ".potm")):
-                from extract_theme import kThemeReader
-                return kThemeReader.OpenAny(Path)
-            return Presentation(Path)
+            return kTemplateMap.Open(Path)  # a missing or non-PowerPoint path stops with exit 2
+        except kToolException:
+            raise
         except Exception as e:
             kS.GlobalErrorHandler(e, f"kDeckDesign.OpenTemplate(path={Path})")
             return None
@@ -1082,7 +1127,7 @@ class kSlideText:
                 return []
             Out = []
             Fields = (("Figures", "facts"), ("Assumed (confirm before presenting)", "assumptions"),
-                      ("Pitfalls", "pitfalls"), ("Sources", "sources"))
+                      ("Pitfalls", "pitfalls"), ("Sources", "sources"), ("MOVED FROM SLIDE", "moved"))
             for Label, Key in Fields:
                 Items = kSlideText.Items(Notes.get(Key))
                 if Items and (Key != "facts" or kSlideText.Items(Notes.get("say"))):
@@ -1167,6 +1212,7 @@ class kDeckBuilder:
             self.Reserve = False  # the slide being built has a footer band (content must end above it)
             self.KickerWidth = 0  # a pattern with a column beside its claim (a statement's points) narrows the kicker
             self._kx = self._ky = 1.0  # template mode: slide size / 1440 x 810, so the grid follows the template
+            self.TemplateLayouts = {}  # template mode: {"title"|"section"|"content": layout} (kTemplateMap.Map)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.__init__")
 
@@ -1339,7 +1385,8 @@ class kDeckBuilder:
         if kS.ErrorMode:
             return None
         try:
-            S = self.Prs.slides.add_slide(self.Layout)
+            S = self.Prs.slides.add_slide(kTemplateMap.LayoutFor(self.TemplateLayouts, Sl.get("pattern"),
+                                                                 self.Layout))
             S._element.find("p:cSld", NS).set("name", Sl.get("id", f"s{N:02d}"))
             if self.Themed:
                 S.background.fill.solid()
@@ -1585,8 +1632,7 @@ class kDeckBuilder:
                     R.font.size, R.font.bold = self.F(Size), Bold
                     if not (Marker and Ri == 0):
                         R.font.color.theme_color = Colour
-                    if self.Themed:
-                        R.font.name = "+mj-lt" if Heading else "+mn-lt"
+                    R.font.name = "+mj-lt" if Heading else "+mn-lt"  # theme refs: a template's own fonts too
             return Tb
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.Text")
@@ -1608,8 +1654,7 @@ class kDeckBuilder:
             for R in Para.runs:
                 R.font.size, R.font.bold = self.F(Size), Bold
                 R.font.color.theme_color = Colour
-                if self.Themed:
-                    R.font.name = "+mj-lt" if Heading else "+mn-lt"
+                R.font.name = "+mj-lt" if Heading else "+mn-lt"  # theme refs: a template's own fonts too
             return Shape
         except Exception as e:
             kS.GlobalErrorHandler(e, "kDeckBuilder.ShapeText")
@@ -1728,9 +1773,10 @@ class kDeckBuilder:
         try:
             if self.Spec.get("template"):
                 self.Prs = kDeckDesign.OpenTemplate(self.Spec["template"])
-                for Sld in list(self.Prs.slides._sldIdLst):  # start from the template's masters, not its slides
-                    self.Prs.part.drop_rel(Sld.rId)
-                    self.Prs.slides._sldIdLst.remove(Sld)
+                kTemplateMap.DropSlides(self.Prs)  # start from the template's masters, not its slides
+                self.TemplateLayouts = kTemplateMap.Map(self.Prs)
+                if "footer" not in self.Spec and kTemplateMap.FooterText(self.Prs):
+                    self.Spec["footer"] = kTemplateMap.FooterText(self.Prs)  # the template's own footer text
                 self.Themed = False
             else:
                 self.Prs = Presentation()
@@ -1929,6 +1975,8 @@ class kSlidePatterns:
             if Pat == "quiz":
                 Right = [f"{'ABCD'[I]}: {O.get('text', '')}" for I, O in enumerate(Sl["options"]) if O.get("correct")]
                 return "ANSWER: " + "; ".join(Right) + (f"\nWHY: {Sl['explain']}" if Sl.get("explain") else "")
+            if Pat == "timeline" and kPlanActual.Has(Sl):
+                return kPlanActual.NotesText(Sl)
             return ""
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.ExtraNotes")
@@ -1953,10 +2001,10 @@ class kSlidePatterns:
         try:
             B = self._b
             Fg, Sub = TEXT, MUTED
-            if B.Themed:  # the cover is a full panel in the text colour: the deck opens with weight
-                B.Backdrop(S, "CoverPanel", TEXT)
+            if B.Themed:  # a light deck opens on a panel in the text colour; a dark deck stays dark (kCoverTone)
+                if kCoverTone.Panel(B, S, "CoverPanel"):
+                    Fg = Sub = BG
                 B.Rect(S, "CoverBand", 0, H - 24, W, 24, ACCENT)
-                Fg = Sub = BG
             B.Rect(S, "AccentRule", M, 236, 160, 10, ACCENT)
             B.Title(S, Sl.get("title", ""), Size=SIZE["section"], Top=262, Height=230, Colour=Fg)
             if Sl.get("subtitle"):
@@ -1974,12 +2022,11 @@ class kSlidePatterns:
         try:
             B = self._b
             Fg = TEXT
-            if B.Themed:  # dividers echo the cover, so the deck has a rhythm
-                B.Backdrop(S, "SectionPanel", TEXT)
+            if B.Themed and kCoverTone.Panel(B, S, "SectionPanel"):  # dividers echo the cover: a deck rhythm
                 Fg = BG
             if Sl.get("eyebrow"):
                 Tb = B.Text(S, "Eyebrow", Sl["eyebrow"].upper(), M, 250, W - 2 * M, 50, SIZE["caption"],
-                            BG if B.Themed else ACCENT, Bold=True)
+                            BG if Fg == BG else ACCENT, Bold=True)
                 for R in Tb.text_frame.paragraphs[0].runs:
                     R.font._rPr.set("spc", "300")
             B.Title(S, Sl["title"], Size=SIZE["section"], Top=300, Height=220, Colour=Fg)
@@ -2285,6 +2332,7 @@ class kSlidePatterns:
                 Top = Y0 + max(Pad * 0.6 + (EDGE if Across else 0), (Th - Block) / 2)
                 B.Text(S, f"Value{I + 1}", Values[I], X0 + Ix, Top, Iw, Hv, Vs, BG if On else Figure, Bold=True,
                        Heading=True)
+                kSlideIcons.MetricTile(B, S, Ms, I, (X0, Y0, Tw, Th), Top, Block, Pad, EDGE if Across else 0, Vs, Hv, On)
                 B.Text(S, f"Label{I + 1}", str(Mt["label"]), X0 + Ix, Top + Hv + 10, Iw, Hl, Ls, Fg)
                 Y = Top + Hv + 10 + Hl
                 if Notes[I]:
@@ -2396,6 +2444,7 @@ class kSlidePatterns:
                 B.Card(S, f"PointTile{I + 1}", Lx, Ty, Cw, CardH, False, "top")
                 B.Text(S, f"TileNo{I + 1}", str(I + 1), Lx + Pad, Ty + EDGE + Pad, Iw, Nh, Ns, Figure, Bold=True,
                        Heading=True)
+                kSlideIcons.BulletTile(B, S, Sl, I, Lx, Ty + EDGE + Pad, Cw, Pad, Nh)
                 B.Text(S, f"Point{I + 1}", Item, Lx + Pad, Ty + EDGE + Pad + Nh + 16, Iw, Th, Size, TEXT)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.BulletTiles")
@@ -2501,6 +2550,7 @@ class kSlidePatterns:
                 B.Card(S, f"Card{I + 1}", Lx, Ty, Wd, CardH, False, "top", EdgeOn=Lead)
                 B.Text(S, f"Heading{I + 1}", str(C["heading"]), Lx + Pad, Ty + EDGE + Pad, Iw, Hh, Hs,
                        ACCENT if I == Hi and B.Themed else TEXT, Bold=True, Heading=True)
+                kSlideIcons.CompareHeading(B, S, Sl, I, Lx + Pad, Ty + EDGE + Pad, Iw, Hh, Hs)
                 for K, P in enumerate(C["points"]):
                     Y = Ty + EDGE + Pad + Hh + 20 + K * (Ph + 16)
                     B.Rect(S, f"PointCard{I + 1}_{K + 1}", Lx + Pad, Y, Iw, Ph, BG)
@@ -2554,6 +2604,7 @@ class kSlidePatterns:
                 Block = Lh + (14 + Dh if Ds else 0)
                 Y = Card + EDGE + max(Pad, (CardH - EDGE - Block) / 2)  # the text block in the card's middle
                 B.Text(S, f"StepLabel{I + 1}", str(St["label"]), Lx + Pad, Y, Iw, Lh, Ls, TEXT, Bold=True)
+                kSlideIcons.StepCard(B, S, Sl, I, Lx + Pad, Card + EDGE, Y)
                 if Details[I]:
                     B.Text(S, f"StepDetail{I + 1}", Details[I], Lx + Pad, Y + Lh + 14, Iw, Dh, Ds, TEXT)
         except Exception as e:
@@ -2600,6 +2651,9 @@ class kSlidePatterns:
         try:
             B = self._b
             B.Title(S, Sl["title"])
+            if kPlanActual.Has(Sl):  # planned and actual dates per milestone: bar pairs with the slip
+                kPlanActual.Draw(B, S, Sl)
+                return
             Ev = Sl["events"]
             N = len(Ev)
             if not any(E.get("date") for E in Ev):  # undated sequential stages: numbered badges on the rail
@@ -2760,6 +2814,7 @@ class kSlidePatterns:
                 On = I == Hi or Hi is None
                 self.Badge(S, f"Stage{I + 1}", str(I + 1), Cx - D / 2, Ry - D / 2, D, ACCENT if On else MUTED, BG, 40)
             self.LabelCards(S, Ev, Hi, Step, Ry + D / 2 + 24, Ch, Ls)
+            kSlideIcons.Stages(B, S, Sl, Step, Ry - D / 2)
             return True
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.StagesInRow")
@@ -3259,6 +3314,16 @@ class kSlidePatterns:
                 B.Text(S, "Caption", Sl["caption"], M, BODY_BOTTOM - 74, BoxW, 74, SIZE["caption"], MUTED)
         except Exception as e:
             kS.GlobalErrorHandler(e, f"kSlidePatterns.Image(image={Sl.get('image')})")
+            return
+
+    def ImageText(self, S, Sl):
+        """A picture beside its points: drawn by kImageText (alt text required by the spec check)."""
+        if kS.ErrorMode:
+            return
+        try:
+            kImageText.Draw(self._b, S, Sl)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.ImageText")
             return
 
     def Matrix(self, S, Sl):
@@ -3884,6 +3949,207 @@ class kPlanCheck:
             return []
 
 
+class kSuggestContext:
+    """What _suggest.kSuggest needs to know about this builder - limits, budgets, the title measure, the spec
+    checks - injected so _suggest.py imports nothing from build_deck.py."""
+
+    def __init__(self, Spec):
+        try:
+            self.Limits = LIMITS
+            self.NoChrome = NO_CHROME
+            self.CompareHeading = COMPARE_HEADING
+            self.CompareCard = COMPARE_CARD_MAX
+            self.BulletBand = BULLET_BAND_MAX
+            self.Builder = kDeckBuilder(Spec)
+            self.Builder.OpenDeck()
+            self.Builder.Major = kTheme(self.Builder.Prs.slide_master).Font("+mj-lt")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestContext.__init__")
+
+    def TitleFits(self, Text):
+        """True when a title takes at most two lines at the title size (what --plan checks)."""
+        if kS.ErrorMode:
+            return True
+        try:
+            return self.Builder.TitleLines(str(Text), SIZE["title"], W - 2 * M - 15, Loose=True) <= 2
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestContext.TitleFits")
+            return True
+
+    def Words(self, Sl):
+        """Visible words of a spec slide, as --plan and the build count them."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            return kPlanCheck.Words(Sl)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestContext.Words")
+            return 0
+
+    def Budget(self, Sl):
+        """The slide pattern's word budget."""
+        if kS.ErrorMode:
+            return 999
+        try:
+            return kPlanCheck.Budget(Sl)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestContext.Budget")
+            return 999
+
+    def LabelAnswer(self, Sl):
+        """True when a quiz answer slide's title is a label."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return kSpecCheck.LabelAnswer(Sl)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestContext.LabelAnswer")
+            return False
+
+    def LooksLikeLabel(self, Text):
+        """True when Text reads as a topic label, not a claim."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return kRules.LooksLikeLabel(Text)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestContext.LooksLikeLabel")
+            return False
+
+    def ChartedSeries(self, Sl):
+        """The number runs a slide charts."""
+        if kS.ErrorMode:
+            return []
+        try:
+            return kSpecCheck.ChartedSeries(Sl)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestContext.ChartedSeries")
+            return []
+
+    def Remaining(self, Spec):
+        """Every spec error, spec warning and plan finding left on Spec (the edits applied): the questions."""
+        if kS.ErrorMode:
+            return []
+        try:
+            return (kSpecCheck.CheckSpec(Spec) + kSpecCheck.Warnings(Spec) + kFigures.SpecWarnings(Spec)
+                    + kPlanCheck.Run(Spec))
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestContext.Remaining")
+            return []
+
+
+class kSuggestFlow:
+    """--plan / --check suggestions and --apply: ready-to-apply edits for the findings, written into the spec
+    file in the same call, and the builder's auto-fixes written back too, so the next build starts clean."""
+
+    @staticmethod
+    def Suggest(Spec, Only=None):
+        """The kSuggest result for Spec (edits and questions), limited to the --slides being built."""
+        if kS.ErrorMode:
+            return None
+        try:
+            from _suggest import kSuggest
+            Hints = kSuggest(Spec, kSuggestContext(Spec)).Run()
+            if Only:
+                Hints.Patches = [P for P in Hints.Patches if P["slide"] in Only]
+                Hints.Questions = [Q for Q in Hints.Questions if not Q["slide"] or Q["slide"] in Only]
+            return Hints
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestFlow.Suggest")
+            return None
+
+    @staticmethod
+    def Write(Path, Patches, Tag="applied"):
+        """Apply Patches to the spec file at Path; print one line per edit (and per skipped one). Returns the
+        number applied."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            from _suggest import kSpecPatcher, kSuggest
+            if not Patches:
+                return 0
+            Raw = kSpecPatcher.Load(Path)
+            if Raw is None:
+                return 0
+            Applied, Skipped = kSpecPatcher.Apply(Raw, Patches)
+            for P, _ in Applied:
+                print(f"{Tag}: {kSuggest.Line(P)}")
+            for P, Why in Skipped:
+                print(f"skipped: {kSuggest.Line(P)} - {Why}")
+            if Applied:
+                Backup = kSpecPatcher.Save(Raw, Path)
+                print(f"{Tag}: {len(Applied)} edit(s) written to {Path} (before: {Backup})")
+            return len(Applied)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestFlow.Write")
+            return 0
+
+    @staticmethod
+    def WriteAuto(Path, Before, After):
+        """--apply: write the builder's auto-fixes (Before: the spec built, After: as the fixes left it) into the
+        spec file, so the next build needs none."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            from _suggest import kSpecPatcher
+            Patches, Splits = kSpecPatcher.AutoPatches(Before, After)
+            for Id in Splits:
+                print(f"skipped: '{Id}' was added by a split - not written; split the slide in the spec by hand")
+            return kSuggestFlow.Write(Path, Patches, "applied")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestFlow.WriteAuto")
+            return 0
+
+    @staticmethod
+    def DryBuild(Spec, SpecPath, Auto, Report):
+        """--plan: build into a temporary file beside the spec (deleted after), with the auto-fixes, so text that
+        will not fit and layout lint findings show before the first real build. Returns the builder."""
+        if kS.ErrorMode:
+            return None
+        try:
+            import tempfile
+            Fd, Tmp = tempfile.mkstemp(suffix=".pptx", prefix=".plan-",
+                                       dir=os.path.dirname(os.path.abspath(SpecPath)))
+            os.close(Fd)
+            try:
+                return kBuildDeckApp.BuildWithFixes(Spec, Tmp, None, Auto, Report)
+            finally:
+                if os.path.exists(Tmp):
+                    os.remove(Tmp)
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestFlow.DryBuild")
+            return None
+
+    @staticmethod
+    def PrintDry(Builder):
+        """The dry build's findings as plan lines: text that still does not fit, then lint errors and warnings
+        (word counts are already plan lines). Returns how many."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            if Builder is None:
+                return 0
+            Lines = []
+            for Pr in Builder.Problems:
+                if f"plan: fit {Pr}" not in Lines:
+                    Lines.append(f"plan: fit {Pr}")
+            for I in Builder.LintItems:  # errors and layout findings are in Problems already
+                if I["severity"] == "warn" and I["code"] not in LINT_COVERED and I["code"] not in LAYOUT_CODES:
+                    Lines.append(f"plan: lint slide {I['slide']} {I['code']}: {I['message']}")
+            for Line in Lines:
+                print(Line)
+            return len(Lines)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSuggestFlow.PrintDry")
+            return 0
+
+
 class kCheckReport:
     """--check: every problem of every class (spec, fit, lint, notes) in one list sorted by slide, each with the
     spec edit that fixes it, then the contact sheet - one round of edits fixes everything."""
@@ -3894,8 +4160,42 @@ class kCheckReport:
             self.Sheet = ""
             self.Auto = []
             self.Passes = []
+            self.Hints = None  # _suggest.kSuggest: ready-to-apply edits and questions
         except Exception as e:
             kS.GlobalErrorHandler(e, "kCheckReport.__init__")
+
+    def Distinct(self):
+        """The items without repeats: the same message twice on a slide (one fit per pass), and a lint finding
+        whose spec warning on the same slide already says it (LINT_COVERED)."""
+        if kS.ErrorMode:
+            return self.Items
+        try:
+            Seen, Out = set(), []
+            Warned = [(I["spec_slide"], I["message"]) for I in self.Items if I["code"] == "spec_warning"]
+            for I in self.Items:
+                Key = (I["slide"], I["code"], I["message"])
+                Words = LINT_COVERED.get(I["code"])
+                if Key in Seen or (Words and any(No == I["spec_slide"] and Words in Msg for No, Msg in Warned)):
+                    continue
+                Seen.add(Key)
+                Out.append(I)
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.Distinct")
+            return self.Items
+
+    def PrintHints(self):
+        """The suggest: and question: lines, when there are any; the JSON part for CHECK-JSON."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            if self.Hints is None:
+                return {}
+            self.Hints.Print()
+            return self.Hints.AsJson()
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.PrintHints")
+            return {}
 
     @staticmethod
     def SlideOf(Message):
@@ -3995,12 +4295,30 @@ class kCheckReport:
             kS.GlobalErrorHandler(e, "kCheckReport.Key")
             return (0, 0, "")
 
+    def PrintSlides(self, Items):
+        """One line per built slide - pattern, title, and the codes of its findings (or 'ok') - so a reader sees
+        what each slide is and where the problems sit without opening an image."""
+        if kS.ErrorMode:
+            return
+        try:
+            Rows = getattr(self, "Slides", None) or []
+            if not Rows:
+                return
+            print("slides:")
+            for N, No, Pattern, Title in Rows:
+                Codes = sorted({I["code"] for I in Items if I["slide"] == N and I["severity"] != "info"})
+                Short = Title if len(Title) <= 60 else Title[:57] + "..."
+                print(f"  {N:>2} {Pattern:<12} {Short:<60} {', '.join(Codes) if Codes else 'ok'}")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCheckReport.PrintSlides")
+            return
+
     def Print(self, Out, Slides, Seconds):
         """The summary: counts, then every problem sorted by slide with its edit, the sheet, and one JSON line."""
         if kS.ErrorMode:
             return
         try:
-            Items = sorted(self.Items, key=kCheckReport.Key)
+            Items = sorted(self.Distinct(), key=kCheckReport.Key)
             Count = {"error": 0, "warn": 0, "info": 0}
             for I in Items:
                 Count[I["severity"]] = Count.get(I["severity"], 0) + 1
@@ -4013,13 +4331,16 @@ class kCheckReport:
                 Shape = f" [{I['shape']}]" if I["shape"] else ""
                 print(f"  {Where:<9} {I['severity']:<5} {I['code']:<22}{Shape} {I['message']}")
                 print(f"  {'':<9} edit: {I['edit']}")
+            Hints = self.PrintHints()
+            self.PrintSlides(Items)
             if self.Sheet:
                 print(f"sheet: {self.Sheet}  <- look at it once; fix everything listed above in one edit")
             else:
                 print("sheet: (not rendered - LibreOffice or pdftoppm not found; render on Windows instead)")
             print("CHECK-JSON " + json.dumps({"deck": Out, "slides": Slides, "seconds": round(Seconds, 1),
                                               "counts": Count, "auto_fixes": len(self.Auto), "passes": self.Passes,
-                                              "sheet": self.Sheet, "problems": Items}, ensure_ascii=False))
+                                              "sheet": self.Sheet, "problems": Items, "suggestions": Hints},
+                                             ensure_ascii=False))
         except Exception as e:
             kS.GlobalErrorHandler(e, "kCheckReport.Print")
             return
@@ -4038,6 +4359,22 @@ class kBuildDeckApp:
         except Exception as e:
             kS.GlobalErrorHandler(e, "kBuildDeckApp.LimitOnly")
             return False
+
+    @staticmethod
+    def TemplateWarnings(Spec):
+        """The template's warnings (layouts it lacks, a size that is not 16:9, theme colours that fail contrast,
+        fonts not installed) as 'template ...' lines; [] when the spec builds on a direction."""
+        if kS.ErrorMode:
+            return []
+        try:
+            if not Spec.get("template"):
+                return []
+            return [f"template {W}" for W in kTemplateMap.PathWarnings(Spec["template"])]
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBuildDeckApp.TemplateWarnings")
+            return []
 
     @staticmethod
     def BuildWithFixes(Spec, Out, Only, Auto, Report):
@@ -4083,18 +4420,112 @@ class kBuildDeckApp:
             Files = kLoRenderer.Render(Out, Dir)
             if Files:
                 Report.Sheet = kContactSheet.Build(Files, 4, 480, os.path.join(Dir, "contact.png")) or ""
+                from visual_check import kVisualCheck  # pixel-level layout findings (empty bands, lists, balance)
+                kVisualCheck.AddToReport(Files, Report)
         except kToolException:
             raise
         except Exception as e:
             kS.GlobalErrorHandler(e, "kBuildDeckApp.Render")
             return
 
+    def Prepare(self, Args, Report):
+        """Load the spec and run every pre-build step: figure tokens, the allow_split pre-split, spec errors and
+        warnings. Returns (spec, only, errors, warnings), or None when the spec could not be read."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Spec = kSpecLoader.Load(Args.spec)
+            if Spec is None:
+                return None
+            if Args.template:  # the command line names the template: it wins over the spec's
+                Spec["template"] = os.path.abspath(Args.template)
+            Only = kSpecCheck.SlideSet(Args.slides, len(Spec.get("slides", []))) if Args.slides else None
+            Schema = kSpecCheck.SchemaErrors(Spec)  # on the spec as written, before figure tokens are filled in
+            Tokens = kFigures.Resolve(Spec, kSlidePatterns.Share)
+            if not Args.no_auto and not Only:  # "allow_split": true and more bullets than the limit: split first
+                from _autofix import kAutoFix
+                for No, Id, Path, What in kAutoFix.PreSplit(Spec, LIMITS["bullets"]["items"][1]):
+                    print(f"auto: slide {No} ({Id}) {Path}: {What}")
+                    Report.Auto.append({"spec_slide": No, "id": Id, "field": Path, "change": What, "pass": 0})
+                if Report.Auto:
+                    Schema = kSpecCheck.SchemaErrors(Spec)
+            Errors = kSpecCheck.ForSlides(kSpecCheck.CheckSpec(Spec) + Schema + Tokens, Only)
+            Warnings = kSpecCheck.ForSlides(kSpecCheck.Warnings(Spec) + kFigures.SpecWarnings(Spec), Only)
+            Warnings += self.TemplateWarnings(Spec)
+            return Spec, Only, Errors, Warnings
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBuildDeckApp.Prepare")
+            return None
+
+    def PlanDry(self, Args, Spec, Errors, Report):
+        """--plan: a dry build of the spec as it will be once the suggested edits are in (auto-fixes on unless
+        --no-auto), and its findings - what is left after the edits. The auto-fixes become edits too: written into
+        the spec with --apply, else listed with the others. Skipped when the spec has errors other than limits.
+        Returns the finding count."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            from _suggest import kSpecPatcher
+            if Errors and not self.LimitOnly(Errors):
+                return 0
+            Hints = Report.Hints
+            Trial = copy.deepcopy(Hints.Work if Hints is not None else Spec)
+            Before = copy.deepcopy(Trial)
+            Builder = kSuggestFlow.DryBuild(Trial, Args.spec, not Args.no_auto, Report)
+            Count = kSuggestFlow.PrintDry(Builder)
+            if Report.Auto and Hints is not None:
+                Auto, _ = kSpecPatcher.AutoPatches(Before, Trial)
+                if Args.apply:
+                    kSuggestFlow.Write(Args.spec, Auto)
+                else:
+                    Hints.Merge(Auto)
+            return Count
+        except kToolException:
+            raise
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBuildDeckApp.PlanDry")
+            return 0
+
+    @staticmethod
+    def DefaultOut(Args):
+        """The single spec path out of the spec list; with --check and no --out, the deck goes beside the spec
+        (<spec>.pptx), so a check needs no --out. Returns the spec path or None."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Spec = Args.spec[0] if Args.spec else None
+            if Spec and Args.check and not Args.out:
+                Args.out = os.path.splitext(Spec)[0] + ".pptx"
+            return Spec
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBuildDeckApp.DefaultOut")
+            return None
+
+    @staticmethod
+    def SlideLines(Builder, Spec):
+        """--check: one (deck slide, spec slide, pattern, title) row per built slide, for the per-slide summary."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Rows = []
+            for N in Builder.Numbers:
+                No = Builder.SpecOf.get(N, 0)
+                Sl = Spec["slides"][No - 1] if 0 < No <= len(Spec["slides"]) else {}
+                Rows.append((N, No, str(Sl.get("pattern", "")), str(Sl.get("title", ""))))
+            return Rows
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kBuildDeckApp.SlideLines")
+            return []
+
     def Run(self):
         if kS.ErrorMode:
             return 1
         try:
             Ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-            Ap.add_argument("spec", nargs="?")
+            Ap.add_argument("spec", nargs="*", help="one spec, or several for a batch (one summary, one "
+                                                    "contact-all.png; --out is then a folder)")
             Ap.add_argument("--out")
             Ap.add_argument("--lint", action="store_true", help="run lint_deck.py on the result")
             Ap.add_argument("--check", action="store_true",
@@ -4107,9 +4538,21 @@ class kBuildDeckApp:
             Ap.add_argument("--list-directions", action="store_true")
             Ap.add_argument("--print-schema", action="store_true", help="print the spec's JSON Schema")
             Ap.add_argument("--plan", action="store_true", help="print the story and the pre-build checks, and stop")
+            Ap.add_argument("--apply", action="store_true",
+                            help="with --plan or --check: write the ready-to-apply edits (suggest: lines) and the "
+                                 "auto-fixes into the spec file (keeping a .before-apply copy), then plan or build "
+                                 "it in the same call; what needs new content stays a question: line")
             Ap.add_argument("--slides", help="build only these spec slides, e.g. 1,3 or 2-4 (the showcase-first "
                                              "step): same theme, page numbers and kickers as in the whole deck")
+            Ap.add_argument("--template", help="build into this company template (.potx/.pptx); overrides the "
+                                               "spec's 'template' and 'direction'")
+            Ap.add_argument("--inspect", metavar="TEMPLATE",
+                            help="report what a template offers (size, colours, fonts, layouts) and how the "
+                                 "patterns map onto it, with its warnings, and stop")
             Args = Ap.parse_args()
+            if Args.inspect:
+                print(kTemplateMap.Inspect(Args.inspect))
+                return 0 if not kS.ErrorMode else 1
             if Args.print_schema:
                 print(json.dumps(kSpecSchema.SpecSchema(), indent=2, ensure_ascii=False))
                 return 0
@@ -4118,25 +4561,28 @@ class kBuildDeckApp:
                     print(f"{D['id']:<18} {D['tone']:<10} {D['heading']} / {D['body']}  #{D['accent']} on "
                           f"#{D['background']}  — {D['mood']}")
                 return 0
+            if len(Args.spec) > 1:  # batch: several specs, one summary (scripts/_batch.py)
+                from _batch import kBatchCheck
+                return kBatchCheck.Run(Args)
+            Args.spec = self.DefaultOut(Args)
             if not Args.spec or not (Args.out or Args.plan):
                 Ap.error("spec and --out are required (or --plan)")
             Started = time.time()
-            Spec = kSpecLoader.Load(Args.spec)
-            if Spec is None:
-                return 1
-            Only = kSpecCheck.SlideSet(Args.slides, len(Spec.get("slides", []))) if Args.slides else None
-            Schema = kSpecCheck.SchemaErrors(Spec)  # on the spec as written, before figure tokens are filled in
-            Tokens = kFigures.Resolve(Spec, kSlidePatterns.Share)
             Report = kCheckReport()
-            if not Args.no_auto and not Only:  # "allow_split": true and more bullets than the limit: split first
-                from _autofix import kAutoFix
-                for No, Id, Path, What in kAutoFix.PreSplit(Spec, LIMITS["bullets"]["items"][1]):
-                    print(f"auto: slide {No} ({Id}) {Path}: {What}")
-                    Report.Auto.append({"spec_slide": No, "id": Id, "field": Path, "change": What, "pass": 0})
-                if Report.Auto:
-                    Schema = kSpecCheck.SchemaErrors(Spec)
-            Errors = kSpecCheck.ForSlides(kSpecCheck.CheckSpec(Spec) + Schema + Tokens, Only)
-            Warnings = kSpecCheck.ForSlides(kSpecCheck.Warnings(Spec) + kFigures.SpecWarnings(Spec), Only)
+            Ready = self.Prepare(Args, Report)
+            if Ready is None:
+                return 1
+            Spec, Only, Errors, Warnings = Ready
+            Hints = kSuggestFlow.Suggest(Spec, Only) if not Errors or self.LimitOnly(Errors) else None
+            if Args.apply and Hints is not None and Hints.Patches and (Args.plan or Args.check):
+                if kSuggestFlow.Write(Args.spec, Hints.Patches):
+                    Report = kCheckReport()
+                    Ready = self.Prepare(Args, Report)
+                    if Ready is None:
+                        return 1
+                    Spec, Only, Errors, Warnings = Ready
+                    Hints = kSuggestFlow.Suggest(Spec, Only) if not Errors or self.LimitOnly(Errors) else None
+            Report.Hints = Hints
             if Args.plan:
                 kSpecLoader.PrintPlan(Spec)
                 Pre = kPlanCheck.Run(Spec) if not Errors or self.LimitOnly(Errors) else []
@@ -4146,9 +4592,15 @@ class kBuildDeckApp:
                     print(f"spec warning: {Wn}")
                 for Pc in Pre:
                     print(f"plan: {Pc}")
-                print(f"\nplan: {len(Errors)} spec error(s), {len(Warnings)} warning(s), {len(Pre)} pre-build "
-                      "finding(s)" + (" - fix the spec lines, weigh the plan lines, then build with --check"
-                                     if Errors or Warnings or Pre else " - build with --check"))
+                Dry = self.PlanDry(Args, Spec, Errors, Report)
+                Report.PrintHints()
+                Found = len(Pre) + Dry
+                Asks = len(Hints.Questions) if Hints is not None else 0
+                Edits = len(Hints.Patches) if Hints is not None and not Args.apply else 0
+                print(f"\nplan: {len(Errors)} spec error(s), {len(Warnings)} warning(s), {Found} pre-build "
+                      f"finding(s); {Edits} ready edit(s), {Asks} question(s)"
+                      + (" - --apply writes the edits; answer the questions in the spec, then build with --check"
+                         if Errors or Warnings or Found else " - build with --check"))
                 return 2 if Errors else 0
             for E in Errors:
                 print(f"spec: {E}", file=sys.stderr)
@@ -4160,9 +4612,12 @@ class kBuildDeckApp:
                 if Args.check:
                     Report.Print(Args.out, 0, time.time() - Started)
                 return 2  # spec mistakes (expected state): listed above, nothing written
+            Before = copy.deepcopy(Spec) if Args.apply else None
             Builder = self.BuildWithFixes(Spec, Args.out, Only, not Args.no_auto, Report)
             if kS.ErrorMode or Builder is None:
                 return 1
+            if Before is not None and Report.Auto:
+                kSuggestFlow.WriteAuto(Args.spec, Before, Spec)
             N = len(Builder.Numbers)
             print(f"{N} slides -> {Args.out}" + (f" (spec slides {Args.slides} only)" if Only else ""))
             for Pr in Builder.Problems:
@@ -4176,6 +4631,7 @@ class kBuildDeckApp:
             if Args.check:
                 sys.stderr.flush()
                 Report.AddBuild(Builder)
+                Report.Slides = self.SlideLines(Builder, Spec)
                 self.Render(Args.out, Report)
                 if kS.ErrorMode:
                     return 1
@@ -4188,6 +4644,751 @@ class kBuildDeckApp:
         except Exception as e:
             kS.GlobalErrorHandler(e, "kBuildDeckApp.Run")
             return 1
+
+
+class kSlideIcons:
+    """Icons on items, cards, tiles, stages and KPI tiles (scripts/_icons.py draws them as editable vector shapes).
+    An item's own "icon" (bullets: the slide's "icons" list) wins; without any, the icons are chosen from the
+    items' words when "auto_icons" (slide, else deck; default true) allows and every item gets a distinct one.
+    An icon sits only where it has room; one that cannot is skipped and named on stderr - never squeezed."""
+
+    @staticmethod
+    def SlideOf(B, Items):
+        """The spec slide that holds the list Items (the same object)."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            for Sl in B.Spec.get("slides", []):
+                if isinstance(Sl, dict) and any(V is Items for V in Sl.values()):
+                    return Sl
+            return {}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.SlideOf")
+            return {}
+
+    @staticmethod
+    def AutoOn(B, Sl):
+        """True when automatic icon choice is on for this slide (slide 'auto_icons', else deck, default true)."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return bool(Sl.get("auto_icons", B.Spec.get("auto_icons", True)))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.AutoOn")
+            return False
+
+    @staticmethod
+    def ForSet(B, Sl, Explicit, Texts):
+        """One icon name (or None) per item: the explicit ones when any is given, else the automatic set."""
+        if kS.ErrorMode:
+            return []
+        try:
+            from _icons import kIconLibrary
+            N = len(Texts)
+            Given = [X for X in Explicit if X is not None]
+            if Given:
+                return [None if X is None or kIconLibrary.Off(X) else kIconLibrary.Resolve(X)
+                        for X in (list(Explicit) + [None] * N)[:N]]
+            if not kSlideIcons.AutoOn(B, Sl):
+                return [None] * N
+            return kIconLibrary.AutoSet(Texts) or [None] * N
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.ForSet")
+            return []
+
+    @staticmethod
+    def Draw(B, S, Icon, Lx, Ty, Size, Name, On=False):
+        """Icon (a bundled name) Size square at (Lx, Ty) on the 1440 grid: accent, or background on an accent card."""
+        if kS.ErrorMode:
+            return None
+        try:
+            from _icons import kIconShape
+            if not Icon:
+                return None
+            Side = min(B.X(Size), B.Y(Size))
+            return kIconShape.Draw(S.shapes, Icon, B.X(Lx), B.Y(Ty), Side, BG if On else ACCENT, Name)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.Draw")
+            return None
+
+    @staticmethod
+    def Skipped(Sl, What, Named, I):
+        """Name icons the spec asked for that had no room (stderr, once per slide; the slide is right without
+        them). Automatic icons that do not fit are simply left out."""
+        if kS.ErrorMode:
+            return
+        try:
+            if I == 0 and any(X is not None for X in Named):
+                print(f"icon: '{Sl.get('id') or Sl.get('title', '')}' - {What} not drawn (no room beside the text)",
+                      file=sys.stderr)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.Skipped")
+            return
+
+    @staticmethod
+    def Width(B, Text, Size, Heading=True):
+        """One-line width of Text on the 1440 grid."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            return B.LineWidth(Text, Size, Heading=Heading, Bold=True) / max(B._kx, 1e-6)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.Width")
+            return 0.0
+
+    @staticmethod
+    def BulletTile(B, S, Sl, I, Lx, Ty, Cw, Pad, Nh):
+        """Bullet tile I: the icon at the right end of the number row."""
+        if kS.ErrorMode:
+            return
+        try:
+            Items = [str(X) for X in Sl.get("items", [])]
+            Icons = kSlideIcons.ForSet(B, Sl, list(Sl.get("icons") or []), Items)
+            if I < len(Icons) and Icons[I]:
+                Ic = Nh * 0.85
+                kSlideIcons.Draw(B, S, Icons[I], Lx + Cw - Pad - Ic, Ty + (Nh - Ic) / 2, Ic, f"TileIcon{I + 1}")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.BulletTile")
+            return
+
+    @staticmethod
+    def MetricTile(B, S, Ms, I, Box, Top, Block, Pad, Edge, Vs, Hv, On):
+        """KPI tile I (Box = left, top, width, height): the icon in the top-right corner above the value, else
+        the bottom-right corner below the text, else at the end of the value's line. Every tile has the same
+        block, so all icons of a row fit or none do."""
+        if kS.ErrorMode:
+            return
+        try:
+            X0, Y0, Tw, Th = Box
+            Sl = kSlideIcons.SlideOf(B, Ms)
+            Named = [M_.get("icon") for M_ in Ms]
+            Icons = kSlideIcons.ForSet(B, Sl, Named, [str(M_.get("label", "")) for M_ in Ms])
+            if I >= len(Icons) or not Icons[I]:
+                return
+            # the corner above the value: every tile has the same block and room, so all icons fit or none do
+            Ic, Y = 44, Y0 + Edge + Pad * 0.5
+            if Y + Ic <= Top - 2:  # the value's box carries its own top inset
+                kSlideIcons.Draw(B, S, Icons[I], X0 + Tw - Pad - Ic, Y, Ic, f"MetricIcon{I + 1}", On)
+                return
+            Yb = Y0 + Th - Pad * 0.5 - Ic
+            if Yb >= Top + Block + 8:
+                kSlideIcons.Draw(B, S, Icons[I], X0 + Tw - Pad - Ic, Yb, Ic, f"MetricIcon{I + 1}", On)
+                return
+            # else at the end of the value's line, when the widest value leaves room in every tile
+            Ic = min(52, Hv * 0.6)
+            Widest = max(kSlideIcons.Width(B, str(M_.get("value", "")), Vs) for M_ in Ms)
+            if Ic >= 32 and Widest + Ic + 20 <= Tw - 2 * Pad:
+                kSlideIcons.Draw(B, S, Icons[I], X0 + Tw - Pad - Ic, Top + (Hv - Ic) / 2, Ic, f"MetricIcon{I + 1}", On)
+                return
+            kSlideIcons.Skipped(Sl, "the metric icons", Named, I)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.MetricTile")
+            return
+
+    @staticmethod
+    def CompareHeading(B, S, Sl, I, Lx, Ty, Iw, Hh, Hs):
+        """Compare column I: the icon at the right end of a one-line heading."""
+        if kS.ErrorMode:
+            return
+        try:
+            Cols = Sl.get("columns", [])
+            Named = [C.get("icon") for C in Cols]
+            Icons = kSlideIcons.ForSet(B, Sl, Named, [str(C.get("heading", "")) for C in Cols])
+            if I >= len(Icons) or not Icons[I]:
+                return
+            Ic = min(52, max(36, Hs * 1.1))
+            Widest = max(kSlideIcons.Width(B, str(C.get("heading", "")), Hs) for C in Cols)
+            if Hh <= Hs * 1.6 and Widest + Ic + 16 <= Iw:  # every heading one line with room: all icons or none
+                kSlideIcons.Draw(B, S, Icons[I], Lx + Iw - Ic, Ty + max(0, (Hh - Ic) / 2), Ic, f"HeadingIcon{I + 1}")
+                return
+            kSlideIcons.Skipped(Sl, "the column icons", Named, I)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.CompareHeading")
+            return
+
+    @staticmethod
+    def StepCard(B, S, Sl, I, Lx, CardTop, LabelTop):
+        """Process step card I (three or four steps): the icon above the label when the card has room."""
+        if kS.ErrorMode:
+            return
+        try:
+            Steps = Sl.get("steps", [])
+            Named = [X.get("icon") for X in Steps]
+            Icons = kSlideIcons.ForSet(B, Sl, Named, [f"{X.get('label', '')} {X.get('detail', '')}" for X in Steps])
+            if I >= len(Icons) or not Icons[I]:
+                return
+            Ic = min(52, LabelTop - CardTop - 18)  # every card has the same text block: all icons fit or none
+            if Ic >= 32:
+                kSlideIcons.Draw(B, S, Icons[I], Lx, LabelTop - Ic - 10, Ic, f"StepIcon{I + 1}")
+                return
+            if any(X is not None for X in Named) and kSlideIcons.InArrow(B, S, Icons[I], I, Sl.get("highlight") == I):
+                return
+            kSlideIcons.Skipped(Sl, "the step icons", Named, I)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.StepCard")
+            return
+
+    @staticmethod
+    def InArrow(B, S, Icon, I, On):
+        """Named step icons with no room in the card: the icon takes the number's place in step I's arrow (the
+        arrows already show the order). False when the arrow is not there."""
+        if kS.ErrorMode:
+            return False
+        try:
+            from _icons import kIconShape
+            Arrow = next((X for X in S.shapes if X.name == f"Step{I + 1}" and X.has_text_frame), None)
+            if Arrow is None:
+                return False
+            Arrow.text_frame.text = ""
+            Side = int(Arrow.height * 0.6)
+            Inset = int(Arrow.height * 0.32)
+            Lx = Arrow.left + Inset + (Arrow.width - 2 * Inset - Side) // 2
+            kIconShape.Draw(S.shapes, Icon, Lx, Arrow.top + (Arrow.height - Side) // 2, Side, BG if On else ACCENT,
+                            f"StepIcon{I + 1}", Alt=f"Step {I + 1}")
+            return True
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.InArrow")
+            return False
+
+    @staticmethod
+    def Stages(B, S, Sl, Step, BadgeTop):
+        """Undated stages in a row: each icon centred above its numbered badge, when there is room."""
+        if kS.ErrorMode:
+            return
+        try:
+            Ev = Sl.get("events", [])
+            Named = [E.get("icon") for E in Ev]
+            Icons = kSlideIcons.ForSet(B, Sl, Named, [str(E.get("label", "")) for E in Ev])
+            Ic = min(56, BadgeTop - 12 - (BODY_TOP + 4))
+            for I, Icon in enumerate(Icons):
+                if not Icon:
+                    continue
+                if Ic < 32:
+                    kSlideIcons.Skipped(Sl, "the stage icons", Named, 0)
+                    return
+                kSlideIcons.Draw(B, S, Icon, M + Step * I + Step / 2 - Ic / 2, BadgeTop - 12 - Ic, Ic,
+                                 f"StageIcon{I + 1}")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.Stages")
+            return
+
+    @staticmethod
+    def SpecErrors(Spec):
+        """Icon names that are not bundled, and pictures without a file or alt text, as spec messages."""
+        if kS.ErrorMode:
+            return []
+        try:
+            from _icons import kIconLibrary
+            Out = []
+            for I, Sl in enumerate(Spec.get("slides", []), 1):
+                if not isinstance(Sl, dict):
+                    continue
+                Pat = Sl.get("pattern")
+                Named = list(Sl.get("icons") or []) + [X.get("icon") for K in ("metrics", "columns", "steps", "events")
+                                                       for X in (Sl.get(K) or []) if isinstance(X, dict)]
+                for Nm in Named:
+                    if Nm is not None and not kIconLibrary.Off(Nm) and not kIconLibrary.Resolve(Nm):
+                        Out.append(f"slide {I} ({Pat}): icon '{Nm}' is not bundled - one of the names in "
+                                   "assets/icons (e.g. shield, mail, users, chart-column), or \"none\"")
+                if Pat == "image_text":
+                    if not os.path.exists(str(Sl.get("image", ""))):
+                        Out.append(f"slide {I} (image_text): image file not found: {Sl.get('image')}")
+                    if not str(Sl.get("alt") or "").strip():
+                        Out.append(f"slide {I} (image_text): 'alt' is required - say what the picture shows")
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.SpecErrors")
+            return []
+
+    @staticmethod
+    def SpecWarnings(Spec):
+        """An 'image' slide without alt text (it falls back to the title, which rarely describes the picture)."""
+        if kS.ErrorMode:
+            return []
+        try:
+            return [f"slide {I} (image): no 'alt' - the title stands in; say what the picture shows"
+                    for I, Sl in enumerate(Spec.get("slides", []), 1)
+                    if isinstance(Sl, dict) and Sl.get("pattern") == "image" and not str(Sl.get("alt") or "").strip()]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlideIcons.SpecWarnings")
+            return []
+
+
+class kImageText:
+    """The image_text pattern: a cover-cropped picture on one half (alt text required), the claim's points on the
+    other as accent-marked cards, with an optional caption under the picture."""
+
+    @staticmethod
+    def Picture(B, S, Sl, Lx, Ty, Wd, Ht):
+        """The picture cover-cropped to exactly Wd x Ht (grid) at (Lx, Ty), named 'Photo', with its alt text."""
+        if kS.ErrorMode:
+            return None
+        try:
+            from PIL import Image, ImageOps
+            from cover_crop import kCoverCrop
+            Img = ImageOps.exif_transpose(Image.open(Sl["image"]))
+            Img = Img.convert("RGBA" if "A" in Img.getbands() else "RGB")
+            Crop = kCoverCrop.Crop(Img, Wd * B._kx, Ht * B._ky, Sl.get("focus_x", 0.5), Sl.get("focus_y", 0.5))
+            Tw = max(Crop.width, 960)
+            Buf = io.BytesIO()
+            Crop.resize((Tw, round(Tw * Ht * B._ky / (Wd * B._kx))), Image.LANCZOS).save(Buf, "PNG")
+            Buf.seek(0)
+            Pic = S.shapes.add_picture(Buf, B.X(Lx), B.Y(Ty), B.X(Wd), B.Y(Ht))
+            Pic.name = "Photo"
+            kSlideText.Alt(Pic, Sl.get("alt") or Sl["title"])
+            return Pic
+        except Exception as e:
+            kS.GlobalErrorHandler(e, f"kImageText.Picture(image={Sl.get('image')})")
+            return None
+
+    @staticmethod
+    def Draw(B, S, Sl):
+        """Title, then the picture (side 'left' default, or 'right') and the points (or 'text') beside it."""
+        if kS.ErrorMode:
+            return
+        try:
+            B.Title(S, Sl["title"])
+            Half = (W - 2 * M - GAP * 2) / 2
+            Cap = 74 if Sl.get("caption") else 0
+            PicLeft = Sl.get("side", "left") != "right"
+            Px = M if PicLeft else M + Half + GAP * 2
+            Tx = M + Half + GAP * 2 if PicLeft else M
+            BodyH = BODY_BOTTOM - BODY_TOP - 10
+            kImageText.Picture(B, S, Sl, Px, BODY_TOP + 10, Half, BodyH - Cap)
+            if Cap:
+                B.Text(S, "Caption", Sl["caption"], Px, BODY_BOTTOM - Cap + 8, Half, Cap - 8, SIZE["caption"], MUTED)
+            Points = [str(X) for X in (Sl.get("points") or [])] or ([str(Sl["text"])] if Sl.get("text") else [])
+            kImageText.Points(B, S, Points, Tx, BODY_TOP + 10, Half, BodyH)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kImageText.Draw")
+            return
+
+    @staticmethod
+    def Points(B, S, Points, Lx, Ty, Wd, Ht):
+        """The points as stacked cards with an accent edge, one text size, centred in the column."""
+        if kS.ErrorMode:
+            return
+        try:
+            if not Points:
+                return
+            N, Gap, Inner = len(Points), 18, 24
+            Tw = Wd - EDGE - 2 * Inner
+            Each = (Ht - Gap * (N - 1)) / N
+            Size = B.FitAll(Points, GROW["point"], Tw, min(Each, 220) - 2 * Inner + 10, What="the points")
+            Ch = max(B.Need(P, Size, Tw) for P in Points) + 2 * Inner
+            Ch = min(max(Ch, 96), Each)
+            Top = Ty + (Ht - (N * Ch + Gap * (N - 1))) / 2
+            for I, P in enumerate(Points):
+                Y = Top + I * (Ch + Gap)
+                B.Card(S, f"PointCard{I + 1}", Lx, Y, Wd, Ch, False, "left")
+                B.Text(S, f"Point{I + 1}", P, Lx + EDGE + Inner, Y + Inner - 6, Tw, Ch - 2 * Inner + 12, Size, TEXT,
+                       Anchor=MSO_ANCHOR.MIDDLE)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kImageText.Points")
+            return
+
+
+class kCoverTone:
+    """The tone of the cover and the section dividers against the body slides. On a light direction they are full
+    panels in the text colour (dark statement slides that give the deck its rhythm); on a dark direction the text
+    colour is light, so the same panel would open the deck on a light slide before dark body slides - a clash.
+    The deck-level 'cover' picks: 'auto' (default: panel on light, plain on dark), 'panel' or 'plain'."""
+
+    Modes = ("auto", "panel", "plain")
+
+    @staticmethod
+    def IsDark(Hex):
+        """True when a colour is dark: white text on it contrasts more than black text."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return kRules.ContrastRatio(Hex, "FFFFFF") > kRules.ContrastRatio(Hex, "000000")
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCoverTone.IsDark")
+            return False
+
+    @staticmethod
+    def DeckIsDark(Spec):
+        """True when the deck is built on a direction (no template) whose background is dark."""
+        if kS.ErrorMode:
+            return False
+        try:
+            if Spec.get("template"):
+                return False
+            Name = Spec.get("direction", "clean-corporate")
+            for D in kSpecSchema.Directions():
+                if D["id"] == Name:
+                    return kCoverTone.IsDark(D["background"])
+            return False  # an unknown direction is reported by the build itself
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCoverTone.DeckIsDark")
+            return False
+
+    @staticmethod
+    def Mode(Spec):
+        """'panel' or 'plain': the tone covers and dividers are drawn in."""
+        if kS.ErrorMode:
+            return "panel"
+        try:
+            Cover = Spec.get("cover", "auto")
+            if Cover in ("panel", "plain"):
+                return Cover
+            return "plain" if kCoverTone.DeckIsDark(Spec) else "panel"
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCoverTone.Mode")
+            return "panel"
+
+    @staticmethod
+    def Panel(B, S, Name):
+        """Draw the full panel in the text colour behind a cover or divider when the deck's mode asks for one;
+        True when drawn (its text then goes in the background colour)."""
+        if kS.ErrorMode:
+            return False
+        try:
+            if kCoverTone.Mode(B.Spec) != "panel":
+                return False
+            B.Backdrop(S, Name, TEXT)
+            return True
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCoverTone.Panel")
+            return False
+
+    @staticmethod
+    def SpecErrors(Spec):
+        """A 'cover' value that is not one of the modes."""
+        if kS.ErrorMode:
+            return []
+        try:
+            Cover = Spec.get("cover", "auto")
+            if Cover not in kCoverTone.Modes:
+                return [f"spec: 'cover' is '{Cover}' (one of: {', '.join(kCoverTone.Modes)})"]
+            return []
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCoverTone.SpecErrors")
+            return []
+
+    @staticmethod
+    def SpecWarnings(Spec):
+        """A forced 'panel' cover on a dark direction: a light cover and dividers between dark body slides."""
+        if kS.ErrorMode:
+            return []
+        try:
+            if Spec.get("cover") == "panel" and kCoverTone.DeckIsDark(Spec):
+                return [f"spec: 'cover': 'panel' on the dark direction '{Spec.get('direction')}' draws a light "
+                        "cover and light section slides between dark body slides - they read as a clash; leave "
+                        "'cover' out (auto) so they stay dark, or pick a light direction"]
+            return []
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kCoverTone.SpecWarnings")
+            return []
+
+
+class kPlanActual:
+    """A timeline whose events carry 'plan' and 'actual' ([start, end] in units from the project start, or [at]
+    for a milestone date): one row per milestone with its label, the planned bar (faint) above the actual bar
+    (the on-plan part soft, the overrun past the planned end in the accent), and the slip in units at the right
+    end. A shared time axis below, cells labelled M1, M2 ... (W, D or Q with 'unit')."""
+
+    Units = {"day": ("D", "day", "days"), "week": ("W", "week", "weeks"), "month": ("M", "month", "months"),
+             "quarter": ("Q", "quarter", "quarters")}
+    LabelW, SlipW, AxisH, LegendH, MaxSpan = 320, 220, 40, 40, 104
+
+    @staticmethod
+    def Has(Sl):
+        """True when any event carries a 'plan' or an 'actual'."""
+        if kS.ErrorMode:
+            return False
+        try:
+            return any(isinstance(E, dict) and ("plan" in E or "actual" in E) for E in Sl.get("events") or [])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Has")
+            return False
+
+    @staticmethod
+    def Span(Val):
+        """(start, end) of a 'plan' or 'actual': [at] is a milestone (start == end), [start, end] a bar; None
+        when it is not one or two numbers from 0 with end >= start."""
+        if kS.ErrorMode:
+            return None
+        try:
+            if not isinstance(Val, list) or not 1 <= len(Val) <= 2:
+                return None
+            if any(isinstance(X, bool) or not isinstance(X, (int, float)) or X < 0 for X in Val):
+                return None
+            Start, End = float(Val[0]), float(Val[-1])
+            return (Start, End) if End >= Start else None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Span")
+            return None
+
+    @staticmethod
+    def SpecErrors(Sl, I):
+        """Every plan-vs-actual mistake on a timeline slide, as messages."""
+        if kS.ErrorMode:
+            return []
+        try:
+            if not kPlanActual.Has(Sl):
+                return []
+            Out, Spans = [], []
+            if Sl.get("unit", "month") not in kPlanActual.Units:
+                Out.append(f"slide {I} (timeline): 'unit' is '{Sl.get('unit')}' (one of: "
+                           f"{', '.join(kPlanActual.Units)})")
+            for J, E in enumerate(Sl.get("events") or []):
+                E = E if isinstance(E, dict) else {}
+                Pl, Ac = kPlanActual.Span(E.get("plan")), kPlanActual.Span(E.get("actual"))
+                if "plan" not in E or "actual" not in E:
+                    Out.append(f"slide {I} (timeline): give every event a 'plan' and an 'actual', or none "
+                               f"(event {J} '{E.get('label', '')}')")
+                elif Pl is None or Ac is None:
+                    Out.append(f"slide {I} (timeline): 'events.{J}' plan/actual must be [start, end] or [at], in "
+                               "units from the project start (0 or more, end >= start)")
+                elif len(E["plan"]) != len(E["actual"]):
+                    Out.append(f"slide {I} (timeline): 'events.{J}' mixes a bar and a milestone - give plan and "
+                               "actual both as [start, end], or both as [at]")
+                else:
+                    Spans += [Pl, Ac]
+            if Spans and not Out:
+                Lo, Hi = min(X[0] for X in Spans), max(X[1] for X in Spans)
+                if Hi - Lo > kPlanActual.MaxSpan or Hi <= Lo:
+                    Out.append(f"slide {I} (timeline): the plan-vs-actual axis runs {Lo:g}-{Hi:g}; it needs a span "
+                               f"of 1-{kPlanActual.MaxSpan} units - pick a coarser 'unit'")
+            return Out
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.SpecErrors")
+            return []
+
+    @staticmethod
+    def Slip(E):
+        """Actual end minus planned end, in units (positive = late)."""
+        if kS.ErrorMode:
+            return 0.0
+        try:
+            return kPlanActual.Span(E["actual"])[1] - kPlanActual.Span(E["plan"])[1]
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Slip")
+            return 0.0
+
+    @staticmethod
+    def SlipText(Slip, Unit):
+        """'+3 months', '-2 weeks', 'On time'."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            if abs(Slip) < 1e-9:
+                return "On time"
+            _, One, Many = kPlanActual.Units.get(Unit, kPlanActual.Units["month"])
+            return f"{'+' if Slip > 0 else '−'}{abs(Slip):g}{NBSP}{One if abs(Slip) == 1 else Many}"
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.SlipText")
+            return ""
+
+    @staticmethod
+    def Lead(Sl):
+        """The row in focus: 'highlight', else the largest slip (None when nothing slipped)."""
+        if kS.ErrorMode:
+            return None
+        try:
+            Hi = Sl.get("highlight")
+            if isinstance(Hi, int) and not isinstance(Hi, bool):
+                return Hi
+            Slips = [kPlanActual.Slip(E) for E in Sl["events"]]
+            return Slips.index(max(Slips)) if max(Slips) > 0 else None
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Lead")
+            return None
+
+    @staticmethod
+    def CellName(Sl, K):
+        """The axis label of cell K (0-based): 'M1' for the first month."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            return f"{kPlanActual.Units.get(Sl.get('unit', 'month'), ('M',))[0]}{K + 1}"
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.CellName")
+            return ""
+
+    @staticmethod
+    def SpanName(Sl, Span):
+        """A span as the reader says it: 'M1-M6' for [0, 6], 'end of M6' for the milestone [6]."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Start, End = Span
+            if End == Start:
+                return f"end of {kPlanActual.CellName(Sl, -int(-End // 1) - 1)}"
+            return f"{kPlanActual.CellName(Sl, int(Start))}-{kPlanActual.CellName(Sl, -int(-End // 1) - 1)}"
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.SpanName")
+            return ""
+
+    @staticmethod
+    def NotesText(Sl):
+        """The chart in words for the notes: one line per milestone with its plan, actual and slip."""
+        if kS.ErrorMode:
+            return ""
+        try:
+            Lines = ["PLAN VS ACTUAL:"]
+            for E in Sl["events"]:
+                Lines.append(f"{E.get('label', '')}: planned {kPlanActual.SpanName(Sl, kPlanActual.Span(E['plan']))}, "
+                             f"actual {kPlanActual.SpanName(Sl, kPlanActual.Span(E['actual']))} "
+                             f"({kPlanActual.SlipText(kPlanActual.Slip(E), Sl.get('unit', 'month'))})")
+            return "\n".join(Lines)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.NotesText")
+            return ""
+
+    @staticmethod
+    def Axis(Sl):
+        """(first cell, last cell + 1) of the time axis: whole units covering every plan and actual."""
+        if kS.ErrorMode:
+            return 0, 1
+        try:
+            Spans = [kPlanActual.Span(E[K]) for E in Sl["events"] for K in ("plan", "actual")]
+            Lo, Hi = int(min(X[0] for X in Spans) // 1), -int(-max(X[1] for X in Spans) // 1)
+            return Lo, max(Hi, Lo + 1)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Axis")
+            return 0, 1
+
+    @staticmethod
+    def Draw(B, S, Sl):
+        """The whole plan-vs-actual body: key, grid and axis, then one row per milestone."""
+        if kS.ErrorMode:
+            return
+        try:
+            Pa = kPlanActual
+            Ev, Lead = Sl["events"], Pa.Lead(Sl)
+            X0, X1 = M + Pa.LabelW + GAP, W - M - Pa.SlipW - GAP
+            RowsTop, AxisTop = BODY_TOP + Pa.LegendH + 20, BODY_BOTTOM - Pa.AxisH
+            Rh = (AxisTop - 10 - RowsTop) / len(Ev)
+            Lo, Hi = Pa.Axis(Sl)
+            Geo = {"X0": X0, "X1": X1, "Lo": Lo, "Hi": Hi, "Top": RowsTop, "Bottom": AxisTop - 10, "Rh": Rh}
+            Pa.Key(B, S, X0)
+            Pa.Grid(B, S, Sl, Geo)
+            Labels = [str(E.get("label", "")) for E in Ev]
+            Ls = B.FitAll(Labels, 36, Pa.LabelW, Rh - 8, What="the milestone labels")
+            Ss = B.FitAll([Pa.SlipText(Pa.Slip(E), Sl.get("unit", "month")) for E in Ev], 34, Pa.SlipW,
+                          Rh - 8, Bold=True, What="the slips")
+            for I, E in enumerate(Ev):
+                Pa.Row(B, S, Sl, I, E, Geo, (Ls, Ss), I == Lead)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Draw")
+            return
+
+    @staticmethod
+    def Px(Geo, V):
+        """The x of time V on the axis."""
+        if kS.ErrorMode:
+            return 0
+        try:
+            return Geo["X0"] + (V - Geo["Lo"]) / (Geo["Hi"] - Geo["Lo"]) * (Geo["X1"] - Geo["X0"])
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Px")
+            return 0
+
+    @staticmethod
+    def Key(B, S, X0):
+        """The key above the rows: Planned, Actual, Slip - a swatch and a word each."""
+        if kS.ErrorMode:
+            return
+        try:
+            Items = [("Planned", FAINT), ("Actual", SOFT), ("Slip past plan", ACCENT)]
+            X = X0
+            for I, (Word, Colour) in enumerate(Items):
+                B.Rect(S, f"PaKeySwatch{I + 1}", X, BODY_TOP + 12, 40, 18, Colour)
+                Wd = 120 if I < 2 else 220
+                B.Text(S, f"PaKey{I + 1}", Word, X + 52, BODY_TOP, Wd, kPlanActual.LegendH, LABEL_MIN, MUTED,
+                       Anchor=MSO_ANCHOR.MIDDLE)
+                X += 52 + Wd + 24
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Key")
+            return
+
+    @staticmethod
+    def Grid(B, S, Sl, Geo):
+        """Faint lines at the cell edges, the axis rail and the cell labels below it (every cell up to 12, then
+        every second, fourth ...)."""
+        if kS.ErrorMode:
+            return
+        try:
+            Cells = Geo["Hi"] - Geo["Lo"]
+            Step = max(1, -(-Cells // 12))
+            Cw = (Geo["X1"] - Geo["X0"]) / Cells
+            for K in range(Geo["Lo"], Geo["Hi"] + 1, Step):
+                B.Rect(S, f"PaGrid{K}", kPlanActual.Px(Geo, K) - 1, Geo["Top"], 2, Geo["Bottom"] - Geo["Top"], QUIET)
+            B.Rect(S, "Rail", Geo["X0"], Geo["Bottom"], Geo["X1"] - Geo["X0"], 4, MUTED)
+            for K in range(Geo["Lo"], Geo["Hi"], Step):
+                Wd = min(Cw * Step, 120)
+                B.Text(S, f"PaTick{K + 1}", kPlanActual.CellName(Sl, K), kPlanActual.Px(Geo, K + 0.5) - Wd / 2,
+                       Geo["Bottom"] + 8, Wd, kPlanActual.AxisH, LABEL_MIN, MUTED, Align=PP_ALIGN.CENTER)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Grid")
+            return
+
+    @staticmethod
+    def Row(B, S, Sl, I, E, Geo, Sizes, On):
+        """One milestone: its label, the planned and actual marks, and the slip at the right."""
+        if kS.ErrorMode:
+            return
+        try:
+            Pa, Rh = kPlanActual, Geo["Rh"]
+            Top = Geo["Top"] + Rh * I
+            Pb, Ab = min(32, Rh * 0.26), min(48, Rh * 0.38)
+            Py = Top + (Rh - Pb - 8 - Ab) / 2
+            Plan, Act = Pa.Span(E["plan"]), Pa.Span(E["actual"])
+            if Plan[0] == Plan[1]:
+                Pa.Milestone(B, S, I, Plan[1], Act[1], Py, Pb, Ab, Geo)
+            else:
+                Pa.Bars(B, S, I, Plan, Act, Py, Pb, Ab, Geo)
+            B.Text(S, f"PaLabel{I + 1}", str(E.get("label", "")), M, Top + 4, Pa.LabelW, Rh - 8, Sizes[0], TEXT,
+                   Bold=On, Anchor=MSO_ANCHOR.MIDDLE)
+            Slip = Pa.Slip(E)
+            B.Text(S, f"PaSlip{I + 1}", Pa.SlipText(Slip, Sl.get("unit", "month")), W - M - Pa.SlipW, Top + 4,
+                   Pa.SlipW, Rh - 8, Sizes[1], ACCENT if Slip > 0 else MUTED, Bold=True, Align=PP_ALIGN.RIGHT,
+                   Anchor=MSO_ANCHOR.MIDDLE, Heading=True)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Row")
+            return
+
+    @staticmethod
+    def Bars(B, S, I, Plan, Act, Py, Pb, Ab, Geo):
+        """The planned bar, and under it the actual bar: soft up to the planned end, the accent past it."""
+        if kS.ErrorMode:
+            return
+        try:
+            Px = kPlanActual.Px
+            B.Rect(S, f"PaPlan{I + 1}", Px(Geo, Plan[0]), Py, max(6, Px(Geo, Plan[1]) - Px(Geo, Plan[0])), Pb, FAINT)
+            Ay, Split = Py + Pb + 8, min(Act[1], max(Act[0], Plan[1]))
+            if Split > Act[0]:
+                B.Rect(S, f"PaActual{I + 1}", Px(Geo, Act[0]), Ay, Px(Geo, Split) - Px(Geo, Act[0]), Ab, SOFT)
+            if Act[1] > Split:
+                B.Rect(S, f"PaOverrun{I + 1}", Px(Geo, Split), Ay, Px(Geo, Act[1]) - Px(Geo, Split), Ab, ACCENT)
+            if Act[1] <= Act[0]:
+                B.Rect(S, f"PaActual{I + 1}", Px(Geo, Act[0]) - 3, Ay, 6, Ab, SOFT)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Bars")
+            return
+
+    @staticmethod
+    def Milestone(B, S, I, Plan, Act, Py, Pb, Ab, Geo):
+        """A milestone date: a faint diamond at the plan, an accent dot at the actual, the slip a line between."""
+        if kS.ErrorMode:
+            return
+        try:
+            Px = kPlanActual.Px
+            Ay = Py + Pb + 8
+            D = Ab + 8
+            if Act > Plan:
+                B.Rect(S, f"PaSlipLine{I + 1}", Px(Geo, Plan), Ay + Ab / 2 - 4, Px(Geo, Act) - Px(Geo, Plan), 8,
+                       ACCENT)
+            B.Rect(S, f"PaPlan{I + 1}", Px(Geo, Plan) - (Pb + 12) / 2, Py - 6, Pb + 12, Pb + 12, FAINT,
+                   MSO_SHAPE.DIAMOND)
+            B.Rect(S, f"PaActual{I + 1}", Px(Geo, Act) - D / 2, Ay + Ab / 2 - D / 2, D, D,
+                   ACCENT if Act > Plan else SOFT, MSO_SHAPE.OVAL)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kPlanActual.Milestone")
+            return
 
 
 if __name__ == "__main__":

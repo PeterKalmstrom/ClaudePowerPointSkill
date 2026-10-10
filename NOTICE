@@ -10,5 +10,9 @@ italic_serif_display, nested_cards and gray_on_color), the two-cadence (per-edit
 rule, and the audience-first persona checklist in reference/CONTENT.md. The material was rewritten and
 shortened for slide decks; it is not a verbatim copy.
 
+Lucide icons — https://lucide.dev — https://github.com/lucide-icons/lucide
+Licensed under the ISC License; portions from Feather (MIT, Cole Bemis). About 100 unmodified SVG files from
+lucide-static 0.460.0 are bundled in assets/icons/, with the licence text in assets/icons/LICENSE.
+
 Several lint rules in scripts/lint_deck.py (slop and chart codes, the shadow / gradient / focal-hierarchy
 thresholds) follow the same Impeccable-derived catalogue; they are re-implemented in Python, not copied.

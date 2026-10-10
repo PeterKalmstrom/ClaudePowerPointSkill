@@ -1,0 +1,796 @@
+{
+ "key": {
+  "K": "plain-1",
+  "W": "plain-2",
+  "H": "pptxskill-1",
+  "F": "pptxskill-2",
+  "M": "thisskill-1",
+  "T": "thisskill-2"
+ },
+ "aggregate": {
+  "thisskill": {
+   "criteria": {
+    "message": 8.65,
+    "design": 8.35,
+    "legibility": 8.1,
+    "layout": 8,
+    "data": 8.05,
+    "notes": 8
+   },
+   "overall": 8.19,
+   "min": 7.97,
+   "max": 8.47,
+   "cells": {
+    "run1-judgeA": 8.47,
+    "run1-judgeB": 7.97,
+    "run2-judgeA": 8.23,
+    "run2-judgeB": 8.1
+   },
+   "by_run": {
+    "1": 8.22,
+    "2": 8.17
+   },
+   "by_judge": {
+    "A": 8.35,
+    "B": 8.03
+   },
+   "original3": 8.33,
+   "holdout2": 7.98,
+   "per_deck": {
+    "qbr": 8.33,
+    "phishing": 8.33,
+    "fourday": 8.33,
+    "launch": 7.96,
+    "postmortem": 8.0
+   }
+  },
+  "pptxskill": {
+   "criteria": {
+    "message": 8,
+    "design": 6.95,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 1.7
+   },
+   "overall": 6.45,
+   "min": 6.37,
+   "max": 6.47,
+   "cells": {
+    "run1-judgeA": 6.37,
+    "run1-judgeB": 6.47,
+    "run2-judgeA": 6.47,
+    "run2-judgeB": 6.47
+   },
+   "by_run": {
+    "1": 6.42,
+    "2": 6.47
+   },
+   "by_judge": {
+    "A": 6.42,
+    "B": 6.47
+   },
+   "original3": 6.46,
+   "holdout2": 6.42,
+   "per_deck": {
+    "qbr": 6.54,
+    "phishing": 6.42,
+    "fourday": 6.42,
+    "launch": 6.42,
+    "postmortem": 6.42
+   }
+  },
+  "plain": {
+   "criteria": {
+    "message": 7.45,
+    "design": 5.6,
+    "legibility": 5.9,
+    "layout": 5.9,
+    "data": 7.45,
+    "notes": 3.95
+   },
+   "overall": 6.04,
+   "min": 5.4,
+   "max": 6.8,
+   "cells": {
+    "run1-judgeA": 5.4,
+    "run1-judgeB": 6.33,
+    "run2-judgeA": 5.63,
+    "run2-judgeB": 6.8
+   },
+   "by_run": {
+    "1": 5.87,
+    "2": 6.22
+   },
+   "by_judge": {
+    "A": 5.52,
+    "B": 6.57
+   },
+   "original3": 6.1,
+   "holdout2": 5.96,
+   "per_deck": {
+    "qbr": 6.08,
+    "phishing": 6.04,
+    "fourday": 6.17,
+    "launch": 6.12,
+    "postmortem": 5.79
+   }
+  }
+ },
+ "judgeA": {
+  "F": {
+   "qbr": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 2,
+    "comment": "Clear arc to the ask on s8-s9 and correct figures (19.8 MUSD, +44 %, ~24 MUSD run rate, s2-s3); s7 table repeats s6 and leaves half the slide empty; notes only on s1-s2."
+   },
+   "phishing": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 3,
+    "comment": "Strong annotated example email (s4) and process flows (s5-s6); quiz s7 has answers only in notes; most slides have no notes."
+   },
+   "fourday": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 6,
+    "data": 9,
+    "notes": 1,
+    "comment": "Covers every brief element with a correct 200 kSEK cost table (s7) and clear decision (s8); s7 and s3 leave large empty areas; no speaker notes at all."
+   },
+   "launch": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 1,
+    "comment": "Complete coverage incl. competitor chart (s5) and 30-day plan (s8); pricing figures correct (20 % annual saving, 4.5 h saved); no notes."
+   },
+   "postmortem": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 9,
+    "notes": 1,
+    "comment": "Blameless, complete, correct arithmetic (+50 %, +38 %, -62 %, s2-s3) and owner table (s8); timeline s5 is a sparse dot row; no notes."
+   },
+   "mean": {
+    "message": 8.0,
+    "design": 7.0,
+    "legibility": 7.0,
+    "layout": 6.8,
+    "data": 8.4,
+    "notes": 1.6,
+    "overall": 6.47
+   }
+  },
+  "H": {
+   "qbr": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 9,
+    "notes": 2,
+    "comment": "Good headline-to-ask story; accurate extras (H2 112 vs H1 79, annualised churn 20 %->13 %, s4-s5); churn line chart s5 well chosen; notes only on s2."
+   },
+   "phishing": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 7,
+    "notes": 1,
+    "comment": "Covers all topics with a clear closing recap (s8); example email (s4) is a bullet list rather than a realistic mock-up; no notes."
+   },
+   "fourday": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 9,
+    "notes": 1,
+    "comment": "Complete proposal with metrics table (s5), risks (s6) and cost (s7); closing decision slide s8 is strong; no notes."
+   },
+   "launch": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 1,
+    "comment": "Story from problem (s2) to sign-early close (s9); pilot bar chart s4 and price chart s5 labelled; no notes."
+   },
+   "postmortem": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 7,
+    "notes": 1,
+    "comment": "Clear and blameless; root-cause chart s6 invents a 2-week staffing figure (labelled approximate); s4 duplicates s3 content; no notes."
+   },
+   "mean": {
+    "message": 8.0,
+    "design": 7.0,
+    "legibility": 7.0,
+    "layout": 7.0,
+    "data": 8.0,
+    "notes": 1.2,
+    "overall": 6.37
+   }
+  },
+  "K": {
+   "qbr": {
+    "message": 7,
+    "design": 5,
+    "legibility": 5,
+    "layout": 5,
+    "data": 6,
+    "notes": 3,
+    "comment": "Covers the brief but s5 claims a one-third churn drop 'roughly halves' annual loss (20 %->13.5 % is not half); plain left-aligned slides with large empty areas (s6-s8); notes mostly repeat titles."
+   },
+   "phishing": {
+    "message": 7,
+    "design": 5,
+    "legibility": 5,
+    "layout": 5,
+    "data": 7,
+    "notes": 3,
+    "comment": "All topics covered with a 4-item quiz (s7); small type and cramped five-column red flags (s3); notes are title echoes."
+   },
+   "fourday": {
+    "message": 7,
+    "design": 5,
+    "legibility": 5,
+    "layout": 5,
+    "data": 8,
+    "notes": 3,
+    "comment": "Complete content and correct cost (s7); text-only design slides (s3) with small body text and empty lower halves; notes echo titles."
+   },
+   "launch": {
+    "message": 7,
+    "design": 5,
+    "legibility": 5,
+    "layout": 6,
+    "data": 8,
+    "notes": 3,
+    "comment": "Good per-customer math (15 kUSD ~ 32 users, s6) and 17-38 % competitor gap (s5); visually plain, small type; notes echo titles."
+   },
+   "postmortem": {
+    "message": 7,
+    "design": 5,
+    "legibility": 5,
+    "layout": 5,
+    "data": 7,
+    "notes": 3,
+    "comment": "Stacked plan-vs-actual bar (s5) is a good idea but shows '6.' labels and an estimated 1-week staffing slice; s4/s7 plain bullets; notes echo titles."
+   },
+   "mean": {
+    "message": 7.0,
+    "design": 5.0,
+    "legibility": 5.0,
+    "layout": 5.2,
+    "data": 7.2,
+    "notes": 3.0,
+    "overall": 5.4
+   }
+  },
+  "M": {
+   "qbr": {
+    "message": 9,
+    "design": 9,
+    "legibility": 8,
+    "layout": 8,
+    "data": 9,
+    "notes": 9,
+    "comment": "Action title on s1 and an owned decision box on s8; highlighted-bar charts (s3, s5) and dot-matrix hiring (s7) are clear; full presenter notes with figures."
+   },
+   "phishing": {
+    "message": 9,
+    "design": 9,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 9,
+    "comment": "Excellent interactive quiz with reveal (s7-s8) and annotated email (s4); friendly tone throughout; notes are speakable script."
+   },
+   "fourday": {
+    "message": 9,
+    "design": 9,
+    "legibility": 8,
+    "layout": 8,
+    "data": 9,
+    "notes": 9,
+    "comment": "41 % dot-matrix (s2), stop-rule in metrics (s5), owned decision (s8) and correct cost table (s7); notes read naturally."
+   },
+   "launch": {
+    "message": 8,
+    "design": 9,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 9,
+    "comment": "Strong visual proof (s4) and competitor bar (s5); 30-day plan s8 skips week 3, objection answers s7 are terse fragments; good notes."
+   },
+   "postmortem": {
+    "message": 8,
+    "design": 8,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 9,
+    "comment": "Honest data handling (staffing not charted, flagged in notes, s6); timeline s5 is only a 6 vs 9 bar and no closing ask slide; dark theme legible; excellent notes."
+   },
+   "mean": {
+    "message": 8.6,
+    "design": 8.8,
+    "legibility": 8.0,
+    "layout": 8.0,
+    "data": 8.4,
+    "notes": 9.0,
+    "overall": 8.47
+   }
+  },
+  "T": {
+   "qbr": {
+    "message": 9,
+    "design": 9,
+    "legibility": 8,
+    "layout": 8,
+    "data": 9,
+    "notes": 8,
+    "comment": "Clear arc to an owned decision (s8); highlighted bars (s3, s5) and risk ratings (s6) are strong; s8 has only two reason cards with a gap."
+   },
+   "phishing": {
+    "message": 9,
+    "design": 9,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 8,
+    "comment": "Quiz with reveal (s7-s8), annotated email (s4) and blame-free reporting flow (s6); very practical; good notes."
+   },
+   "fourday": {
+    "message": 9,
+    "design": 9,
+    "legibility": 8,
+    "layout": 8,
+    "data": 9,
+    "notes": 8,
+    "comment": "Best timeline of the set (s4) with go/no-go point; metrics with continue rule (s5); cost table correct (s7); decision s8 clear."
+   },
+   "launch": {
+    "message": 7,
+    "design": 9,
+    "legibility": 8,
+    "layout": 8,
+    "data": 6,
+    "notes": 8,
+    "comment": "Visually strong (s4-s6) but s8 goal of '3 deals each by 31 March' implies 75 deals in a month, inconsistent with 120 for the year; s8 skips week 3; objections s7 very terse."
+   },
+   "postmortem": {
+    "message": 9,
+    "design": 8,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 8,
+    "comment": "Real plan-vs-actual timeline (s5), four-cause 'what went wrong' (s4) and owned actions (s8); staffing omitted from chart s6; no final summary slide."
+   },
+   "mean": {
+    "message": 8.6,
+    "design": 8.8,
+    "legibility": 8.0,
+    "layout": 8.0,
+    "data": 8.0,
+    "notes": 8.0,
+    "overall": 8.23
+   }
+  },
+  "W": {
+   "qbr": {
+    "message": 7,
+    "design": 5,
+    "legibility": 5,
+    "layout": 5,
+    "data": 8,
+    "notes": 4,
+    "comment": "Ask stated early (s2) and at end (s8); hiring bar s7 is a thin bar in empty space; small type throughout; notes short one-liners."
+   },
+   "phishing": {
+    "message": 7,
+    "design": 6,
+    "legibility": 5,
+    "layout": 5,
+    "data": 7,
+    "notes": 4,
+    "comment": "Covers everything incl. chevron process (s6); example email s4 is small and plain, quiz s7 prints answers on the slide; terse notes."
+   },
+   "fourday": {
+    "message": 7,
+    "design": 5,
+    "legibility": 5,
+    "layout": 6,
+    "data": 8,
+    "notes": 4,
+    "comment": "Complete content; pie chart (s7) adds little to a 3-row table; small text in cards (s3); notes brief."
+   },
+   "launch": {
+    "message": 7,
+    "design": 5,
+    "legibility": 5,
+    "layout": 5,
+    "data": 8,
+    "notes": 4,
+    "comment": "Coverage complete with correct pricing math (s5) and ~5 customers per rep (s6); closing slide s9 sparse; tiny chart labels (s4-s5)."
+   },
+   "postmortem": {
+    "message": 7,
+    "design": 5,
+    "legibility": 5,
+    "layout": 5,
+    "data": 7,
+    "notes": 3,
+    "comment": "Stacked timeline s5 has near-illegible labels and estimated attribution; s7 mixes a 'went well' line into lessons; notes are 2-3 words."
+   },
+   "mean": {
+    "message": 7.0,
+    "design": 5.2,
+    "legibility": 5.0,
+    "layout": 5.2,
+    "data": 7.6,
+    "notes": 3.8,
+    "overall": 5.63
+   }
+  }
+ },
+ "judgeB": {
+  "F": {
+   "qbr": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 2,
+    "comment": "Clear ask (s8-9), correct sums incl. 19.8 and ~24 MUSD run rate (s2-3); churn shown only as cards (s5) and s7 table half-empty; notes absent after s2."
+   },
+   "phishing": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 8,
+    "data": 7,
+    "notes": 2,
+    "comment": "Covers all brief items with an annotated example email (s4) and process flows (s5-6); quiz (s7) gives no answers; notes missing."
+   },
+   "fourday": {
+    "message": 8,
+    "design": 6,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 2,
+    "comment": "Full brief coverage with correct 200 kSEK table and 5 kSEK/engineer (s7); metrics table vague 'current level' (s5); s7 leaves half the slide empty; no notes."
+   },
+   "launch": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 2,
+    "comment": "Competitor bar chart and correct 470 USD/-20% math (s5), 25 sellers ~5 customers each (s6); objections and 30-day plan text small (s7-8); notes nearly absent."
+   },
+   "postmortem": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 2,
+    "comment": "Strong summary (s2) with correct +50%/+38%, latency chart (s3), root-cause table and owned actions (s6, s8); timeline s5 is just dots; no notes."
+   },
+   "mean": {
+    "message": 8.0,
+    "design": 6.8,
+    "legibility": 7.0,
+    "layout": 7.2,
+    "data": 7.8,
+    "notes": 2.0,
+    "overall": 6.47
+   }
+  },
+  "H": {
+   "qbr": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 2,
+    "comment": "Good story ending on a three-step decision (s8); churn line chart (s5) and correct +12/+13/+13 % (s3); hiring table s7 sparse; notes only on s2."
+   },
+   "phishing": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 7,
+    "notes": 2,
+    "comment": "Warm tone, example and flags side by side (s4), report timeline (s6); quiz answers shown inline (s7) small text; no notes."
+   },
+   "fourday": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 2,
+    "comment": "Covers all elements with exit rule (s3) and clear decision (s8); cost table (s7) correct; small type in timeline/metrics cards; no notes."
+   },
+   "launch": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 2,
+    "comment": "Before/after bar and 83 % conversion (s4), competitor chart (s5), closes on incentives (s9); several cards hold tiny text; notes missing."
+   },
+   "postmortem": {
+    "message": 8,
+    "design": 7,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 2,
+    "comment": "Root-cause bar chart sums to the 13-week delay (s6), owned actions (s8), blameless close (s9); s7 lessons cards mostly empty; no notes."
+   },
+   "mean": {
+    "message": 8.0,
+    "design": 7.0,
+    "legibility": 7.0,
+    "layout": 7.0,
+    "data": 7.8,
+    "notes": 2.0,
+    "overall": 6.47
+   }
+  },
+  "K": {
+   "qbr": {
+    "message": 8,
+    "design": 6,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 4,
+    "comment": "Correct data and annualised churn maths (s5), ask justified (s7-8) but s7-8 are text-only bullets and risk cards (s6) leave most of the slide empty; notes largely repeat titles."
+   },
+   "phishing": {
+    "message": 7,
+    "design": 6,
+    "legibility": 7,
+    "layout": 6,
+    "data": 7,
+    "notes": 4,
+    "comment": "All elements covered; red-flag cards (s3) and quiz (s7) leave large empty areas; quiz has no answers; notes thin."
+   },
+   "fourday": {
+    "message": 8,
+    "design": 6,
+    "legibility": 7,
+    "layout": 7,
+    "data": 7,
+    "notes": 4,
+    "comment": "Solid content and decision (s8); timeline (s4) starts in Dec and skips April; s3 is a plain bullet slide; notes thin."
+   },
+   "launch": {
+    "message": 8,
+    "design": 6,
+    "legibility": 6,
+    "layout": 6,
+    "data": 8,
+    "notes": 4,
+    "comment": "Correct derived figures (15 kUSD/customer, s6) and competitor chart (s5); dense objection table (s8) and s6/s9 sparse with small type; notes mostly titles."
+   },
+   "postmortem": {
+    "message": 8,
+    "design": 6,
+    "legibility": 6,
+    "layout": 6,
+    "data": 6,
+    "notes": 4,
+    "comment": "Good stacked plan-vs-actual chart (s5) but data labels render as '6.' and '2.'; s4 and s7 are plain bullet slides; notes thin."
+   },
+   "mean": {
+    "message": 7.8,
+    "design": 6.0,
+    "legibility": 6.6,
+    "layout": 6.4,
+    "data": 7.2,
+    "notes": 4.0,
+    "overall": 6.33
+   }
+  },
+  "M": {
+   "qbr": {
+    "message": 9,
+    "design": 8,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 7,
+    "comment": "Action title on cover, clean highlighted bar charts (s3, s5), risk likelihood/impact grid (s6), owned decision slide (s8); usable spoken notes throughout."
+   },
+   "phishing": {
+    "message": 9,
+    "design": 8,
+    "legibility": 9,
+    "layout": 8,
+    "data": 8,
+    "notes": 7,
+    "comment": "Large, friendly type; annotated mailbox example (s4), interactive quiz with reveal slide (s7-8); strong closing (s9); notes are speakable."
+   },
+   "fourday": {
+    "message": 9,
+    "design": 8,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 7,
+    "comment": "41 % dot-grid (s2), guardrails (s3), mid-point check (s4), measurable targets with stop rule (s5), costed decision (s8); timeline shows only four months."
+   },
+   "launch": {
+    "message": 9,
+    "design": 8,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 7,
+    "comment": "Tight story ending on a 30-day plan with an owner per row (s8); before/after and competitor bars (s4-5); target tile pairs correct; objection cards small (s7)."
+   },
+   "postmortem": {
+    "message": 8,
+    "design": 7,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 7,
+    "comment": "Clear charts for cost/latency (s3), plan vs actual (s5) and root causes (s6), owned actions (s8); dark theme clashes with light cover and staffing cause left off the s6 chart."
+   },
+   "mean": {
+    "message": 8.8,
+    "design": 7.8,
+    "legibility": 8.2,
+    "layout": 8.0,
+    "data": 8.0,
+    "notes": 7.0,
+    "overall": 7.97
+   }
+  },
+  "T": {
+   "qbr": {
+    "message": 9,
+    "design": 8,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 8,
+    "comment": "Same strong structure as a polished exec deck: highlighted bars (s3, s5), risk grid (s6), 14/20 visual (s7), decision with owner (s8); detailed notes."
+   },
+   "phishing": {
+    "message": 9,
+    "design": 8,
+    "legibility": 9,
+    "layout": 8,
+    "data": 8,
+    "notes": 8,
+    "comment": "Practical and friendly with quiz + answer reveal (s7-8), annotated example (s4), blame-free report flow (s6); best notes of the set."
+   },
+   "fourday": {
+    "message": 9,
+    "design": 8,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 8,
+    "comment": "Full month timeline with go/no-go (s4), quantified success rule (s5), risk grid (s6), highlighted cost table (s7); decision slide clear (s8)."
+   },
+   "launch": {
+    "message": 8,
+    "design": 8,
+    "legibility": 8,
+    "layout": 8,
+    "data": 7,
+    "notes": 8,
+    "comment": "Strong visuals (s4-6) and correct pricing; s8 goal '3 deals each by 31 March, about 4 days per salesperson' is unsupported and odd against the 120-customer target; s3 icon row is vague."
+   },
+   "postmortem": {
+    "message": 8,
+    "design": 8,
+    "legibility": 8,
+    "layout": 8,
+    "data": 8,
+    "notes": 8,
+    "comment": "Clear M1-M9 timeline (s5), root-cause bars (s6), owned actions (s8) with good notes; root-cause chart omits staffing and ends without a summary/ask."
+   },
+   "mean": {
+    "message": 8.6,
+    "design": 8.0,
+    "legibility": 8.2,
+    "layout": 8.0,
+    "data": 7.8,
+    "notes": 8.0,
+    "overall": 8.1
+   }
+  },
+  "W": {
+   "qbr": {
+    "message": 8,
+    "design": 6,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 5,
+    "comment": "Correct figures and ask stated early (s2) and at end (s8); hiring bar (s7) has unreadable labels; s6 risks leaves most of the slide empty; notes short but useful."
+   },
+   "phishing": {
+    "message": 8,
+    "design": 7,
+    "legibility": 8,
+    "layout": 7,
+    "data": 7,
+    "notes": 5,
+    "comment": "Chevron process (s6) and 'Pause. Check. Report.' close (s8) work; example email text small (s4); quiz answers crammed in a footer line (s7)."
+   },
+   "fourday": {
+    "message": 8,
+    "design": 6,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 5,
+    "comment": "Complete coverage; pie chart for cost (s7) adds little to the table; s3 cards are mostly empty; notes brief."
+   },
+   "launch": {
+    "message": 8,
+    "design": 6,
+    "legibility": 7,
+    "layout": 7,
+    "data": 8,
+    "notes": 5,
+    "comment": "Correct 20 % annual saving and ~5 customers per seller (s5-6); objection table text small (s7); chart labels tiny (s4-5)."
+   },
+   "postmortem": {
+    "message": 8,
+    "design": 6,
+    "legibility": 6,
+    "layout": 6,
+    "data": 8,
+    "notes": 5,
+    "comment": "Correct maths incl. 288 kSEK/yr savings (s3); stacked timeline (s5) labels unreadable; s4 and s7 are bare bullet slides; notes brief."
+   },
+   "mean": {
+    "message": 8.0,
+    "design": 6.2,
+    "legibility": 7.0,
+    "layout": 6.8,
+    "data": 7.8,
+    "notes": 5.0,
+    "overall": 6.8
+   }
+  }
+ }
+}

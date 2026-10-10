@@ -16,13 +16,16 @@ The *New deck* checklist in `SKILL.md`, step by step:
   ([computed figures](BUILDER.md#computed-figures)).
 - **`spec warning:` lines are content to fix** - a figure that does not add up, vague targets, a skipped month, a
   sparse slide.
-- **`--plan` before building.** It prints the story and runs the cheap pre-checks: pattern limits, figures,
-  warnings, each slide's words against its budget and each title measured in the deck's heading font. Fix the
-  `spec:` lines and weigh the `plan:` lines (advice) in one edit.
-- **`--check` builds, lints and renders in one call.** Text that does not fit is first fixed automatically
-  (`auto:` lines - see [BUILDER](BUILDER.md#automatic-fixes-and---check)); what is left is listed once, every
-  class together, sorted by slide, each with the spec edit that fixes it, and the contact sheet's path.
-  Look at the sheet once, make every listed edit in one pass, run `--check` again. Clean means done.
+- **`--plan --apply` before building.** It prints the story and runs every pre-check: pattern limits, figures,
+  warnings, each slide's words against its budget, each title measured in the deck's heading font, and a dry build
+  (fit and layout lint). Each finding it can fix without new facts gets a measured edit, which `--apply` writes into
+  the spec ([ready edits](BUILDER.md#ready-edits-and---apply)); the rest are `question:` lines - answer them all in
+  one edit.
+- **`--check --apply` builds, lints and renders in one call.** Text that does not fit is first fixed automatically
+  (`auto:` lines - see [BUILDER](BUILDER.md#automatic-fixes-and---check)) and, with `--apply`, written back to the
+  spec; what is left is listed once, every class together, sorted by slide, each with the spec edit that fixes it,
+  and the contact sheet's path. Look at the sheet once, make every listed edit in one pass, run `--check` again.
+  Clean means done - after a clean `--plan --apply` plus answers, the first `--check` usually is.
 - **Review the `auto:` lines.** Each says which field changed and how; detail cut from a card is in the notes
   under `MOVED FROM SLIDE:`. If a cut reads badly, write the short version yourself; `--no-auto` reports only.
 

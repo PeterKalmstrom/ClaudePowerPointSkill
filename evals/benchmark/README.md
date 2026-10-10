@@ -11,7 +11,88 @@ All 27 slides per maker were rendered with LibreOffice and scored **blind** by a
 only anonymous labels (keys: `round*-key.json`), on six criteria from 1 to 10: message, visual design, legibility,
 layout correctness, data presentation, presenter support (speaker notes).
 
-## Round 9 - spoken-script notes, every category label, duplicate-chart warning (current)
+## Round 10 - five briefs (two holdout), two runs per maker, two blind judges (current)
+
+| Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall (range)** | Time / tokens / calls per run |
+|---|---|---|---|---|---|---|---|---|
+| **This skill** | 8.65 | 8.35 | 8.10 | 8.00 | 8.05 | 8.00 | **8.19** (7.97-8.47) | 395 s / 113k / 22; 482 s / 113k / 23 |
+| Anthropic pptx skill | 8.00 | 6.95 | 7.00 | 7.00 | 8.00 | 1.70 | 6.45 (6.37-6.47) | 1473 s* / 106k / 25; 373 s / 97k / 17 |
+| Plain Claude | 7.45 | 5.60 | 5.90 | 5.90 | 7.45 | 3.95 | 6.04 (5.40-6.80) | 233 s / 95k / 11; 221 s / 133k / 11 |
+
+Each cell is the mean over 2 runs x 2 judges x 5 decks; the range is over the four run/judge overalls.
+\* the first pptx-skill run hung on a LibreOffice render and abandoned it, so its time is not representative.
+
+**What changed in the skill since round 9:** icons and pictures, company-template support, a visual check inside
+`--check`, ready edits through `--plan` / `--check --apply`, and tools for existing decks.
+
+**Method changes (stronger than rounds 7-9):**
+1. **Holdout briefs.** Two new briefs the skill was never tuned on ([briefs-holdout.md](briefs-holdout.md)): B4 a
+   product-launch pitch to sales, B5 a blameless project post-mortem for engineering leadership, both with concrete
+   numbers. All five briefs were built by every maker run.
+2. **Two independent runs per maker** (six unattended agents, all in parallel, each into `<maker>-<run>`), so
+   single-run luck (round 8's 3-call plain run) shows up as spread instead of as a result.
+3. All 30 decks rendered sequentially in real PowerPoint (`render_slides.py`, no other PowerPoint job running,
+   PowerPoint closed afterwards) into slide JPGs, contact sheets and text+notes files, under six fresh random labels
+   (`round10-key.json`), one label per maker *run*, so a judge could not tell two runs of one maker were related.
+4. **Two independent blind judges** with the same prompt ([prompts/judge.txt](prompts/judge.txt)), each scoring
+   all 30 decks; the key and the other judge's file were outside the judge folder.
+5. This skill's `lint_deck.py` and `visual_check.py` (on the PowerPoint renders) run on every deck.
+
+**Spread - do the differences exceed noise?**
+
+| Maker | Run 1 | Run 2 | Judge A | Judge B | Original 3 briefs | Holdout 2 briefs |
+|---|---|---|---|---|---|---|
+| This skill | 8.22 | 8.17 | 8.35 | 8.03 | 8.33 | 7.98 |
+| pptx skill | 6.42 | 6.47 | 6.42 | 6.47 | 6.46 | 6.42 |
+| Plain Claude | 5.87 | 6.22 | 5.52 | 6.57 | 6.10 | 5.96 |
+
+- **This skill vs the other two: yes.** Its lowest of four run/judge cells (7.97) is 1.5 above the pptx skill's
+  highest (6.47). Notes carry much of the gap, but without notes (mean of the other five criteria) it still leads
+  8.23 vs 7.39 vs 6.46, and both judges ranked its two runs first and second.
+- **pptx skill vs plain Claude: no.** 0.41 apart, inside plain Claude's own 1.4-point range; the judges disagreed
+  most on plain Claude (A 5.52, B 6.57).
+- **Run-to-run spread was small** (0.05 for this skill and the pptx skill, 0.35 for plain); **judge-to-judge spread
+  was larger** (0.32 for this skill, 1.05 for plain). One judge per round, as in rounds 1-9, is the weaker link.
+- **Holdout:** this skill scored 0.35 lower on the two unseen briefs (8.33 -> 7.98), the others 0.04-0.14 lower.
+  That gap is about the size of the judge spread, so it is a hint, not proof, of some tuning to the original
+  briefs; it still led on both holdout decks (launch 7.96, post-mortem 8.00 vs 6.42 and 5.8-6.1).
+- **Compared with round 9** (8.55 / 6.78 / 5.78): different briefs, judges and run counts, so the 0.36 drop for
+  this skill is not a regression signal; the order and the size of the lead held.
+
+Judges, in short: this skill - claim titles, highlighted charts, dot graphics, a quiz with an answer slide,
+decisions with owner and date, and the only notes a presenter could read aloud; assumptions marked rather than
+invented (both runs kept the unquantified staffing delay off the post-mortem chart and said so in the notes).
+Weaknesses: on the holdout launch deck both runs invented first-30-day targets (one run's "3 deals each by
+31 March" is ~75 deals in a month against a 120-customer year target - judge A); short objection answers; one
+post-mortem switched from a light cover to a dark body; a four-month-looking pilot timeline. Best decks: fourday
+(judge A) and phishing (judge B). pptx skill - clean, consistent, every brief item and arithmetic right (24 MUSD
+run rate, 20 % annual-plan saving), but notes almost absent in both runs, small card text, half-empty lower slide
+halves, quiz without answers (one run) and an invented 2-week staffing figure (labelled approximate). Plain
+Claude - complete and mostly correct, but plain left-aligned slides, tiny chart labels, a pie chart that repeats a
+three-row table, notes that repeat the title, chart labels rendered as "6." and one wrong claim ("roughly halves"
+annual churn for a one-third drop).
+
+Both judges said they worked from the contact sheets and text files and opened only ~10 single slides each, despite
+the prompt asking for every chart/table slide - the same shortcut as round 9's judge. Fine layout defects can be
+under-scored for every maker.
+
+**Lint and visual check** (this skill's own tools, not neutral):
+
+| Maker | lint errors / warnings per deck | visual_check warnings per deck (PowerPoint renders) |
+|---|---|---|
+| This skill | 0 / 0 on all 10 decks (0-2 info) | 0 on all 10 (0-3 info) |
+| pptx skill | 0-2 / 18-30 | 0-4 (`empty_area`) |
+| Plain Claude | 0-10 / 17-37 | 1-5 (`empty_area`) |
+
+`visual_check` reported `median_occupancy` 0 for both of this skill's post-mortem decks (light cover, dark body)
+while every per-slide occupancy was 0.21-0.38 - a reporting bug in the summary value to look at, not a deck defect.
+
+**Speed:** this skill's agent took 22-23 tool calls for five decks (4.5 per deck) against round 9's 16 for three
+(5.3 per deck), 395-482 s and 113k tokens per run - slower than the other makers in absolute terms (plain 11 calls,
+~225 s), the cost of building each deck through spec, build, check and render.
+Raw data: [round10-scores.json](round10-scores.json) (both judges' per-deck scores, comments and the aggregate).
+
+## Round 9 - spoken-script notes, every category label, duplicate-chart warning
 
 | Maker | Message | Design | Legibility | Layout | Data | Notes | **Overall** | Time / tokens / calls |
 |---|---|---|---|---|---|---|---|---|

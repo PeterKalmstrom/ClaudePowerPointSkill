@@ -2,6 +2,146 @@
 
 ## Unreleased
 
+- **Several decks in one call** (benchmark round 10: 22-23 tool calls for five decks against ~11 for plain Claude,
+  one `--plan`, one `--check` and one image read per deck). `build_deck.py a.json b.json --check --apply` runs every
+  spec (three at a time), prints one `batch summary`, one `contact-all.png` with a row per deck and a `BATCH-JSON`
+  line; exit = worst deck. `--check` now prints a `slides:` table (pattern, title, findings or `ok`) and needs no
+  `--out` (deck beside the spec). SKILL.md opens with a *Fast path* that front-loads the patterns and slide fields,
+  so a clean brief needs no reference file. New `scripts/_batch.py`, `scripts/selftest_batch.py`.
+
+- **A dark direction's cover and dividers stay dark** (benchmark round 10: a post-mortem on `night-terminal` /
+  `blueprint` opened on a light slide before dark body slides - "a clash"). The cause: covers and section slides
+  were always full panels in the *text* colour, which is light on a dark direction. New `kCoverTone` in
+  `build_deck.py`: on a dark direction (background darker than mid-grey) covers and dividers keep the deck's
+  background with the accent rule and band; light directions keep their deliberate dark panels. Deck-level
+  `"cover": "auto" | "panel" | "plain"` overrides; `panel` on a dark direction is a spec warning, an unknown value a
+  spec error.
+- **Plan vs actual on a `timeline`** (round 10: the post-mortem's plan-vs-actual slide was a two-bar chart or a
+  rail with "M6 (plan)" and "M9 (actual)" as events). `plan` and `actual` on every event (`[start, end]` in units
+  from the project start, or `[at]` for a milestone date) and an optional `unit` (`month` default, `week`, `day`,
+  `quarter`) draw one row per milestone: planned bar above actual bar, the overrun past the planned end in the
+  accent, the slip labelled in units at the row's end, an `M1..Mn` axis, the largest slip's label bold, and a
+  `PLAN VS ACTUAL:` line per milestone in the notes. New `kPlanActual`; spec errors for a missing field, an end
+  before its start, a bar against a milestone and an axis over 104 units. Self-test: `scripts/selftest_timeline.py`
+  (10 checks); schema regenerated.
+
+- **Implausible invented goals and terse objection answers are spec warnings** (benchmark round 10: a launch deck's
+  "3 deals each by 31 March" for 25 sellers meant ~75 deals in a month against 120 a year; both runs' objection
+  answers were fragments). New `scripts/_plausibility.py`, called from `kSpecCheck.Warnings` (so `--plan`,
+  `--check` and plain builds): `kTargetCheck` finds per-person goals ("N deals each", "per salesperson"), the
+  headcount (a `facts` entry such as `sales_team`, or "25 sellers" in any text), the period ("by 31 March" from the
+  cover/footer month, per week/month/quarter, "first 30 days") and the deck's total target, and warns when goal x
+  people is over half the target in one month or the implied year over twice it; asks for the headcount when a goal
+  sits beside a total without one; and warns when the goal's number is neither a fact nor named in the slide's
+  notes `assumptions`. `kObjectionCheck` warns on an objection / FAQ slide (`compare` or `table`) with an answer
+  under six words. On the round 9/10 thisskill specs and the example deck it fires only on the two slides the
+  judges marked down (run 2 launch s8 goal; both launch s7 objection slides). New CONTENT.md sections
+  [goals](reference/CONTENT.md#invented-goals-must-add-up-to-the-stated-target) and
+  [objections](reference/CONTENT.md#objection-answers-claim-proof-action), SKILL.md rule 9; selftest checks in
+  `scripts/selftest_plausibility.py`.
+- **Fewer build loops: ready edits, `--apply`, a dry build in `--plan`** (benchmark rounds 8-9: this skill's maker
+  used 16-21 tool calls against 7-12, mostly re-fixing text-length findings by hand):
+  - *Ready edits* (new `scripts/_suggest.py`: `kShorten`, `kSuggest`, `kSpecPatcher`; context injected by
+    `build_deck.kSuggestContext`): every finding that needs no new facts gets a measured replacement, printed as
+    `suggest: slide N (id) field: 'old' -> 'new' (how)` - over-limit texts, titles past two lines (measured in the
+    deck's heading font), bullets over 80 / compare points over 60 characters, a quiz answer slide's default title
+    (from the slide's own `explain`), a kpi trend that repeats another slide's chart, slides well over their word
+    budget (secondary detail only). Shortening only removes or abbreviates words; removed text goes to the notes.
+    A cut that would land mid-phrase is only a `proposal`; content (a cost, a target number, points) stays a
+    `question: ... needs ...` line.
+  - *`--apply`* (with `--plan` or `--check`, `kSuggestFlow`): writes the edits and the builder's auto-fixes into the
+    spec (`<spec>.before-apply.json` keeps the previous file; figure tokens kept - such a field is `skipped:`),
+    then plans or builds the patched spec in the same call. New notes field `moved` (`MOVED FROM SLIDE:`);
+    `spec.schema.json` regenerated.
+  - *`--plan` dry build* (`kBuildDeckApp.PlanDry`): builds the spec-with-edits into a temporary file beside the
+    spec (deleted after), so unfit text and layout lint show as `plan: fit` / `plan: lint` before the first build.
+    The summary line counts ready edits and questions. `--check`'s `CHECK-JSON` gains `suggestions`.
+  - *One line per finding* (`kCheckReport.Distinct`): the same fit message from two passes, and a lint finding its
+    spec warning already states (`ask_without_cost`, `target_not_measurable`, the answer slide's `title_is_label`),
+    are listed once.
+  - *Word counts*: a quiz's `explain` and `answer_title` (answer slide or notes) and auto-moved text no longer count
+    toward the quiz slide's budget - adding an `answer_title` used to push the quiz over its budget.
+  - Replay (`_scratch/loops`: the three bench9 specs with typical first-draft flaws - long titles, over-limit
+    points, long bullets, no answer title, an ask without cost, an unmeasurable target): hand-edited fields 15 -> 5
+    (the five are the questions only the author can answer); build calls 2 / 2 / 2 with the new flow
+    (`--plan --apply`, answers, one clean `--check --apply`), against 2-3+ for an agent fixing what the old output
+    listed by cutting to the stated limit (the QBR deck still had unfit text after its first `--check`).
+  - `SKILL.md` checklist is now spec -> `--plan --apply` -> answer -> `--check --apply` -> done; `BUILDER.md`
+    *Ready edits and --apply*, `WORKFLOW.md`. Self-test `selftest_suggest.py` (9 checks).
+
+- **Improving a deck someone already has** - two scripted routes, chosen in the new `SKILL.md` section
+  *Existing deck: restyle or keep the look*:
+  - *Restyle* (`scripts/extract_spec.py`, `kSpecMapper` / `kExtractSpec`): reads an existing .pptx - plain text
+    boxes as well as placeholders - into a best-effort `build_deck.py` spec: chart / kpi_chart (chart data, a
+    one-category chart turned), table, image (pictures saved to `<spec>-media/`), cover, big_number / kpi (large
+    figures with the label under each), statement with the ask, timeline (date columns), compare / process
+    (heading + detail), bullets. Slide numbers, footers and number badges are dropped; text over a field limit
+    is cut at a break and the full text goes to the notes as `MOVED FROM SLIDE:`, each gap a `flag:` line.
+    `--compare REBUILT` (`kTextCompare`) checks every word and figure of the source (text, tables, chart labels
+    and values, notes) is in the rebuilt deck; exit 1 names what is missing.
+  - *Keep the look* (`scripts/improve_deck.py`, `kNotesRepair`): `fix_deck.py`'s safe fixes, then a spoken-script
+    DRAFT on slides whose notes are missing or have no script, written only from the slide's own title, lines,
+    figure labels and chart/table data (`scripts/_deck_content.py`, `kSlideContent` / `kNotesDraft`, shared with
+    extract_spec), marked for review, the original notes kept below the divider; then the lint report.
+  - Verified on the six bench9 decks (`_scratch/bench9/plain`, `pptxskill`): extract -> build lints 0 errors on
+    all six and `--compare` reports every word and figure kept; PowerPoint renders before / restyled / improved
+    in `_scratch/edit-demo` (`*-sheet.png`). `reference/AUDIT.md` and `scripts/README.md` updated; self-test
+    module `scripts/selftest_edit.py` (12 checks, run by `selftest.py`).
+
+- **Icons and pictures** (`scripts/_icons.py`, `build_deck.py` `kSlideIcons` / `kImageText`):
+  - *Bundled icon set*: 101 Lucide icons (ISC, unmodified SVGs from lucide-static 0.460.0) in `assets/icons/` with
+    `LICENSE`; attribution in `NOTICE` and `README.md`. Names are the file names; aliases such as `money`,
+    `warning`, `people`, `email`.
+  - *Drawn as editable vector shapes*: each icon is one native shape with a custom geometry (SVG path, circle,
+    rect, line, polyline and arc commands converted to DrawingML moveTo/lnTo/cubicBezTo), stroked in the theme
+    accent with round caps - recolours with the theme, editable with Edit Points. Chosen over PNG (needs a
+    rasteriser, blurs), SVG pictures (PowerPoint 2016+ only) and EMF (uneven in LibreOffice); all 101 verified
+    in a LibreOffice render and the demo deck in a PowerPoint render (`_scratch/icons-demo`).
+  - *Spec*: `"icon"` on `kpi` metrics, `compare` columns, `process` steps and undated `timeline` stages; `"icons"`
+    (one per item) on `bullets` tiles; `"none"` per item. Without named icons they are chosen from the items'
+    words when every item gets a distinct one; `"auto_icons": false` on a slide or the deck turns that off. An
+    icon is drawn only where it fits, all of a set or none; named icons with no room are listed on stderr as
+    `icon:`. Unknown icon names are spec errors.
+  - *Accessibility*: an icon beside its text is marked decorative (PowerPoint's `adec:decorative` flag); one that
+    replaces a step number gets alt text. `lint_deck.py` `IsDecorative` now reads the real PowerPoint flag (it
+    looked only for an `a16:decorative` element PowerPoint does not write).
+  - *New pattern `image_text`*: a cover-cropped picture on one half (`side` left/right), points as accent-edged
+    cards on the other, optional caption; `alt` is required (spec error). An `image` slide without `alt` is now a
+    spec warning. `spec.schema.json` regenerated; `reference/BUILDER.md` *Icons and pictures*; self-test
+    `CheckIcons`.
+
+- **Build into a company template** (`scripts/_template.py`, new: `kTemplateMap`; hooks in `build_deck.py`):
+  - `--template brand.potx` (wins over the spec's `template`) and `--inspect brand.potx` (size, the five colours the
+    builder paints with, fonts and whether installed, each layout's role, the mapping, master footer text, example
+    slides to drop, warnings; builds nothing). A missing template is exit 2, no error report.
+  - Layout per pattern: `title` -> the cover layout, `section` -> the divider, everything else -> *Title Only*;
+    roles from layout names (renamed layouts like *Cover* / *Chapter Break* / *Headline Only* included) or, failing
+    that, from the placeholders, with fallbacks. Before, every slide used *Title Only*.
+  - The template's example slides are dropped together with the sections / custom shows that listed them (left
+    behind, PowerPoint offers to repair the file). Masters, logos and the theme stay; the master's footer text
+    becomes the deck `footer` when the spec has none.
+  - Warnings (`spec warning: template ...`, in `--check` too): missing cover/divider layout, a slide size that is not
+    16:9, theme colour pairs under WCAG (text/muted on background and card 4.5:1, accent 3:1, background on accent
+    4.5:1), theme fonts not installed.
+  - Fix: in template mode text boxes did not name a font, so headings set as values (a kpi's `41.2 M`) rendered in
+    the body face while fit was measured in the heading face (lint `unwanted_wrap` on Georgia/Verdana). `Text` and
+    `ShapeText` now always name the theme fonts (`+mj-lt` / `+mn-lt`).
+  - `scripts/make_test_templates.py`: two fictional templates (16:9 `.potx` with renamed layouts, logo, footer and an
+    example slide in a section; 4:3 `.pptx` with a failing accent and a missing heading font) in
+    `examples/templates/`. Verified: `examples/spec/sample-deck.json` built into the `.potx` lints 0 errors / 0
+    warnings and renders in PowerPoint (`_scratch/template-demo`). Self-test `CheckTemplates` (11 checks, one with
+    `--com`). `reference/BUILDER.md` (*Building into a company template*), `SKILL.md`, `scripts/README.md` updated.
+
+- **Visual check on the renders** (`scripts/visual_check.py`, new; PIL + numpy, no new dependency): looks at the
+  slide images for what geometry lint cannot see - `empty_area` (an empty band across the content area, empty card
+  interiors included: warn when ≥ 27 % of the slide height and running down to the footer, info otherwise; a big
+  empty block beside the content: info), `unbalanced`, `crowded`, `list_like` (5+ aligned one-column rows) and
+  `deck_outlier` (occupancy far from the deck median), each with a spec edit; text or `--json`, `--metrics` for
+  tuning. `build_deck.py --check` runs it on its LibreOffice renders and lists the findings as `visual_*`
+  (`kBuildDeckApp.Render`, two lines). Tuned on the round-9 PowerPoint renders against the judge: all 8 slides the
+  judge called empty are flagged (6 warn, 2 info), 6 of 9 warnings are on judge-named slides (7 counting P
+  phishing s3, named for small card text), the example deck gets 0 warnings (PowerPoint and LibreOffice renders).
+  Selftest: four checks on synthetic renders and metrics. Documented in `reference/AUDIT.md` (step 5) and SKILL.md.
 - **Near-bullet slides from benchmark round 9** (the judge named phishing s3 - five short `bullets` drawn as
   numbered bands - and four-day s3 - a `compare` with three short points a column drawn as bulleted text):
   - *Tiles for a short set* (`kSlidePatterns.BulletTiles`): three to five `bullets` items of ≤ 50 characters each

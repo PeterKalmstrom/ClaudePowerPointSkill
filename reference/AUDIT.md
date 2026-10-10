@@ -100,6 +100,35 @@ It never rewrites words, titles or picture descriptions and never changes a desi
 "what's left" list for you (or Claude, looking at the render) to decide. Render the fixed copy and look at it:
 raising text to the floor can push a slide into overflow, which the follow-up lint will show.
 
+## Improving a deck someone already has — `extract_spec.py` / `improve_deck.py` (any OS)
+
+Pick the route first ([SKILL.md](../SKILL.md#existing-deck-restyle-or-keep-the-look)): restyle by rebuilding,
+or keep the look and improve in place.
+
+```bash
+python scripts/improve_deck.py old.pptx --out improved.pptx      # keep the look: fixes + DRAFT notes + report
+python scripts/extract_spec.py old.pptx --out spec.json          # restyle: a spec to edit, then build
+python scripts/build_deck.py spec.json --out new.pptx --check
+python scripts/extract_spec.py old.pptx --compare new.pptx       # every word and figure still there? (exit 1 if not)
+```
+
+- **`improve_deck.py`** runs every `fix_deck.py` fix, then writes a spoken-script DRAFT on each slide whose notes
+  are missing or have no script (under 12 words of prose): the title as the point, the slide's own lines (a
+  figure read with the label under it), its chart and table figures. Old notes stay below the divider as
+  `Original notes:`. Each draft is marked for review; it says nothing the slide does not, so a figure still needs
+  its source added by someone who knows it. `--dry-run`, `--in-place` (keeps `.bak`), `--no-fix`, `--no-notes`,
+  `--report findings.txt`.
+- **`extract_spec.py`** reads plain text boxes as well as placeholders: the title is the title placeholder or the
+  topmost large text; slide numbers, footers and number badges are dropped (the builder draws its own). A slide
+  becomes `chart` / `kpi_chart`, `table`, `image` (the picture saved to `<spec>-media/`), `title`, `big_number` /
+  `kpi` (large figures with the label under each), `statement` with a `decision` (a title about a decision or
+  approval), `timeline` (dates heading columns), `compare` / `process` (bold headings over details), else
+  `bullets` or `statement`. Text over a field's limit is cut at a sentence or clause break and the full text
+  goes to the notes as `MOVED FROM SLIDE:`; so does anything the pattern has no room for. Every such gap prints
+  as a `flag:` line - work through them in the spec (the right pattern, claim titles) before building.
+- `--compare` counts the rebuilt deck's notes as kept, so moved text passes; open the notes to decide what
+  belongs back on a slide.
+
 ## Reading a whole deck — `scripts/read_deck.py` (any OS)
 
 For analysing a deck as a whole (critiquing content, building a relationship map, counting words, finding
@@ -242,7 +271,28 @@ similar layouts in a row and forgotten template slides:
 uvx --with pywin32 --with pillow python scripts/contact_sheet.py --file deck.pptx [--cols 6] [--slide-width 240]  # Windows
 python scripts/render_lo.py deck.pptx --out renders/ --sheet          # any OS: renders + renders/contact.png
 python scripts/contact_sheet.py --renders renders/ --cols 4           # any OS: a sheet from renders on disk
+python scripts/visual_check.py renders/ [--json] [--metrics]          # any OS: what geometry lint cannot see
 ```
+
+`visual_check.py` reads the pixels of the renders (PIL + numpy; `build_deck.py --check` runs it on its LibreOffice
+renders and lists its findings as `visual_*`). It finds the slide background, marks ink (text, lines, detail) by
+local contrast and lays a 64 x 36 occupancy grid over the content area (below the title, above the footer); a cell
+with no ink that is background or a pale panel is empty, so **an empty card interior counts as empty space**.
+
+| Code | Severity | Fires when |
+|---|---|---|
+| `empty_area` | warn | an empty band ≥ 80 % of the content width and ≥ 27 % of the slide height runs down to the footer (the content stops early, card bottoms left empty) |
+| `empty_area` | info | such a band 16-27 % high, or one between two elements (a quote and its attribution); or an empty block beside the content ≥ 40 % of the content area |
+| `unbalanced` | info | the content's centre of mass is off by > 22 % sideways or > 25 % upward (and no empty_area) |
+| `crowded` | warn | less than 8 % of the content area is empty |
+| `list_like` | info | 5+ consecutive one-column text rows of one height with the same left edge |
+| `deck_outlier` | info | a content slide's occupancy is < 0.35 x or > 2.6 x the deck median |
+
+Slide 1, dark-background slides and near-empty slides are statement slides: only `crowded` applies. Tuned on the
+round-9 benchmark (9 decks, 74 PowerPoint-rendered slides from three makers): 6 of the 9 warnings are on slides
+the judge named as empty, 7 counting a slide named for small card text, and the other 2 are in the plain maker's
+decks scored 5-6 for layout; all 8 slides the judge named as empty are flagged (6 warn, 2 info); the example deck
+(`examples/spec/sample-deck.json`) gets 0 warnings in both PowerPoint and LibreOffice renders. Info findings are hints, not defects - weigh them on the contact sheet.
 
 **Reporting back:** lead with the numbers (N slides, M flagged, K accepted as anchor exceptions), then a table of
 slide # → fix, then the accepted exceptions with their anchor type, then any slides with thin speaker notes.

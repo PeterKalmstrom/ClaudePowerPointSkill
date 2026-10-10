@@ -21,7 +21,10 @@ jobs:
           repository: PeterKalmstrom/kSharedPy
           path: _kSharedPy
       - name: Generated modules match the kSharedPy master and are not hand-edited
-        run: python _kSharedPy/kpy/kPyCompiler.py --manifest kpy.manifest.json --action verify --shared-root _kSharedPy
+        # The checkout is removed afterwards so the later checks (docs, kpattern) only see this skill
+        run: |
+          python _kSharedPy/kpy/kPyCompiler.py --manifest kpy.manifest.json --action verify --shared-root _kSharedPy
+          rm -rf _kSharedPy
 
       - name: Install dependencies
         run: pip install python-pptx pillow numpy jsonschema

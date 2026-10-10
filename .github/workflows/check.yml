@@ -15,6 +15,14 @@ jobs:
       - name: Fonts the text measurement needs (metric-compatible Calibri/Cambria/Arial twins)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation2 fonts-dejavu
 
+      - name: The kSharedPy master (generated modules come from it)
+        uses: actions/checkout@v4
+        with:
+          repository: PeterKalmstrom/kSharedPy
+          path: _kSharedPy
+      - name: Generated modules match the kSharedPy master and are not hand-edited
+        run: python _kSharedPy/kpy/kPyCompiler.py --manifest kpy.manifest.json --action verify --shared-root _kSharedPy
+
       - name: Install dependencies
         run: pip install python-pptx pillow numpy jsonschema
       - name: Compile scripts

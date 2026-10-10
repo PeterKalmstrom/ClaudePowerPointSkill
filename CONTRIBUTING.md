@@ -50,6 +50,11 @@ If you hit a defect and figured out the fix, send a PR with:
 Every Python file follows the error pattern in `scripts/kShared.py`, the same as the author's C#, TypeScript and
 PowerShell code. `tools/check_kpattern.py` enforces it (CI and the self-test run it).
 
+**`scripts/kShared.py` is generated - do not edit it here.** Its master is
+[PeterKalmstrom/kSharedPy](https://github.com/PeterKalmstrom/kSharedPy) (`kshared/kShared.py`); send a change
+there, then regenerate it with `python <kSharedPy>/kpy/kPyCompiler.py --manifest kpy.manifest.json --action
+compile`. CI fails when a generated file was edited by hand or is behind the master.
+
 - **Four parts per function.** (1) First statement after the docstring: `if kS.ErrorMode: return <safe default>`
   (not in `__init__`). (2) The whole rest of the body in one `try`. (3) `except kToolException: raise` where
   expected states pass through, then a last `except Exception as e: kS.GlobalErrorHandler(e, "kClass.Method")` -

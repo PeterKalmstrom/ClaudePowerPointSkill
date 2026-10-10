@@ -60,6 +60,8 @@ SIZE = {"title": 54, "section": 84, "statement": 72, "hero": 220, "kpi": 84, "h2
         "small": 30, "caption": 28, "label": 24}  # 1.5x a 960-pt slide: body 34 ~ 23 pt, floor 27 ~ 18 pt
 GROW = {"body": 44, "point": 40, "detail": 36, "heading": 44, "value": 120, "note": 32}  # ceilings text grows to
 GAP = 24
+TILE_ITEM_MAX = 50              # bullets this short (3-5 of them) become tiles side by side
+COMPARE_CARD_MAX = 60           # compare points this short (up to 4 a column) become point cards, not bullets
 EDGE = 8                        # the accent edge every card carries (card language: tint + edge, highlight = accent fill)
 FOOTER_TOP, FOOTER_H, FOOTER_SIZE = 760, 30, 18  # deck footer and page number, below BODY_BOTTOM (caption tier)
 KICKER_SIZE, KICKER_H = 24, 34  # the small accent label above a title
@@ -660,6 +662,11 @@ class kSpecCheck:
                     Out.append(f"slide {I} (bullets): a point over 80 characters keeps the slide a plain bulleted "
                                "list - shorten each point to a phrase (detail to the notes) for numbered bands, or "
                                "use 'compare', 'process' or 'statement' with 'points'")
+                if Pat == "compare" and any(len(str(P)) > COMPARE_CARD_MAX for C in Sl.get("columns", []) if isinstance(C, dict)
+                                            for P in C.get("points", [])):
+                    Out.append(f"slide {I} (compare): a point over {COMPARE_CARD_MAX} characters keeps each column "
+                               "a bulleted list - shorten every point to a phrase (detail to the notes) so each "
+                               "becomes its own card")
                 Out.extend(kSpecCheck.WindowWarnings(Sl, I) if Pat == "timeline" else [])
                 if Pat == "timeline":
                     Months = [kSpecCheck.MonthIndex(E.get("date", "")) for E in Sl.get("events", [])
@@ -2318,7 +2325,9 @@ class kSlidePatterns:
             B = self._b
             B.Title(S, Sl["title"])
             if all(len(str(X)) <= 80 for X in Sl["items"]):
-                if len(Sl["items"]) <= 5:
+                if 3 <= len(Sl["items"]) <= 5 and all(len(str(X)) <= TILE_ITEM_MAX for X in Sl["items"]):
+                    self.BulletTiles(S, Sl)  # three to five phrases: numbered tiles side by side, a set not a list
+                elif len(Sl["items"]) <= 5:
                     self.BulletRows(S, Sl)  # a few short points: one numbered band each, filling the slide
                 else:
                     self.BulletGrid(S, Sl)  # six or seven: numbered cards in two columns, never a bare list
@@ -2361,6 +2370,37 @@ class kSlidePatterns:
             kS.GlobalErrorHandler(e, "kSlidePatterns.BulletRows")
             return
 
+    def BulletTiles(self, S, Sl):
+        """Three to five short phrases as numbered tiles side by side (tint, accent edge on top, a large accent
+        number over the phrase): the eye takes them in as a set of equals instead of reading down a list."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            Items = [str(X) for X in Sl["items"]]
+            N = len(Items)
+            Cw = (W - 2 * M - GAP * (N - 1)) / N
+            Pad = 28
+            Iw = Cw - 2 * Pad
+            BodyH = BODY_BOTTOM - BODY_TOP - 10
+            Ns = 72 if N <= 4 else 64
+            Nh = Ns * 1.2
+            Room = BodyH - EDGE - 2 * Pad - Nh - 16
+            Size = B.FitAll(Items, GROW["point"], Iw, Room, What="the tiles")
+            Th = max(B.Need(X, Size, Iw) for X in Items)
+            CardH = min(BodyH, max(EDGE + 2 * Pad + Nh + 16 + Th, BodyH * 0.62))
+            Ty = BODY_TOP + 10 + (BodyH - CardH) / 2
+            Figure = ACCENT if B.Themed else TEXT
+            for I, Item in enumerate(Items):
+                Lx = M + I * (Cw + GAP)
+                B.Card(S, f"PointTile{I + 1}", Lx, Ty, Cw, CardH, False, "top")
+                B.Text(S, f"TileNo{I + 1}", str(I + 1), Lx + Pad, Ty + EDGE + Pad, Iw, Nh, Ns, Figure, Bold=True,
+                       Heading=True)
+                B.Text(S, f"Point{I + 1}", Item, Lx + Pad, Ty + EDGE + Pad + Nh + 16, Iw, Th, Size, TEXT)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.BulletTiles")
+            return
+
     def BulletGrid(self, S, Sl):
         """Six or seven short points as numbered cards in two columns (read down the left column, then the right):
         each card a tinted band with an accent edge and a number badge."""
@@ -2395,6 +2435,9 @@ class kSlidePatterns:
             B = self._b
             B.Title(S, Sl["title"])
             Cols = Sl["columns"]
+            if all(len(C["points"]) <= 4 and all(len(str(P)) <= COMPARE_CARD_MAX for P in C["points"]) for C in Cols):
+                self.CompareCards(S, Sl)  # short points: each its own card under the heading, never bullets
+                return
             Hi = Sl.get("highlight")
             N = len(Cols)
             Gap = GAP * 1.5
@@ -2422,6 +2465,50 @@ class kSlidePatterns:
                        Spacing=Spacing)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSlidePatterns.Compare")
+            return
+
+    def CompareCards(self, S, Sl):
+        """Compare columns whose points are short phrases: the heading on the column's tint, then each point as
+        its own card in the background colour with an accent marker, all cards one height and one text size -
+        the columns read as matched sets, not two bulleted lists."""
+        if kS.ErrorMode:
+            return
+        try:
+            B = self._b
+            Cols = Sl["columns"]
+            Hi = Sl.get("highlight")
+            N = len(Cols)
+            Gap = GAP * 1.5
+            Wd = (W - 2 * M - Gap * (N - 1)) / N
+            Pad = 28
+            Iw = Wd - 2 * Pad
+            BodyH = BODY_BOTTOM - BODY_TOP - 10
+            Hs = B.FitAll([str(C["heading"]) for C in Cols], GROW["heading"] - 4, Iw, 120, Heading=True)
+            Hh = max(B.Need(str(C["heading"]), Hs, Iw, Heading=True) for C in Cols)
+            Most = max(len(C["points"]) for C in Cols)
+            Room = BodyH - EDGE - 2 * Pad - Hh - 20
+            Ph = min(140, (Room - 16 * (Most - 1)) / Most)
+            Inner = 20
+            Tw = Iw - EDGE - 2 * Inner
+            Ps = B.FitAll([str(P) for C in Cols for P in C["points"]], GROW["point"] - 4, Tw, Ph - 16)
+            Need = max(B.Need(str(P), Ps, Tw) for C in Cols for P in C["points"]) + 28
+            Ph = min(Ph, max(Need, 88))
+            CardH = EDGE + 2 * Pad + Hh + 20 + Most * Ph + 16 * (Most - 1)
+            Ty = BODY_TOP + 10 + (BodyH - CardH) / 2
+            for I, C in enumerate(Cols):
+                Lx = M + I * (Wd + Gap)
+                Lead = Hi is None or I == Hi
+                B.Card(S, f"Card{I + 1}", Lx, Ty, Wd, CardH, False, "top", EdgeOn=Lead)
+                B.Text(S, f"Heading{I + 1}", str(C["heading"]), Lx + Pad, Ty + EDGE + Pad, Iw, Hh, Hs,
+                       ACCENT if I == Hi and B.Themed else TEXT, Bold=True, Heading=True)
+                for K, P in enumerate(C["points"]):
+                    Y = Ty + EDGE + Pad + Hh + 20 + K * (Ph + 16)
+                    B.Rect(S, f"PointCard{I + 1}_{K + 1}", Lx + Pad, Y, Iw, Ph, BG)
+                    B.Rect(S, f"PointMark{I + 1}_{K + 1}", Lx + Pad, Y, EDGE, Ph, ACCENT if Lead else SOFT)
+                    B.Text(S, f"Point{I + 1}_{K + 1}", str(P), Lx + Pad + EDGE + Inner, Y + 8, Tw, Ph - 16, Ps,
+                           TEXT, Anchor=MSO_ANCHOR.MIDDLE)
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSlidePatterns.CompareCards")
             return
 
     def Process(self, S, Sl):

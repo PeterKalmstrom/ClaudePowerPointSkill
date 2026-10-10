@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Near-bullet slides from benchmark round 9** (the judge named phishing s3 - five short `bullets` drawn as
+  numbered bands - and four-day s3 - a `compare` with three short points a column drawn as bulleted text):
+  - *Tiles for a short set* (`kSlidePatterns.BulletTiles`): three to five `bullets` items of ≤ 50 characters each
+    (`TILE_ITEM_MAX`) become numbered tiles side by side - tint, accent top edge, a large accent number over the
+    phrase. Two items, or any item of 51-80 characters, keep the numbered bands; six or seven the two-column grid.
+  - *Point cards in compare* (`kSlidePatterns.CompareCards`): when every point is ≤ 60 characters
+    (`COMPARE_CARD_MAX`) and a column has at most four, each point is its own card under the heading (background
+    colour, accent marker - soft on the non-highlighted column), one height and one text size across columns. A
+    longer point keeps the bulleted columns and gives a new spec warning (`kSpecCheck.Warnings`).
+  - Verified in a PowerPoint render: before/after in `_scratch/r9fix` (`before/`, `*-render/s003.jpg`); the three
+    bench9 decks and `examples/spec/sample-deck.json` lint 0 errors / 0 warnings. `reference/BUILDER.md` updated;
+    self-test `CheckRound9` added and the round-7 band checks moved to tiles.
 - **Chart findings from benchmark round 8** (`build_deck.py`):
   - *Every category label shows*: a kpi trend labelled only by its ends (`trend_labels: ["Q1", "Q4"]` over four
     values) drew blank Q2/Q3 bars; two labels that are one prefix plus a number counting up one per value

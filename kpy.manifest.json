@@ -1,0 +1,28 @@
+{
+    "Product":    "building-powerpoint-decks",
+    "//":         "Generated modules from the kSharedPy master (https://github.com/PeterKalmstrom/kSharedPy). Edit the master, never these outputs; then: python <kSharedPy>/kpy/kPyCompiler.py --manifest kpy.manifest.json --action compile",
+    "SharedRoot": "../../../kSharedPy",
+    "Modules": [
+        {
+            "Out":      "scripts/kShared.py",
+            "Parts":    [ "kshared/kShared.py" ],
+            "Settings": {
+                "Product":          "building-powerpoint-decks",
+                "VersionFile":      ".claude-plugin/plugin.json",
+                "ReportFilePrefix": "pptskill-error-",
+                "ErrorLogVariable": "PPTSKILL_ERROR_LOG"
+            }
+        },
+        { "Out": "scripts/send_error_report.py", "Parts": [ "kshared/send_error_report.py" ] },
+        { "Out": "scripts/_ppt.py",              "Parts": [ "powerpoint/_ppt.py" ] },
+        { "Out": "scripts/render_slides.py",     "Parts": [ "powerpoint/render_slides.py" ] },
+        { "Out": "scripts/contact_sheet.py",     "Parts": [ "powerpoint/contact_sheet.py" ] },
+        { "Out": "scripts/export_pdf.py",        "Parts": [ "powerpoint/export_pdf.py" ] },
+        { "Out": "scripts/backup_snapshot.py",   "Parts": [ "powerpoint/backup_snapshot.py" ] },
+        {
+            "Out":      "tools/check_kpattern.py",
+            "Parts":    [ "kpy/check_kpattern.py" ],
+            "Settings": { "Folders": [ "scripts", "tools", "mcp-app" ], "SharedFolder": "scripts" }
+        }
+    ]
+}

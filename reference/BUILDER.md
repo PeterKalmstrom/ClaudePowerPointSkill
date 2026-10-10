@@ -146,10 +146,14 @@ fact — without building it: show that to the user first, then build.
   the caption, so the slide is not one line of support.
 - **`decision`** on `kpi`, `statement` and `next_steps` draws the ask in a box in the text colour with an accent
   edge and a label (`decision_label`, default *Decision requested*); `statement` adds an owner/date line.
-- **`bullets`** with short items (≤ 80 characters each) never render as a bare list: up to five become full-width
-  bands with a number badge each, six or seven numbered cards in two columns. A list with a longer item stays a
+- **`bullets`** with short items (≤ 80 characters each) never render as a bare list: three to five phrases of
+  ≤ 50 characters become numbered tiles side by side (a large accent number over each phrase), other lists up to
+  five full-width bands with a number badge each, six or seven numbered cards in two columns. A list with a longer item stays a
   bulleted list on an accent rule, with a spec warning - shorten each point to a phrase (detail to the notes), or
   pick `compare`, `process` or a `statement` with `points` when the items have structure.
+- **`compare`** points of ≤ 60 characters each become their own card under the column heading (background
+  colour, accent marker, one height and text size across columns), so the columns read as matched sets. A
+  longer point keeps both columns as bulleted lists, with a spec warning - shorten each point to a phrase.
 - **`chart` caption**: a caption that fits two lines across the slide sits above the chart on an accent rule and
   the chart takes the full width; a longer caption keeps a side column (and a smaller chart) - keep it short.
 - **`email` callouts** point at `from`, `to`, `subject`, `attachment` or a `body` paragraph (`line`, 0-based); the
@@ -271,7 +275,7 @@ linted, rendered, found one class of problem (`fit:`, then an overlap, then a wi
 - **Spec warnings** (`spec warning: …`, exit code unchanged): a derived figure the deck's data contradicts
   (`spec warning: figure: …`, see *Computed figures*); a `metrics` target with no number, percent, date or
   comparison; a monthly timeline that skips one month, or has a month outside its `window` (or the range its
-  title or notes state); a `bullets` item over 80 characters; a `statement` with nothing but a support line, or a
+  title or notes state); a `bullets` item over 80 characters; a `compare` point over 60 characters; a `statement` with nothing but a support line, or a
   `big_number` with one caption — add `points`.
 - **Email body:** each paragraph's box is as tall as its wrapped text (in the wider of the body font and its
   LibreOffice substitute), so cutting words from an overflowing paragraph shows up at the next build.

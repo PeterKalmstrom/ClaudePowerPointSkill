@@ -1004,9 +1004,9 @@ class kSelfTest:
                        not Low, f"slides ending above 80 % of the height: {Low}")
             Sizes = [Run.font.size.pt for Shape in Slides[-1].shapes if Shape.name.startswith("Point")
                      and Shape.has_text_frame for Para in Shape.text_frame.paragraphs for Run in Para.runs]
-            self.Check("build_deck: a few short bullets become bands with text grown above 34 pt (up to 44 pt)",
+            self.Check("build_deck: a few short bullets become tiles with text grown above 34 pt (up to 44 pt)",
                        Sizes and 34 < min(Sizes) <= 44 and len({S.name for S in Slides[-1].shapes} & {
-                           "Point1", "Point2", "Point3", "PointBand3"}) == 4, str(Sizes))
+                           "Point1", "Point2", "Point3", "PointTile3"}) == 4, str(Sizes))
             Details = [Run.font.size.pt for Shape in Slides[-2].shapes if Shape.name.startswith("StepDetail")
                        for Para in Shape.text_frame.paragraphs for Run in Para.runs]
             self.Check("build_deck: process details at or above the 27 pt floor", Details and min(Details) >= 27,
@@ -1900,9 +1900,10 @@ class kSelfTest:
             Names = [{Shape.name: Shape for Shape in Slide.shapes} for Slide in Slides]
             if len(Names) < 6:
                 return
-            self.Check("build_deck: five short bullets are numbered bands, not a bare list",
-                       {f"BulletNo{I}" for I in range(1, 6)} <= set(Names[0]) and "Points" not in Names[0]
-                       and Names[0]["BulletNo3"].text_frame.text == "3", str(sorted(Names[0])))
+            self.Check("build_deck: five short bullets are numbered tiles side by side, not a bare list",
+                       {f"TileNo{I}" for I in range(1, 6)} <= set(Names[0]) and "Points" not in Names[0]
+                       and Names[0]["TileNo3"].text_frame.text == "3"
+                       and len({Names[0][f"PointTile{I}"].top for I in range(1, 6)}) == 1, str(sorted(Names[0])))
             Grid = Names[5]
             self.Check("build_deck: six short bullets are numbered cards in two columns",
                        "BulletNo6" in Grid and Grid["PointBand4"].left > Grid["PointBand1"].left
@@ -1920,6 +1921,62 @@ class kSelfTest:
             self.CheckRound7Chart(Names[3], Slides[4], Out)
         except Exception as e:
             kS.GlobalErrorHandler(e, "kSelfTest.CheckRound7")
+            return
+
+    @staticmethod
+    def Round9Spec():
+        """Benchmark round 9's near-bullet slides: short compare points, a compare with one long point, and five
+        bullets with one 51-80 character item (bands, not tiles)."""
+        if kS.ErrorMode:
+            return {}
+        try:
+            return {"direction": "boardroom", "footer": "Round 9", "slides": [
+                {"id": "design", "pattern": "compare", "title": "The pilot keeps pay and output, cuts one day",
+                 "notes": "n", "highlight": 0, "columns": [
+                     {"heading": "Who and how", "points": ["All 40 engineers", "Four days, full pay",
+                                                           "Staggered days keep cover"]},
+                     {"heading": "Guardrails", "points": ["Delivery commitments unchanged",
+                                                          "Overtime buffer for crunches", "Exit rule if metrics fall"]}]},
+                {"id": "long", "pattern": "compare", "title": "Two options differ on cost and speed", "notes": "n",
+                 "columns": [{"heading": "Build", "points": ["Six months of two engineers before the first customer"
+                                                             " release ships"]},
+                             {"heading": "Buy", "points": ["Live in four weeks"]}]},
+                {"id": "mixed", "pattern": "bullets", "title": "Five checks before you pay an invoice", "notes": "n",
+                 "items": ["Supplier is known", "Bank details match the contract on file with purchasing",
+                           "Amount matches the order", "Approver signed", "Due date is real"]}]}
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.Round9Spec")
+            return {}
+
+    def CheckRound9(self):
+        """Round 9's criticism - two slides still read as bullet lists: short compare points become point cards
+        (a long point keeps the bulleted column), and five bullets become tiles only when every item is short."""
+        if kS.ErrorMode:
+            return
+        try:
+            Path, Deck = os.path.join(self.Edge, "round9.json"), os.path.join(self.Tmp, "round9.pptx")
+            self.WriteJson(self.Round9Spec(), Path)
+            Code, Out = self.RunScript("build_deck.py", Path, "--out", Deck)
+            Bad = [f"{Sl}:{C}" for Sl, C, _, Sev in self.LintFindings(Deck) if Sev in ("error", "warn")]
+            self.Check("build_deck: the round-9 slides build and lint clean", Code == 0 and not Bad,
+                       ", ".join(Bad) + Out[-300:])
+            Names = [{Shape.name: Shape for Shape in Slide.shapes}
+                     for Slide in (Presentation(Deck).slides if os.path.exists(Deck) else [])]
+            if len(Names) < 3:
+                return
+            Cards = Names[0]
+            self.Check("build_deck: short compare points are each a card with a marker, not a bulleted list",
+                       {"PointCard1_3", "PointMark2_3", "Point2_1"} <= set(Cards) and "Points1" not in Cards
+                       and Cards["PointCard1_1"].top == Cards["PointCard2_1"].top
+                       and "•" not in Cards["Point1_1"].text_frame.text, str(sorted(Cards)))
+            self.Check("build_deck: a compare point over 60 characters keeps the bulleted column",
+                       "Points1" in Names[1] and "PointCard1_1" not in Names[1], str(sorted(Names[1])))
+            self.Check("build_deck: a compare point over 60 characters is a spec warning",
+                       "slide 2 (compare): a point over 60" in Out, Out[-400:])
+            self.Check("build_deck: five bullets with a 51-80 character item stay numbered bands, not tiles",
+                       "PointBand5" in Names[2] and "PointTile1" not in Names[2], str(sorted(Names[2])))
+        except Exception as e:
+            kS.GlobalErrorHandler(e, "kSelfTest.CheckRound9")
             return
 
     def CheckRound7Chart(self, Chart, Claim, Out):
@@ -2310,6 +2367,7 @@ class kSelfTestApp:
             Test.CheckRound5()
             Test.CheckRound7()
             Test.CheckRound8()
+            Test.CheckRound9()
             Test.CheckAutoAndCheck()
             Test.CheckThemeAndRenders()
             Test.CheckErrorPattern()

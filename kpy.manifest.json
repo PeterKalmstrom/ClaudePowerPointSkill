@@ -22,7 +22,8 @@
         {
             "Out":      "tools/check_kpattern.py",
             "Parts":    [ "kpy/check_kpattern.py" ],
-            "Settings": { "Folders": [ "scripts", "tools", "mcp-app" ], "SharedFolder": "scripts" }
+            "Settings": { "Folders": [ "scripts", "tools", "mcp-app" ], "SharedFolder": "scripts" },
+            "ImportPaths": [ "scripts" ]
         }
     ]
 }
